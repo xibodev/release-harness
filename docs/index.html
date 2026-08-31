@@ -38,8 +38,9 @@
     <div class="nav-section">
       <div class="nav-header">AI Agent Integration</div>
       <ul class="nav-links">
-        <li><a href="#ai-agent-onboarding" class="nav-link">Tell AI to Install & Onboard</a></li>
-        <li><a href="#ai-prompts" class="nav-link">Autonomous Workflow Recipes</a></li>
+        <li><a href="#ai-agent-onboarding" class="nav-link">AI Onboarding Prompt</a></li>
+        <li><a href="#release-conductor-agent" class="nav-link">The release-conductor Agent</a></li>
+        <li><a href="#ai-prompts" class="nav-link">Role-Based Delegation Recipes</a></li>
         <li><a href="#deterministic-boundary" class="nav-link">Deterministic Core Rule</a></li>
       </ul>
     </div>
@@ -231,8 +232,8 @@
 
     <!-- Onboarding a Project -->
     <section id="onboarding-project">
-      <h2 id="onboarding-project">Onboarding an Existing Project</h2>
-      <p>Follow these 3 steps to onboard any software project from scratch:</p>
+      <h2 id="onboarding-project">Manual Project Onboarding</h2>
+      <p>Follow these 3 steps if you are manually setting up the harness in your project:</p>
 
       <h3>Step 1: Run Doctor & Init</h3>
       <div class="code-header">
@@ -299,32 +300,46 @@ npx release-harness init</code></pre>
     <section id="ai-agent-onboarding">
       <h2 id="ai-agent-onboarding">Using with AI Coding Agents</h2>
       <p>
-        Release-Harness is purpose-built to act as an impartial referee for AI coding agents (Claude Code, GitHub Copilot CLI, opencode, Cursor, Codex).
+        Release-Harness is designed from the ground up for high-leverage AI engineering. Instead of micro-managing tool invocations, give your AI agent high-level goals and let it discover and orchestrate the harness autonomously.
       </p>
 
       <div class="callout">
-        <div class="callout-title">💡 HOW TO ONBOARD AN EXISTING PROJECT USING AN AI AGENT</div>
+        <div class="callout-title">🚀 HOW TO ONBOARD A PROJECT USING AN AI AGENT</div>
         <p>
-          If you are already in your project repository working with an AI agent, copy and paste the onboarding prompt below. The AI agent will install the package, initialize contracts, and map your services automatically:
+          When you are working in an existing or new project repository with an AI agent (Claude Code, Copilot, opencode, Cursor), just give it this simple prompt:
         </p>
       </div>
 
       <div class="code-header">
-        <span>ONBOARDING PROMPT FOR AI AGENT</span>
+        <span>AI ONBOARDING PROMPT</span>
         <button class="copy-btn">COPY</button>
       </div>
-      <pre><code>We are onboarding this project to @xibodev/release-harness for deterministic quality gating.
-Please follow these steps:
-1. Install the tool: `npm install -D @xibodev/release-harness`
-2. Check prerequisites: `npx release-harness doctor`
-3. Initialize the contract scaffolding: `npx release-harness init`
-4. Inspect our docker-compose and package scripts to configure `.release-harness/topology.json` and `.release-harness/origins.json` with our real service ports and health endpoints.
-5. Create an initial smoke scenario in `.release-harness/scenarios/smoke.json` covering our landing and login pages.
-6. Verify Level 1: `npx release-harness check-pr`
-7. Run the local gate: `npx release-harness run-local` and confirm exit code 0.</code></pre>
+      <pre><code>Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating.</code></pre>
 
-      <h3 id="ai-prompts">Autonomous Workflow Recipes by Task</h3>
-      <p>Select your AI tool to view targeted prompt recipes for feature development, bug fixes, and pre-commit checks:</p>
+      <p><strong>What the AI agent does automatically:</strong></p>
+      <ul>
+        <li>Installs <code>@xibodev/release-harness</code> as a project dev dependency.</li>
+        <li>Executes <code>npx release-harness doctor</code> to verify the environment.</li>
+        <li>Runs <code>npx release-harness init</code> to scaffold <code>.release-harness/</code>.</li>
+        <li>Inspects your <code>package.json</code>, Docker configs, and application routes to configure <code>topology.json</code> and <code>origins.json</code> with your actual service ports and health endpoints.</li>
+        <li>Authors initial smoke scenarios under <code>.release-harness/scenarios/</code> and runs <code>npx release-harness run-local</code> to verify a certified green baseline.</li>
+      </ul>
+
+      <!-- The Shipped release-conductor Persona -->
+      <h3 id="release-conductor-agent">The Shipped <code>release-conductor</code> Agent Persona</h3>
+      <p>
+        Release-Harness ships pre-configured agent persona definitions out of the box for all major AI coding tools:
+      </p>
+      <ul>
+        <li><strong>Claude Code:</strong> <code>.claude/agents/release-conductor.md</code></li>
+        <li><strong>GitHub Copilot CLI:</strong> <code>.copilot/agents/release-conductor.md</code></li>
+        <li><strong>GitHub Copilot Workspace:</strong> <code>.github/agents/release-conductor.agent.md</code></li>
+        <li><strong>opencode:</strong> <code>.opencode/agents/release-conductor.md</code></li>
+        <li><strong>Canonical Definition:</strong> <code>agents/release-conductor.md</code></li>
+      </ul>
+
+      <h3 id="ai-prompts">Role-Based Delegation Recipes</h3>
+      <p>Once onboarded, delegate tasks to the agent using concise, role-based prompts:</p>
 
       <!-- Agent Switcher Tabs -->
       <div class="tab-container">
@@ -337,55 +352,49 @@ Please follow these steps:
 
         <!-- Claude Code -->
         <div class="tab-pane active">
-          <p><strong>Autonomous Bug-Fix / Feature Loop:</strong></p>
+          <p><strong>Run Quality Gate & Fix Branch to Green:</strong></p>
           <div class="code-header">
             <span>PROMPT FOR CLAUDE CODE</span>
             <button class="copy-btn">COPY</button>
           </div>
-          <pre><code>Implement the checkout billing flow.
-Follow the release-conductor quality loop:
-1. Validate contracts: `npx release-harness check-pr`
-2. Implement your changes in code.
-3. Run local UAT: `npx release-harness run-local --evidence-dir .quality-run/evidence`
-4. Inspect `verdict.json`. If exit code != 0, fix the failing scenarios and re-run.
-5. Loop until you achieve a certified PASS (exit code 0). Do not declare completion until exit code is 0.</code></pre>
+          <pre><code>Use release-conductor to run our release quality gate and drive this branch to green.</code></pre>
+
+          <p><strong>Pre-PR Check:</strong></p>
+          <div class="code-header">
+            <span>PROMPT FOR CLAUDE CODE</span>
+            <button class="copy-btn">COPY</button>
+          </div>
+          <pre><code>Use release-conductor to verify this PR before merging.</code></pre>
         </div>
 
         <!-- Copilot CLI -->
         <div class="tab-pane">
-          <p><strong>GitHub Copilot CLI Execution:</strong></p>
+          <p><strong>Run Quality Gate:</strong></p>
           <div class="code-header">
             <span>PROMPT FOR GITHUB COPILOT CLI</span>
             <button class="copy-btn">COPY</button>
           </div>
-          <pre><code>copilot: Execute the deterministic local release gate:
-npx release-harness run-local
-If verdict.json reports any failures or unproven status, review the screenshot evidence in the evidence directory, resolve the code defects, and iterate until exit code 0.</code></pre>
+          <pre><code>copilot: Use release-conductor to execute our local release UAT and resolve any failing scenarios until certified green.</code></pre>
         </div>
 
         <!-- opencode -->
         <div class="tab-pane">
-          <p><strong>opencode Subagent Orchestration:</strong></p>
+          <p><strong>Run Autonomous Loop:</strong></p>
           <div class="code-header">
             <span>PROMPT FOR OPENCODE</span>
             <button class="copy-btn">COPY</button>
           </div>
-          <pre><code>Run the release-conductor verification workflow:
-1. Verify contract syntax with `npx release-harness check-pr`.
-2. Run local Docker UAT via `npx release-harness run-local`.
-3. If failures occur, sequence remedies with fix-planner and fix-executor.
-4. When certified green, clean workspaces with `npx release-harness clean`.</code></pre>
+          <pre><code>Use release-conductor to verify our changes with run-local, resolve defects, and clean up when done.</code></pre>
         </div>
 
         <!-- Cursor / Codex -->
         <div class="tab-pane">
-          <p><strong>Cursor / Codex Prompt:</strong></p>
+          <p><strong>Run Local UAT:</strong></p>
           <div class="code-header">
             <span>PROMPT FOR CURSOR / CODEX</span>
             <button class="copy-btn">COPY</button>
           </div>
-          <pre><code>Please run `npx release-harness run-local` in the integrated terminal.
-Examine the generated `verdict.json`. If any scenario fails, update the application code to fix the root cause and re-run until you get PASS (exit code 0).</code></pre>
+          <pre><code>Use release-conductor to run `npx release-harness run-local`, inspect verdict.json, and fix any failing scenarios.</code></pre>
         </div>
       </div>
 
