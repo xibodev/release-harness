@@ -1,5 +1,5 @@
 ---
-name: release-readiness
+name: release-decider
 description: Aggregates code-change-review and test-coverage-audit results into a release readiness assessment. Computes a risk matrix across all change areas, generates a release notes draft (user-facing changelog), produces a pre-prod checklist (migrations, env vars, rollback plan), and delivers a Go/No-Go recommendation with supporting evidence. Use when asked to "release readiness", "go/no-go", "can we release", "pre-prod check", or "generate changelog".
 compatibility: Requires code-change-review and test-coverage-audit outputs. Python 3.8+ for risk scoring.
 allowed-tools:
