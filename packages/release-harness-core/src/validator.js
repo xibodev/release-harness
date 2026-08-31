@@ -12,13 +12,39 @@ export class ValidationError extends Error {
   }
 }
 
+function isSupportedSchemaVersion(version) {
+  if (!version || typeof version !== 'string') return false;
+  // Major version 1.x is supported (1.0.0, 1.0.1, 1.1.0, etc.)
+  return /^1\.\d+(\.\d+)?$/.test(version);
+}
+
+export function validateHarnessConfig(config) {
+  const errors = [];
+  if (!config || typeof config !== 'object') {
+    throw new ValidationError('Harness config must be a JSON object', ['Invalid root']);
+  }
+  if (!isSupportedSchemaVersion(config.schema_version)) {
+    errors.push(`Unsupported schema_version "${config.schema_version}". Supported major is 1.x`);
+  }
+  if (!config.product_slug || typeof config.product_slug !== 'string') {
+    errors.push('Missing or invalid "product_slug"');
+  }
+  if (config.port_block && (typeof config.port_block.start !== 'number' || typeof config.port_block.range !== 'number')) {
+    errors.push('Invalid port_block specification (must contain start and range numbers)');
+  }
+  if (errors.length > 0) {
+    throw new ValidationError(`Harness config validation failed with ${errors.length} error(s)`, errors);
+  }
+  return true;
+}
+
 export function validateTopology(topology) {
   const errors = [];
   if (!topology || typeof topology !== 'object') {
     throw new ValidationError('Topology must be a JSON object', ['Invalid root']);
   }
-  if (topology.schema_version !== '1.0.0') {
-    errors.push(`Unsupported schema_version "${topology.schema_version}". Expected "1.0.0"`);
+  if (!isSupportedSchemaVersion(topology.schema_version)) {
+    errors.push(`Unsupported schema_version "${topology.schema_version}". Supported major is 1.x`);
   }
   if (!topology.product_slug || typeof topology.product_slug !== 'string') {
     errors.push('Missing or invalid "product_slug"');
@@ -115,7 +141,7 @@ export function validateEvidenceManifest(manifest) {
   if (!manifest || typeof manifest !== 'object') {
     throw new ValidationError('Evidence manifest must be a JSON object', ['Invalid root']);
   }
-  if (manifest.schema_version !== '1.0.0') errors.push('Invalid schema_version');
+  if (!isSupportedSchemaVersion(manifest.schema_version)) errors.push('Unsupported schema_version');
   if (!manifest.run_id) errors.push('Missing run_id');
   if (!manifest.sealed_at) errors.push('Missing sealed_at');
   if (!Array.isArray(manifest.files)) errors.push('Missing files array');
@@ -138,7 +164,7 @@ export function validateVerdict(verdict) {
   if (!verdict || typeof verdict !== 'object') {
     throw new ValidationError('Verdict must be a JSON object', ['Invalid root']);
   }
-  if (verdict.schema_version !== '1.0.0') errors.push('Invalid schema_version');
+  if (!isSupportedSchemaVersion(verdict.schema_version)) errors.push('Unsupported schema_version');
   if (!verdict.run_id) errors.push('Missing run_id');
   if (!['PASS', 'FAIL', 'UNPROVEN'].includes(verdict.certification_status)) {
     errors.push(`Invalid certification_status "${verdict.certification_status}"`);

@@ -31,8 +31,11 @@ jobs:
       - name: 2. Core Engine & Evaluator Tests
         run: npm run test:core
 
-      - name: 3. Acceptance Suite (AC-01 through AC-18)
+      - name: 3. 28 Neutral Acceptance Fixtures Suite
+        run: npm run test:neutral
+
+      - name: 4. Acceptance Suite (AC-01 through AC-18)
         run: npm run test:smoke
 
-      - name: 4. Pack & Independent Consumer Test
+      - name: 5. Pack & Independent Consumer Test
         run: npm run test:install
