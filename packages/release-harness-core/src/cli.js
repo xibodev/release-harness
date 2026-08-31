@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import { SourceMaterializer } from './materializer.js';
 import { EvidenceSealer } from './sealer.js';
@@ -14,7 +15,7 @@ import { ScenarioRunner } from './scenario-runner.js';
 import { parseScenarioFile } from './scenario-parser.js';
 import { validateTopology, validateOrigins } from './validator.js';
 
-const HARNESS_VERSION = '1.0.0';
+const HARNESS_VERSION = '1.0.1';
 
 export async function runCli(argv = process.argv.slice(2)) {
   const command = argv[0];
@@ -68,8 +69,8 @@ Release-Harness Core CLI (v${HARNESS_VERSION})
 Deterministic quality-gate adjudication and test execution engine.
 
 Commands:
-  doctor        Check host prerequisites, toolchain, and product contracts
-  init          Scaffold a minimal product-owned .release-harness/ specification
+  doctor        Check host prerequisites, toolchain, and project contracts
+  init          Scaffold a project-owned .release-harness/ contract + multi-runtime AI agents
   check-pr      Run Level 1 PR Integration Gate (contracts, smoke, toolchain)
   run-local     Run Level 2 Local Release UAT Gate (sealed Compose, scenarios, probes)
   evaluate      Pure-function deterministic adjudication of existing evidence
@@ -111,6 +112,21 @@ function resolveEvidenceRoot(flags, productSlug) {
   }
   const baseCache = process.env.LOCALAPPDATA || process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
   return path.join(baseCache, 'release-harness', productSlug || 'default');
+}
+
+function copyDirectoryRecursive(src, dest) {
+  if (!fs.existsSync(src)) return;
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectoryRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
 }
 
 async function handleDoctor(args) {
@@ -177,8 +193,8 @@ async function handleDoctor(args) {
     console.warn('    Action: Run "npx playwright install chromium" if browser tests are needed');
   }
 
-  // 2. Product-owned configuration discovery
-  console.log('\nProduct Contract Discovery:');
+  // 2. Project-owned configuration discovery
+  console.log('\nProject Contract Discovery:');
   const harnessDir = path.join(cwd, '.release-harness');
   const topologyFile = path.join(harnessDir, 'topology.json');
   const originsFile = path.join(harnessDir, 'origins.json');
@@ -227,13 +243,14 @@ async function handleInit(args) {
   const scenariosDir = path.join(harnessDir, 'scenarios');
   const fixturesDir = path.join(harnessDir, 'fixtures');
 
-  console.log(`Scaffolding product-owned Release-Harness configuration under ${harnessDir}...`);
+  console.log(`Scaffolding project-owned Release-Harness contracts and multi-runtime AI agents...`);
 
   fs.mkdirSync(scenariosDir, { recursive: true });
   fs.mkdirSync(fixturesDir, { recursive: true });
 
-  const pkgName = path.basename(cwd).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'product';
+  const pkgName = path.basename(cwd).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'project';
 
+  // 1. Write .release-harness contracts
   const harnessConfig = {
     schema_version: '1.0.0',
     product_slug: pkgName,
@@ -271,6 +288,15 @@ async function handleInit(args) {
       safe_for_live: true,
       evidence: ['package.json'],
     },
+    {
+      origin_id: 'staging-web',
+      type: 'browser_app',
+      auth: 'session-cookie',
+      url_source: 'env:STAGING_URL (default https://staging.example.com)',
+      route_families: ['/'],
+      safe_for_live: true,
+      evidence: ['package.json'],
+    },
   ];
   fs.writeFileSync(path.join(harnessDir, 'origins.json'), JSON.stringify(origins, null, 2) + '\n', 'utf8');
 
@@ -289,7 +315,7 @@ async function handleInit(args) {
 
   const readmeContent = `# Release Harness Configuration
 
-Product-owned test intent for **${pkgName}**:
+Project-owned test intent for **${pkgName}**:
 - \`harness.config.json\`: Execution controls, timeouts, and port blocks.
 - \`topology.json\`: Service graph, Docker Compose services, and health probes.
 - \`origins.json\`: Served surface definitions (browser apps, APIs, workers).
@@ -309,6 +335,70 @@ npx release-harness run-local
   console.log('✓ Created .release-harness/origins.json');
   console.log('✓ Created .release-harness/scenarios/smoke.json');
   console.log('✓ Created .release-harness/README.md');
+
+  // 2. Scaffold multi-runtime agent personas and skills from bundled templates
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const templatesDir = path.resolve(__dirname, '../templates');
+
+    if (fs.existsSync(templatesDir)) {
+      const tmplAgentsDir = path.join(templatesDir, 'agents');
+      const tmplSkillsDir = path.join(templatesDir, 'skills');
+
+      // AGENTS.md & .cursorrules
+      if (fs.existsSync(path.join(tmplAgentsDir, 'AGENTS.md'))) {
+        fs.copyFileSync(path.join(tmplAgentsDir, 'AGENTS.md'), path.join(cwd, 'AGENTS.md'));
+      }
+      if (fs.existsSync(path.join(tmplAgentsDir, '.cursorrules'))) {
+        fs.copyFileSync(path.join(tmplAgentsDir, '.cursorrules'), path.join(cwd, '.cursorrules'));
+      }
+
+      // Claude Code: .claude/agents & .claude/skills
+      const claudeAgentsDir = path.join(cwd, '.claude', 'agents');
+      const claudeSkillsDir = path.join(cwd, '.claude', 'skills');
+      fs.mkdirSync(claudeAgentsDir, { recursive: true });
+      fs.mkdirSync(claudeSkillsDir, { recursive: true });
+      if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
+        fs.copyFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), path.join(claudeAgentsDir, 'release-conductor.md'));
+      }
+      copyDirectoryRecursive(tmplSkillsDir, claudeSkillsDir);
+
+      // opencode: .opencode/agents & .opencode/skills
+      const opencodeAgentsDir = path.join(cwd, '.opencode', 'agents');
+      const opencodeSkillsDir = path.join(cwd, '.opencode', 'skills');
+      fs.mkdirSync(opencodeAgentsDir, { recursive: true });
+      fs.mkdirSync(opencodeSkillsDir, { recursive: true });
+      if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
+        fs.copyFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), path.join(opencodeAgentsDir, 'release-conductor.md'));
+      }
+      copyDirectoryRecursive(tmplSkillsDir, opencodeSkillsDir);
+
+      // GitHub Copilot: .github/agents & .github/copilot-instructions.md
+      const ghAgentsDir = path.join(cwd, '.github', 'agents');
+      fs.mkdirSync(ghAgentsDir, { recursive: true });
+      if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'))) {
+        fs.copyFileSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'), path.join(ghAgentsDir, 'release-conductor.agent.md'));
+      }
+      if (fs.existsSync(path.join(tmplAgentsDir, 'copilot-instructions.md'))) {
+        fs.copyFileSync(path.join(tmplAgentsDir, 'copilot-instructions.md'), path.join(cwd, '.github', 'copilot-instructions.md'));
+      }
+
+      // Copilot CLI: .copilot/agents
+      const copilotAgentsDir = path.join(cwd, '.copilot', 'agents');
+      fs.mkdirSync(copilotAgentsDir, { recursive: true });
+      if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
+        fs.copyFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), path.join(copilotAgentsDir, 'release-conductor.md'));
+      }
+
+      console.log('✓ Scaffolding AGENTS.md and .cursorrules');
+      console.log('✓ Scaffolding Claude Code agent & 17 skills (.claude/)');
+      console.log('✓ Scaffolding opencode agent & 17 skills (.opencode/)');
+      console.log('✓ Scaffolding GitHub Copilot agent & instructions (.github/)');
+    }
+  } catch (err) {
+    console.warn(`  ! Note: Agent scaffolding notice: ${err.message}`);
+  }
+
   console.log('\nInitialization complete. Run "npx release-harness doctor" to verify.');
   return 0;
 }
@@ -347,9 +437,9 @@ async function handleCheckPr(args) {
     const materializer = new SourceMaterializer(path.join(os.tmpdir(), 'harness-check-pr'));
 
     if (topology.topology_type === 'multi_repo') {
-      console.log('\n--- Multi-Repo Product Graph Resolution ---');
+      console.log('\n--- Multi-Repo Project Graph Resolution ---');
       const graphRes = materializer.resolveMultiRepoGraph(topology, cwd);
-      console.log(`Product Graph Digest: ${graphRes.graph_digest.slice(0, 16)}...`);
+      console.log(`Project Graph Digest: ${graphRes.graph_digest.slice(0, 16)}...`);
 
       if (!graphRes.ok) {
         for (const err of graphRes.errors) {
@@ -418,7 +508,7 @@ async function handleRunLocal(args) {
   }
 
   const topology = JSON.parse(fs.readFileSync(topologyFile, 'utf8'));
-  const productSlug = topology.product_slug || 'product';
+  const productSlug = topology.product_slug || 'project';
   const evidenceRoot = resolveEvidenceRoot(flags, productSlug);
   const runDir = path.join(evidenceRoot, 'runs', runId);
   const runEvidenceDir = path.join(runDir, 'evidence');

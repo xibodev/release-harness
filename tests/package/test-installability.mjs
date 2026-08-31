@@ -60,7 +60,7 @@ const npxCmd = isWin ? 'npx.cmd' : 'npx';
 // 4a. Version test
 const versionOut = execSync(`${npxCmd} release-harness --version`, { cwd: consumerRepoDir, encoding: 'utf8' }).trim();
 console.log(`  • Version: ${versionOut}`);
-assert.ok(versionOut.includes('1.0.0'), 'Version must report 1.0.0');
+assert.ok(versionOut.includes('1.0.1'), 'Version must report 1.0.1');
 
 // 4b. Help test
 const helpOut = execSync(`${npxCmd} release-harness --help`, { cwd: consumerRepoDir, encoding: 'utf8' });
@@ -80,7 +80,12 @@ const initOut = execSync(`${npxCmd} release-harness init`, { cwd: consumerRepoDi
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'topology.json')), 'topology.json must be created');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'origins.json')), 'origins.json must be created');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'scenarios', 'smoke.json')), 'smoke.json must be created');
-console.log('  ✓ .release-harness/ scaffolded successfully');
+assert.ok(fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'AGENTS.md must be scaffolded');
+assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md')), 'Claude agent must be scaffolded');
+assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'skills', 'project-cartographer', 'SKILL.md')), 'Claude skill must be scaffolded');
+assert.ok(fs.existsSync(path.join(consumerRepoDir, '.github', 'agents', 'release-conductor.agent.md')), 'GitHub Copilot agent must be scaffolded');
+assert.ok(fs.existsSync(path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md')), 'opencode agent must be scaffolded');
+console.log('  ✓ .release-harness/ and multi-runtime AI agents scaffolded successfully');
 
 // Point origin to designated test port 38500
 const originsPath = path.join(consumerRepoDir, '.release-harness', 'origins.json');
@@ -161,7 +166,7 @@ try {
   assert.strictEqual(verdict.certification_status, 'PASS', 'Certification status must be PASS');
   assert.strictEqual(verdict.run_integrity, 'COMPLETE', 'Run integrity must be COMPLETE');
   assert.strictEqual(verdict.exit_code, 0, 'Exit code must be 0');
-  assert.strictEqual(runManifest.harness_core_version, '1.0.0', 'Recorded harness core version must be 1.0.0');
+  assert.strictEqual(runManifest.harness_core_version, '1.0.1', 'Recorded harness core version must be 1.0.1');
   assert.strictEqual(runManifest.sources[0].commit_sha, consumerSha, 'Recorded commit SHA must match consumer repository SHA');
   assert.strictEqual(runManifest.sources[0].is_clean, true, 'Consumer repo must be recorded clean');
 

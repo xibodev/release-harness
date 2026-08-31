@@ -40,6 +40,7 @@
       <ul class="nav-links">
         <li><a href="#ai-agent-onboarding" class="nav-link">AI Onboarding Prompt</a></li>
         <li><a href="#release-conductor-agent" class="nav-link">The release-conductor Agent</a></li>
+        <li><a href="#skill-catalog" class="nav-link">The 17 Bundled Skills</a></li>
         <li><a href="#ai-prompts" class="nav-link">Role-Based Delegation Recipes</a></li>
         <li><a href="#deterministic-boundary" class="nav-link">Deterministic Core Rule</a></li>
       </ul>
@@ -337,6 +338,114 @@ npx release-harness init</code></pre>
         <li><strong>opencode:</strong> <code>.opencode/agents/release-conductor.md</code></li>
         <li><strong>Canonical Definition:</strong> <code>agents/release-conductor.md</code></li>
       </ul>
+
+      <!-- The 17 Bundled Skills -->
+      <h3 id="skill-catalog">The 17 Bundled Cognitive Skills</h3>
+      <p>
+        Running <code>npx release-harness init</code> automatically populates your project's local AI skill library (under <code>.claude/skills/</code> and <code>.opencode/skills/</code>) with 17 specialized release playbooks:
+      </p>
+
+      <table class="tech-table">
+        <thead>
+          <tr>
+            <th>Skill Name</th>
+            <th>Category</th>
+            <th>Role in the Release Lifecycle</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>project-cartographer</code></td>
+            <td>Discovery</td>
+            <td>Scans Docker Compose, routes, and scripts to build <code>topology.json</code> and <code>origins.json</code>.</td>
+          </tr>
+          <tr>
+            <td><code>scenario-compiler</code></td>
+            <td>Synthesis</td>
+            <td>Translates user stories, personas, and auth flows into declarative Playwright scenarios.</td>
+          </tr>
+          <tr>
+            <td><code>data-seeding</code></td>
+            <td>Fixtures</td>
+            <td>Generates and binds realistic seed entities for local Docker database testing.</td>
+          </tr>
+          <tr>
+            <td><code>code-change-review</code></td>
+            <td>Audit</td>
+            <td>Diffs backend/frontend changes against the baseline release tag to evaluate blast radius.</td>
+          </tr>
+          <tr>
+            <td><code>test-coverage-audit</code></td>
+            <td>Audit</td>
+            <td>Cross-references code changes with scenario coverage to identify untested branches.</td>
+          </tr>
+          <tr>
+            <td><code>database-readiness-audit</code></td>
+            <td>Audit</td>
+            <td>Audits database migration safety, lock risks, missing indexes, and rollback readiness.</td>
+          </tr>
+          <tr>
+            <td><code>security-audit</code></td>
+            <td>Audit</td>
+            <td>Scans for OWASP Top 10 vulnerabilities, authentication leaks, and security headers.</td>
+          </tr>
+          <tr>
+            <td><code>fintech-security-review</code></td>
+            <td>Audit</td>
+            <td>Deep security review for PCI-DSS compliance, payment flows, and sensitive PII storage.</td>
+          </tr>
+          <tr>
+            <td><code>performance-audit</code></td>
+            <td>Audit</td>
+            <td>Analyzes database query loops (N+1 queries), caching strategies, and slow API routes.</td>
+          </tr>
+          <tr>
+            <td><code>deep-screenshot-analysis</code></td>
+            <td>Vision UX</td>
+            <td>Multimodal vision model reviews Playwright screenshots to detect UI clipping and alignment flaws.</td>
+          </tr>
+          <tr>
+            <td><code>monitoring-audit</code></td>
+            <td>Observability</td>
+            <td>Validates production observability, health endpoints, and structured logging posture.</td>
+          </tr>
+          <tr>
+            <td><code>fix-planner</code></td>
+            <td>Remediation</td>
+            <td>Parses failure causes in <code>verdict.json</code> and constructs an ordered <code>execution-plan.json</code>.</td>
+          </tr>
+          <tr>
+            <td><code>fix-executor</code></td>
+            <td>Remediation</td>
+            <td>Applies code patches to source files, validates with <code>run-local</code>, and rolls back if broken.</td>
+          </tr>
+          <tr>
+            <td><code>change-safety</code></td>
+            <td>Gatekeeper</td>
+            <td>Pre-commit safety check ensuring zero secret leaks, clean git tree, and multi-repo SHA binding.</td>
+          </tr>
+          <tr>
+            <td><code>release-decider</code></td>
+            <td>Decision</td>
+            <td>Synthesizes all test evidence and audits into a formal Go/No-Go release assessment.</td>
+          </tr>
+          <tr>
+            <td><code>deployment-plan-generator</code></td>
+            <td>Operations</td>
+            <td>Generates release deployment plans, rollback runbooks, and post-deploy verification steps.</td>
+          </tr>
+          <tr>
+            <td><code>post-deploy-window-planner</code></td>
+            <td>Operations</td>
+            <td>Plans 30-minute and 24-hour post-deployment observation metrics for on-call engineers.</td>
+          </tr>
+          <tr>
+            <td><code>session-handoff-agent</code></td>
+            <td>Continuity</td>
+            <td>Writes durable handoff cairns so development and testing can pause and resume seamlessly.</td>
+          </tr>
+        </tbody>
+      </table>
 
       <h3 id="ai-prompts">Role-Based Delegation Recipes</h3>
       <p>Once onboarded, delegate tasks to the agent using concise, role-based prompts:</p>
