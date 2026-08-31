@@ -288,15 +288,6 @@ async function handleInit(args) {
       safe_for_live: true,
       evidence: ['package.json'],
     },
-    {
-      origin_id: 'staging-web',
-      type: 'browser_app',
-      auth: 'session-cookie',
-      url_source: 'env:STAGING_URL (default https://staging.example.com)',
-      route_families: ['/'],
-      safe_for_live: true,
-      evidence: ['package.json'],
-    },
   ];
   fs.writeFileSync(path.join(harnessDir, 'origins.json'), JSON.stringify(origins, null, 2) + '\n', 'utf8');
 
@@ -619,9 +610,26 @@ async function handleRunLocal(args) {
     const rawResultsBytes = JSON.stringify(redactor.redactObject(rawResults), null, 2) + '\n';
     fs.writeFileSync(path.join(runEvidenceDir, 'raw-results.json'), rawResultsBytes, 'utf8');
 
-    // 6. Seal Evidence
+    // 6. Seal Evidence with Policy Snapshot for deterministic replay
     console.log('6. Sealing evidence directory...');
-    const sealRes = sealer.sealEvidence();
+    const policySnapshot = {
+      schema_version: '1.0.0',
+      product_slug: productSlug,
+      topology,
+      origins,
+      scenarios,
+      network_policy: topology.network_policy || null,
+      waivers: [],
+    };
+    const waiversFile = path.join(harnessDir, 'waivers.json');
+    if (fs.existsSync(waiversFile)) {
+      try {
+        const parsedWaivers = JSON.parse(fs.readFileSync(waiversFile, 'utf8'));
+        policySnapshot.waivers = parsedWaivers.waivers || parsedWaivers;
+      } catch {}
+    }
+
+    const sealRes = sealer.sealEvidence(policySnapshot);
     console.log(`   Evidence sealed (Manifest SHA: ${sealRes.manifestSha256.slice(0, 12)}...)`);
 
     // 7. Deterministic Adjudication

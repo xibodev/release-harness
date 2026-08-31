@@ -38,6 +38,7 @@ export class EvidenceSealer {
 
   categorizeFile(relPath) {
     const norm = relPath.replace(/\\/g, '/');
+    if (norm === 'policy-snapshot.json') return 'policy';
     if (norm.startsWith('logs/') || norm.endsWith('.log')) return 'log';
     if (norm.startsWith('traces/') || norm.endsWith('.zip')) return 'trace';
     if (norm.startsWith('screenshots/') || norm.endsWith('.png') || norm.endsWith('.webp') || norm.endsWith('.jpg')) {
@@ -87,12 +88,18 @@ export class EvidenceSealer {
   /**
    * Closes the evidence directory, computes all file hashes, and writes evidence.manifest.json.
    */
-  sealEvidence() {
+  sealEvidence(policySnapshot = null) {
     if (this.state === 'COLLECTING') {
       this.transitionTo('SANITIZING');
     }
     if (this.state === 'SANITIZING') {
       this.transitionTo('SEALED');
+    }
+
+    // Write policy snapshot into evidence directory before computing hashes if provided
+    if (policySnapshot) {
+      const policySnapshotPath = path.join(this.evidenceDir, 'policy-snapshot.json');
+      fs.writeFileSync(policySnapshotPath, JSON.stringify(policySnapshot, null, 2) + '\n', 'utf8');
     }
 
     const files = this.scanFiles();
