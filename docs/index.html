@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Release-Harness — Deterministic Quality Gate & Local UAT</title>
-  <meta name="description" content="Deterministic, versioned quality-gate and local UAT release harness for modern software projects.">
+  <title>Release-Harness — Deterministic Quality Gate & Autonomous UAT</title>
+  <meta name="description" content="Deterministic quality-gate and autonomous UAT release harness for modern software projects.">
   <link rel="stylesheet" href="style.css">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='10' fill='%230f172a'/><text x='50%' y='68%' font-size='55' font-weight='900' fill='%23ffffff' font-family='monospace' text-anchor='middle'>RH</text></svg>">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='12' fill='%230f172a'/><text x='50%' y='68%' font-size='55' font-weight='900' fill='%23ffffff' font-family='monospace' text-anchor='middle'>RH</text></svg>">
 </head>
 <body>
 
@@ -17,11 +17,19 @@
       <div class="brand-name">RELEASE-HARNESS</div>
     </a>
 
+    <!-- Quick Search -->
+    <div class="search-container">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" class="search-input" placeholder="Search documentation...">
+      <span class="search-shortcut">/</span>
+    </div>
+
     <div class="nav-section">
       <div class="nav-header">Overview</div>
       <ul class="nav-links">
         <li><a href="#introduction" class="nav-link active">Introduction</a></li>
-        <li><a href="#core-invariants" class="nav-link">Core Invariants</a></li>
+        <li><a href="#architecture-pipeline" class="nav-link">Dual-Core Architecture</a></li>
+        <li><a href="#core-invariants" class="nav-link">Core Invariants & Exit Codes</a></li>
         <li><a href="#interactive-demo" class="nav-link">Interactive Terminal</a></li>
       </ul>
     </div>
@@ -39,8 +47,8 @@
       <div class="nav-header">AI Agent Integration</div>
       <ul class="nav-links">
         <li><a href="#ai-agent-onboarding" class="nav-link">AI Onboarding Prompt</a></li>
-        <li><a href="#release-conductor-agent" class="nav-link">The release-conductor Agent</a></li>
-        <li><a href="#skill-catalog" class="nav-link">The 17 Bundled Skills</a></li>
+        <li><a href="#release-conductor-agent" class="nav-link">release-conductor Agent</a></li>
+        <li><a href="#skill-catalog" class="nav-link">17 Bundled Cognitive Skills</a></li>
         <li><a href="#ai-prompts" class="nav-link">Role-Based Delegation Recipes</a></li>
         <li><a href="#deterministic-boundary" class="nav-link">Deterministic Core Rule</a></li>
       </ul>
@@ -49,14 +57,27 @@
     <div class="nav-section">
       <div class="nav-header">Contracts & DSL</div>
       <ul class="nav-links">
-        <li><a href="#project-contracts" class="nav-link">Project Contracts</a></li>
+        <li><a href="#project-contracts" class="nav-link">Project Contracts Reference</a></li>
         <li><a href="#scenario-dsl" class="nav-link">Scenario DSL Guide</a></li>
         <li><a href="#negative-controls" class="nav-link">Negative Controls</a></li>
         <li><a href="#side-effects" class="nav-link">Side-Effect Probes</a></li>
+        <li><a href="#multi-repo-guide" class="nav-link">Multi-Repo Product Graph</a></li>
       </ul>
     </div>
 
-    <div class="nav-section" style="margin-top: auto; padding-top: 16px; border-top: 2px solid var(--border);">
+    <div class="nav-section">
+      <div class="nav-header">Operations</div>
+      <ul class="nav-links">
+        <li><a href="#troubleshooting" class="nav-link">Troubleshooting & FAQs</a></li>
+      </ul>
+    </div>
+
+    <div class="theme-toggle-bar">
+      <span>THEME:</span>
+      <button id="theme-toggle-btn" class="toggle-btn">🌙 DARK</button>
+    </div>
+
+    <div class="nav-section" style="margin-top: 16px; padding-top: 14px; border-top: 2px solid var(--border);">
       <a href="https://github.com/xibodev/release-harness" class="nav-link" target="_blank" rel="noreferrer" style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">
         <span>GitHub Repository ↗</span>
       </a>
@@ -73,7 +94,7 @@
     <header class="hero">
       <div class="status-pill">
         <span class="status-dot"></span>
-        <span>PRODUCTION RELEASE v1.0.0 — LIVE ON NPM</span>
+        <span>PRODUCTION RELEASE v1.0.1 — LIVE ON NPM</span>
       </div>
       <h1>Deterministic Quality Gates & Local UAT for Software Projects</h1>
       <p class="subtitle">
@@ -146,42 +167,112 @@
       </div>
     </section>
 
-    <!-- Core Invariants -->
+    <!-- Architecture & Pipeline Flowchart -->
+    <section id="architecture-pipeline">
+      <h2 id="architecture-pipeline">Dual-Core Architecture: Intelligence + Determinism</h2>
+      <p>
+        Release-Harness pairs an <strong>AI Intelligence Layer</strong> (17 cognitive skills for mapping, audits, and bug fixing) with a <strong>Deterministic Core Engine</strong> (pure Node.js/Playwright/Docker with zero prompts and zero hallucinations).
+      </p>
+
+      <div class="diagram-container">
+        <svg viewBox="0 0 880 260" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg" style="font-family: var(--font-mono); font-size: 11px;">
+          <defs>
+            <linearGradient id="gradAccent" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#4f46e5" />
+              <stop offset="100%" stop-color="#6366f1" />
+            </linearGradient>
+            <linearGradient id="gradSuccess" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#059669" />
+              <stop offset="100%" stop-color="#10b981" />
+            </linearGradient>
+            <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+              <feDropShadow dx="2" dy="2" stdDeviation="2" flood-opacity="0.1" />
+            </filter>
+          </defs>
+
+          <!-- Stage 1: Source & Materializer -->
+          <rect x="20" y="30" width="160" height="85" rx="6" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" filter="url(#shadow)"/>
+          <text x="100" y="55" font-weight="bold" fill="#0f172a" text-anchor="middle">1. PROJECT SOURCE</text>
+          <text x="100" y="75" fill="#64748b" text-anchor="middle">.git tree (immutable)</text>
+          <text x="100" y="92" fill="#4f46e5" text-anchor="middle">.release-harness/</text>
+
+          <path d="M 180 72 L 230 72" stroke="#4f46e5" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Stage 2: Detached Materializer -->
+          <rect x="230" y="30" width="180" height="85" rx="6" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" filter="url(#shadow)"/>
+          <text x="320" y="55" font-weight="bold" fill="#0f172a" text-anchor="middle">2. MATERIALIZER</text>
+          <text x="320" y="75" fill="#64748b" text-anchor="middle">Isolated scratchpad</text>
+          <text x="320" y="92" fill="#059669" text-anchor="middle">Zero repo pollution</text>
+
+          <path d="M 410 72 L 460 72" stroke="#4f46e5" stroke-width="2"/>
+
+          <!-- Stage 3: Docker & Playwright -->
+          <rect x="460" y="30" width="190" height="85" rx="6" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" filter="url(#shadow)"/>
+          <text x="555" y="55" font-weight="bold" fill="#0f172a" text-anchor="middle">3. COMPOSE & PLAYWRIGHT</text>
+          <text x="555" y="75" fill="#64748b" text-anchor="middle">Origins + Egress Filter</text>
+          <text x="555" y="92" fill="#6366f1" text-anchor="middle">S3 & DB Probes</text>
+
+          <path d="M 650 72 L 700 72" stroke="#4f46e5" stroke-width="2"/>
+
+          <!-- Stage 4: Sealer & Evaluator -->
+          <rect x="700" y="30" width="160" height="85" rx="6" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" filter="url(#shadow)"/>
+          <text x="780" y="55" font-weight="bold" fill="#0f172a" text-anchor="middle">4. SEALER & VERDICT</text>
+          <text x="780" y="75" fill="#64748b" text-anchor="middle">SHA-256 Manifest</text>
+          <text x="780" y="92" font-weight="bold" fill="#059669" text-anchor="middle">verdict.json (Exit 0-4)</text>
+
+          <!-- Feedback Loop: AI Fix Planner & Executor -->
+          <path d="M 780 115 L 780 200 L 100 200 L 100 115" fill="none" stroke="#dc2626" stroke-width="2" stroke-dasharray="5,5"/>
+          <rect x="300" y="175" width="280" height="50" rx="6" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+          <text x="440" y="196" font-weight="bold" fill="#991b1b" text-anchor="middle">AUTONOMOUS FIX LOOP (If Exit != 0)</text>
+          <text x="440" y="212" fill="#7f1d1d" text-anchor="middle">fix-planner + fix-executor patches code & re-runs</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- Core Invariants & Exit Codes -->
     <section id="core-invariants">
-      <h2 id="core-invariants">Core Invariants</h2>
+      <h2 id="core-invariants">Core Invariants & Exit Codes</h2>
+      <p>The pure-function evaluator strictly derivation verdicts without human or AI overrides:</p>
+
       <table class="tech-table">
         <thead>
           <tr>
             <th>Status Code</th>
             <th>Exit Code</th>
             <th>Adjudication Meaning</th>
+            <th>Remediation Action</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><code style="color: var(--success); font-weight: bold;">PASS</code></td>
             <td><code>0</code></td>
-            <td>All required and conditional scenarios passed with verified side-effects. Certified for release.</td>
+            <td>All required & conditional scenarios passed with verified side effects.</td>
+            <td>Ready for promotion / deployment.</td>
           </tr>
           <tr>
             <td><code style="color: var(--danger); font-weight: bold;">FAIL</code></td>
             <td><code>1</code></td>
-            <td>One or more required scenarios failed due to product defects or unmet required dependencies.</td>
+            <td>One or more required scenarios failed due to product bugs or missing dependencies.</td>
+            <td>Invoke <code>fix-planner</code> & <code>fix-executor</code> to patch code.</td>
           </tr>
           <tr>
             <td><code style="color: var(--warning); font-weight: bold;">UNPROVEN</code></td>
             <td><code>2</code></td>
-            <td>Preconditions unmet or active waivers present (e.g. non-certifying local development mode).</td>
+            <td>Preconditions unmet, active waivers present, or dirty git tree with <code>--allow-dirty</code>.</td>
+            <td>Stage missing fixtures or commit uncommitted changes.</td>
           </tr>
           <tr>
             <td><code style="color: var(--danger); font-weight: bold;">HARNESS_ERROR</code></td>
             <td><code>3</code></td>
-            <td>Malformed scenario, environment missing, or Docker Compose startup failure.</td>
+            <td>Malformed scenario, missing runtime environment, or Docker Compose crash.</td>
+            <td>Verify <code>doctor</code> prerequisites and Compose configuration.</td>
           </tr>
           <tr>
             <td><code style="color: var(--danger); font-weight: bold;">EVIDENCE_INVALID</code></td>
             <td><code>4</code></td>
-            <td>Evidence file tampering, missing artifacts, or SHA-256 checksum divergence detected.</td>
+            <td>Evidence file tampering, injected logs, or SHA-256 checksum mismatch.</td>
+            <td>Clean corrupted workspace with <code>npx release-harness clean</code>.</td>
           </tr>
         </tbody>
       </table>
@@ -198,34 +289,45 @@
       </div>
       <pre><code>npm install -D @xibodev/release-harness</code></pre>
 
-      <h3 id="cli-commands">Supported CLI Commands</h3>
+      <h3 id="cli-commands">Supported CLI Commands & Options</h3>
       <table class="tech-table">
         <thead>
           <tr>
             <th>Command</th>
+            <th>Flags</th>
             <th>Description</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><code>npx release-harness doctor</code></td>
+            <td><code>doctor</code></td>
+            <td>none</td>
             <td>Validates host prerequisites (Node, Git, Docker, Compose, and Playwright Chromium).</td>
           </tr>
           <tr>
-            <td><code>npx release-harness init</code></td>
-            <td>Scaffolds a clean project-owned <code>.release-harness/</code> contract directory.</td>
+            <td><code>init</code></td>
+            <td>none</td>
+            <td>Scaffolds project-owned <code>.release-harness/</code> contracts, <code>AGENTS.md</code>, and multi-runtime AI agents + skills.</td>
           </tr>
           <tr>
-            <td><code>npx release-harness check-pr</code></td>
+            <td><code>check-pr</code></td>
+            <td><code>--allow-dirty</code></td>
             <td>Level 1 PR Integration Gate: checks schemas, contract validity, and clean git provenance.</td>
           </tr>
           <tr>
-            <td><code>npx release-harness run-local</code></td>
+            <td><code>run-local</code></td>
+            <td><code>--evidence-dir</code>, <code>--port-offset</code>, <code>--allow-dirty</code></td>
             <td>Level 2 Local Release Gate: materializes detached source, spins up Docker stack, runs Playwright journeys, verifies side-effects, seals evidence, and outputs verdict.</td>
           </tr>
           <tr>
-            <td><code>npx release-harness clean</code></td>
-            <td>Cleans up detached workspaces and removes scoped test containers.</td>
+            <td><code>evaluate</code></td>
+            <td><code>--evidence-dir</code>, <code>--time</code></td>
+            <td>Pure-function replay evaluation of existing sealed evidence directory.</td>
+          </tr>
+          <tr>
+            <td><code>clean</code></td>
+            <td><code>--run-id</code>, <code>--evidence-dir</code></td>
+            <td>Cleans up detached workspaces and removes scoped Docker test containers.</td>
           </tr>
         </tbody>
       </table>
@@ -321,7 +423,7 @@ npx release-harness init</code></pre>
       <ul>
         <li>Installs <code>@xibodev/release-harness</code> as a project dev dependency.</li>
         <li>Executes <code>npx release-harness doctor</code> to verify the environment.</li>
-        <li>Runs <code>npx release-harness init</code> to scaffold <code>.release-harness/</code>.</li>
+        <li>Runs <code>npx release-harness init</code> to scaffold <code>.release-harness/</code>, <code>AGENTS.md</code>, and multi-runtime skill libraries.</li>
         <li>Inspects your <code>package.json</code>, Docker configs, and application routes to configure <code>topology.json</code> and <code>origins.json</code> with your actual service ports and health endpoints.</li>
         <li>Authors initial smoke scenarios under <code>.release-harness/scenarios/</code> and runs <code>npx release-harness run-local</code> to verify a certified green baseline.</li>
       </ul>
@@ -345,107 +447,86 @@ npx release-harness init</code></pre>
         Running <code>npx release-harness init</code> automatically populates your project's local AI skill library (under <code>.claude/skills/</code> and <code>.opencode/skills/</code>) with 17 specialized release playbooks:
       </p>
 
-      <table class="tech-table">
-        <thead>
-          <tr>
-            <th>Skill Name</th>
-            <th>Category</th>
-            <th>Role in the Release Lifecycle</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>project-cartographer</code></td>
-            <td>Discovery</td>
-            <td>Scans Docker Compose, routes, and scripts to build <code>topology.json</code> and <code>origins.json</code>.</td>
-          </tr>
-          <tr>
-            <td><code>scenario-compiler</code></td>
-            <td>Synthesis</td>
-            <td>Translates user stories, personas, and auth flows into declarative Playwright scenarios.</td>
-          </tr>
-          <tr>
-            <td><code>data-seeding</code></td>
-            <td>Fixtures</td>
-            <td>Generates and binds realistic seed entities for local Docker database testing.</td>
-          </tr>
-          <tr>
-            <td><code>code-change-review</code></td>
-            <td>Audit</td>
-            <td>Diffs backend/frontend changes against the baseline release tag to evaluate blast radius.</td>
-          </tr>
-          <tr>
-            <td><code>test-coverage-audit</code></td>
-            <td>Audit</td>
-            <td>Cross-references code changes with scenario coverage to identify untested branches.</td>
-          </tr>
-          <tr>
-            <td><code>database-readiness-audit</code></td>
-            <td>Audit</td>
-            <td>Audits database migration safety, lock risks, missing indexes, and rollback readiness.</td>
-          </tr>
-          <tr>
-            <td><code>security-audit</code></td>
-            <td>Audit</td>
-            <td>Scans for OWASP Top 10 vulnerabilities, authentication leaks, and security headers.</td>
-          </tr>
-          <tr>
-            <td><code>fintech-security-review</code></td>
-            <td>Audit</td>
-            <td>Deep security review for PCI-DSS compliance, payment flows, and sensitive PII storage.</td>
-          </tr>
-          <tr>
-            <td><code>performance-audit</code></td>
-            <td>Audit</td>
-            <td>Analyzes database query loops (N+1 queries), caching strategies, and slow API routes.</td>
-          </tr>
-          <tr>
-            <td><code>deep-screenshot-analysis</code></td>
-            <td>Vision UX</td>
-            <td>Multimodal vision model reviews Playwright screenshots to detect UI clipping and alignment flaws.</td>
-          </tr>
-          <tr>
-            <td><code>monitoring-audit</code></td>
-            <td>Observability</td>
-            <td>Validates production observability, health endpoints, and structured logging posture.</td>
-          </tr>
-          <tr>
-            <td><code>fix-planner</code></td>
-            <td>Remediation</td>
-            <td>Parses failure causes in <code>verdict.json</code> and constructs an ordered <code>execution-plan.json</code>.</td>
-          </tr>
-          <tr>
-            <td><code>fix-executor</code></td>
-            <td>Remediation</td>
-            <td>Applies code patches to source files, validates with <code>run-local</code>, and rolls back if broken.</td>
-          </tr>
-          <tr>
-            <td><code>change-safety</code></td>
-            <td>Gatekeeper</td>
-            <td>Pre-commit safety check ensuring zero secret leaks, clean git tree, and multi-repo SHA binding.</td>
-          </tr>
-          <tr>
-            <td><code>release-decider</code></td>
-            <td>Decision</td>
-            <td>Synthesizes all test evidence and audits into a formal Go/No-Go release assessment.</td>
-          </tr>
-          <tr>
-            <td><code>deployment-plan-generator</code></td>
-            <td>Operations</td>
-            <td>Generates release deployment plans, rollback runbooks, and post-deploy verification steps.</td>
-          </tr>
-          <tr>
-            <td><code>post-deploy-window-planner</code></td>
-            <td>Operations</td>
-            <td>Plans 30-minute and 24-hour post-deployment observation metrics for on-call engineers.</td>
-          </tr>
-          <tr>
-            <td><code>session-handoff-agent</code></td>
-            <td>Continuity</td>
-            <td>Writes durable handoff cairns so development and testing can pause and resume seamlessly.</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="skill-item">
+        <div class="skill-header">
+          <div class="skill-title">
+            <span>project-cartographer</span>
+            <span class="skill-badge">Discovery</span>
+          </div>
+          <span class="skill-arrow">▶</span>
+        </div>
+        <div class="skill-content">
+          <p>Scans Docker Compose, routes, and scripts to build <code>topology.json</code> and <code>origins.json</code>.</p>
+          <p><strong>Prompt:</strong> <code>Use project-cartographer to map our Docker Compose services into .release-harness/topology.json and origins.json.</code></p>
+        </div>
+      </div>
+
+      <div class="skill-item">
+        <div class="skill-header">
+          <div class="skill-title">
+            <span>scenario-compiler</span>
+            <span class="skill-badge">Synthesis</span>
+          </div>
+          <span class="skill-arrow">▶</span>
+        </div>
+        <div class="skill-content">
+          <p>Translates user stories, personas, and auth flows into declarative Playwright scenarios.</p>
+          <p><strong>Prompt:</strong> <code>Use scenario-compiler to author Playwright test scenarios for our user checkout flow in .release-harness/scenarios/.</code></p>
+        </div>
+      </div>
+
+      <div class="skill-item">
+        <div class="skill-header">
+          <div class="skill-title">
+            <span>fix-planner & fix-executor</span>
+            <span class="skill-badge">Remediation</span>
+          </div>
+          <span class="skill-arrow">▶</span>
+        </div>
+        <div class="skill-content">
+          <p>Parses failure causes in <code>verdict.json</code>, constructs an ordered <code>execution-plan.json</code>, applies source code diffs, and re-runs <code>run-local</code> until certified green.</p>
+          <p><strong>Prompt:</strong> <code>Use fix-planner and fix-executor to resolve the failing scenarios in verdict.json.</code></p>
+        </div>
+      </div>
+
+      <div class="skill-item">
+        <div class="skill-header">
+          <div class="skill-title">
+            <span>deep-screenshot-analysis</span>
+            <span class="skill-badge">Vision UX</span>
+          </div>
+          <span class="skill-arrow">▶</span>
+        </div>
+        <div class="skill-content">
+          <p>Passes Playwright screenshots to multimodal vision models to detect UI clipping, overlapping text, missing CTAs, and layout flaws.</p>
+        </div>
+      </div>
+
+      <div class="skill-item">
+        <div class="skill-header">
+          <div class="skill-title">
+            <span>security-audit & fintech-security-review</span>
+            <span class="skill-badge">Security</span>
+          </div>
+          <span class="skill-arrow">▶</span>
+        </div>
+        <div class="skill-content">
+          <p>Scans for OWASP Top 10 vulnerabilities, authentication leaks, security headers, PCI-DSS compliance, and sensitive PII handling.</p>
+        </div>
+      </div>
+
+      <div class="skill-item">
+        <div class="skill-header">
+          <div class="skill-title">
+            <span>database-readiness-audit & performance-audit</span>
+            <span class="skill-badge">Infrastructure</span>
+          </div>
+          <span class="skill-arrow">▶</span>
+        </div>
+        <div class="skill-content">
+          <p>Audits database migration safety, lock risks, missing indexes, rollback readiness, N+1 query loops, and slow API routes.</p>
+        </div>
+      </div>
 
       <h3 id="ai-prompts">Role-Based Delegation Recipes</h3>
       <p>Once onboarded, delegate tasks to the agent using concise, role-based prompts:</p>
@@ -613,6 +694,36 @@ npx release-harness init</code></pre>
     }
   ]
 }</code></pre>
+    </section>
+
+    <!-- Multi-Repo & Product Graph Guide -->
+    <section id="multi-repo-guide">
+      <h2 id="multi-repo-guide">Multi-Repo Product Graph Architecture</h2>
+      <p>
+        In microservice or multi-repo setups, an <strong>Integration Owner</strong> repository coordinates testing across component repositories without cloning entire codebases into production:
+      </p>
+      <ul>
+        <li><strong>Topology Type:</strong> Set <code>topology_type: "multi_repo"</code> in <code>topology.json</code>.</li>
+        <li><strong>Product Graph Digest:</strong> The harness computes a single cryptographic hash across all component commit SHAs and contract versions.</li>
+        <li><strong>Build-Once OCI Continuity:</strong> Inspects and pins immutable container image digests (<code>sha256:...</code>) so exact verified binaries are promoted to production with zero rebuild drift.</li>
+      </ul>
+    </section>
+
+    <!-- Troubleshooting & FAQs -->
+    <section id="troubleshooting">
+      <h2 id="troubleshooting">Troubleshooting & FAQs</h2>
+      <div class="tech-card" style="margin-bottom: 16px;">
+        <div class="card-title">❓ Why does check-pr fail on a dirty working tree?</div>
+        <div class="card-desc">Certification runs require a clean git state to produce an immutable, tamper-proof Git SHA in <code>run.manifest.json</code>. For active development without committing, pass <code>--allow-dirty</code> to enter non-certifying development mode (returns Exit Code 2).</div>
+      </div>
+      <div class="tech-card" style="margin-bottom: 16px;">
+        <div class="card-title">❓ How do I fix a missing Chromium browser?</div>
+        <div class="card-desc">Run <code>npx playwright install chromium</code> on the host machine. Release-Harness uses the standard Playwright Chromium cache.</div>
+      </div>
+      <div class="tech-card">
+        <div class="card-title">❓ What causes an EVIDENCE_INVALID (Exit 4) error?</div>
+        <div class="card-desc">The sealer detected that files in the evidence directory were modified or injected after sealing. Clean the run directory with <code>npx release-harness clean</code>.</div>
+      </div>
     </section>
 
     <!-- Footer -->

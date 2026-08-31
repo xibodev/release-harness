@@ -1,5 +1,59 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // Terminal Simulations
+  // 1. Theme Management (Light / Dark)
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const savedTheme = localStorage.getItem('rh_theme') || (prefersDark ? 'dark' : 'light');
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (themeToggleBtn) {
+      themeToggleBtn.innerText = theme === 'dark' ? '☀️ LIGHT' : '🌙 DARK';
+    }
+    localStorage.setItem('rh_theme', theme);
+  }
+
+  applyTheme(savedTheme);
+
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  // 2. Client-Side Instant Search
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      const searchableItems = document.querySelectorAll('section[id], .skill-item, .tech-card, .tech-table tr');
+
+      if (!query) {
+        searchableItems.forEach(el => el.style.display = '');
+        return;
+      }
+
+      searchableItems.forEach(el => {
+        const text = el.innerText.toLowerCase();
+        if (text.includes(query)) {
+          el.style.display = '';
+        } else {
+          el.style.display = 'none';
+        }
+      });
+    });
+
+    // Keyboard shortcut '/' or 'Ctrl+K'
+    window.addEventListener('keydown', (e) => {
+      if ((e.key === '/' || (e.ctrlKey && e.key === 'k') || (e.metaKey && e.key === 'k')) && document.activeElement !== searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+    });
+  }
+
+  // 3. Interactive Terminal Simulation
   const terminalOutputs = {
     'run-local': [
       '<span class="t-cyan">$ npx release-harness run-local</span>',
@@ -27,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ],
     'doctor': [
       '<span class="t-cyan">$ npx release-harness doctor</span>',
-      '<span class="t-bold">Release-Harness v1.0.0 Diagnostics & Prerequisites</span>',
+      '<span class="t-bold">Release-Harness v1.0.1 Diagnostics & Prerequisites</span>',
       '',
       'Host Toolchain:',
       '  <span class="t-green">✓</span> Node.js          : 22.14.0',
@@ -45,13 +99,17 @@ document.addEventListener('DOMContentLoaded', () => {
     ],
     'init': [
       '<span class="t-cyan">$ npx release-harness init</span>',
-      'Scaffolding project-owned Release-Harness configuration under .release-harness...',
+      'Scaffolding project-owned Release-Harness contracts and multi-runtime AI agents...',
       '',
       '  <span class="t-green">✓</span> Created .release-harness/harness.config.json',
       '  <span class="t-green">✓</span> Created .release-harness/topology.json',
       '  <span class="t-green">✓</span> Created .release-harness/origins.json',
       '  <span class="t-green">✓</span> Created .release-harness/scenarios/smoke.json',
       '  <span class="t-green">✓</span> Created .release-harness/README.md',
+      '  <span class="t-green">✓</span> Scaffolding AGENTS.md and .cursorrules',
+      '  <span class="t-green">✓</span> Scaffolding Claude Code agent & 17 skills (.claude/)',
+      '  <span class="t-green">✓</span> Scaffolding opencode agent & 17 skills (.opencode/)',
+      '  <span class="t-green">✓</span> Scaffolding GitHub Copilot agent & instructions (.github/)',
       '',
       '<span class="t-green t-bold">Initialization complete. Run "npx release-harness doctor" to verify.</span>'
     ],
@@ -85,10 +143,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Initial terminal render
   renderTerminal('run-local');
 
-  // Generic Tabs switching
+  // 4. Tab Containers
   document.querySelectorAll('.tab-container').forEach(container => {
     const btns = container.querySelectorAll('.tab-btn');
     const panes = container.querySelectorAll('.tab-pane');
@@ -104,7 +161,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Copy buttons
+  // 5. Expandable Skill Accordion
+  document.querySelectorAll('.skill-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const item = header.parentElement;
+      item.classList.toggle('open');
+    });
+  });
+
+  // 6. Copy Buttons
   document.querySelectorAll('.copy-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const targetId = btn.getAttribute('data-target');
@@ -119,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Active scrollspy for sidebar
+  // 7. Active Scrollspy
   const sections = document.querySelectorAll('section[id], h2[id]');
   const navLinks = document.querySelectorAll('.nav-link');
 
