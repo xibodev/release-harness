@@ -4,106 +4,142 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Release-Harness — Deterministic Quality Gate & Local UAT</title>
-  <meta name="description" content="Deterministic, versioned quality-gate and local UAT release harness for modern software products.">
+  <meta name="description" content="Deterministic, versioned quality-gate and local UAT release harness for modern software projects.">
   <link rel="stylesheet" href="style.css">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%236366f1'/><text x='50%' y='68%' font-size='55' font-weight='bold' fill='white' text-anchor='middle'>RH</text></svg>">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='10' fill='%230f172a'/><text x='50%' y='68%' font-size='55' font-weight='900' fill='%23ffffff' font-family='monospace' text-anchor='middle'>RH</text></svg>">
 </head>
 <body>
 
-  <!-- Navigation Sidebar -->
+  <!-- Sidebar Navigation -->
   <aside class="sidebar">
     <a href="#" class="brand">
-      <div class="brand-icon">RH</div>
-      <div class="brand-title">Release-Harness <span style="font-size: 11px; opacity: 0.6;">v1.0</span></div>
+      <div class="brand-badge">RH</div>
+      <div class="brand-name">RELEASE-HARNESS</div>
     </a>
 
     <div class="nav-section">
-      <div class="nav-title">Overview</div>
+      <div class="nav-header">Overview</div>
       <ul class="nav-links">
         <li><a href="#introduction" class="nav-link active">Introduction</a></li>
         <li><a href="#core-invariants" class="nav-link">Core Invariants</a></li>
+        <li><a href="#interactive-demo" class="nav-link">Interactive Terminal</a></li>
       </ul>
     </div>
 
     <div class="nav-section">
-      <div class="nav-title">Quick Start</div>
+      <div class="nav-header">Developer Quickstart</div>
       <ul class="nav-links">
         <li><a href="#installation" class="nav-link">Installation</a></li>
         <li><a href="#cli-commands" class="nav-link">CLI Commands</a></li>
-        <li><a href="#onboarding-product" class="nav-link">Onboarding a Product</a></li>
+        <li><a href="#onboarding-project" class="nav-link">Onboarding a Project</a></li>
       </ul>
     </div>
 
     <div class="nav-section">
-      <div class="nav-title">AI Coding Agents</div>
+      <div class="nav-header">AI Agent Integration</div>
       <ul class="nav-links">
-        <li><a href="#ai-agent-guide" class="nav-link">Using with AI Agents</a></li>
-        <li><a href="#agent-prompts" class="nav-link">Prompting Recipes</a></li>
+        <li><a href="#ai-agent-onboarding" class="nav-link">Tell AI to Install & Onboard</a></li>
+        <li><a href="#ai-prompts" class="nav-link">Autonomous Workflow Recipes</a></li>
         <li><a href="#deterministic-boundary" class="nav-link">Deterministic Core Rule</a></li>
       </ul>
     </div>
 
     <div class="nav-section">
-      <div class="nav-title">Contracts & DSL</div>
+      <div class="nav-header">Contracts & DSL</div>
       <ul class="nav-links">
-        <li><a href="#product-contracts" class="nav-link">Product Contracts</a></li>
+        <li><a href="#project-contracts" class="nav-link">Project Contracts</a></li>
         <li><a href="#scenario-dsl" class="nav-link">Scenario DSL Guide</a></li>
         <li><a href="#negative-controls" class="nav-link">Negative Controls</a></li>
         <li><a href="#side-effects" class="nav-link">Side-Effect Probes</a></li>
       </ul>
     </div>
 
-    <div class="nav-section" style="margin-top: auto;">
-      <a href="https://github.com/xibodev/release-harness" class="nav-link" target="_blank" rel="noreferrer" style="display: flex; align-items: center; gap: 6px;">
-        <span>GitHub Repository</span> ↗
+    <div class="nav-section" style="margin-top: auto; padding-top: 16px; border-top: 2px solid var(--border);">
+      <a href="https://github.com/xibodev/release-harness" class="nav-link" target="_blank" rel="noreferrer" style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">
+        <span>GitHub Repository ↗</span>
       </a>
-      <a href="https://www.npmjs.com/package/@xibodev/release-harness" class="nav-link" target="_blank" rel="noreferrer" style="display: flex; align-items: center; gap: 6px;">
-        <span>npm Package</span> ↗
+      <a href="https://www.npmjs.com/package/@xibodev/release-harness" class="nav-link" target="_blank" rel="noreferrer" style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">
+        <span>npm Package ↗</span>
       </a>
     </div>
   </aside>
 
-  <!-- Main Content -->
+  <!-- Main Content Container -->
   <main class="content">
 
-    <!-- Hero -->
+    <!-- Hero Header -->
     <header class="hero">
-      <div class="badge">Official Release v1.0.0</div>
-      <h1>Deterministic Quality Gates & Local UAT for Software Products</h1>
+      <div class="status-pill">
+        <span class="status-dot"></span>
+        <span>PRODUCTION RELEASE v1.0.0 — LIVE ON NPM</span>
+      </div>
+      <h1>Deterministic Quality Gates & Local UAT for Software Projects</h1>
       <p class="subtitle">
-        A portable, non-polluting test harness and release adjudication engine. Consumable by human developers and autonomous AI coding agents as a standard npm dependency.
+        A portable, non-polluting test harness and release adjudication engine. Consumable by human developers and autonomous AI coding agents as a standard npm development dependency.
       </p>
 
       <div class="code-header">
-        <span>Install via npm</span>
-        <button class="copy-btn">Copy</button>
+        <span>INSTALL AS DEV DEPENDENCY</span>
+        <button class="copy-btn">COPY</button>
       </div>
       <pre><code>npm install -D @xibodev/release-harness</code></pre>
     </header>
+
+    <!-- Interactive Live Terminal Simulation -->
+    <section id="interactive-demo">
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
+        <h3 style="margin: 0; font-family: var(--font-mono); text-transform: uppercase; font-size: 14px; letter-spacing: 0.5px;">Live Execution Simulation</h3>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);">Click commands to preview output:</span>
+      </div>
+
+      <div class="terminal-widget">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <div class="terminal-tabs">
+            <button class="term-btn active" data-cmd="run-local">run-local</button>
+            <button class="term-btn" data-cmd="doctor">doctor</button>
+            <button class="term-btn" data-cmd="init">init</button>
+            <button class="term-btn" data-cmd="check-pr">check-pr</button>
+          </div>
+        </div>
+        <div class="terminal-body" id="terminal-body"></div>
+      </div>
+    </section>
 
     <!-- Introduction -->
     <section id="introduction">
       <h2 id="introduction">Introduction</h2>
       <p>
-        <strong>Release-Harness</strong> bridges the gap between unit tests and production deployments. While traditional E2E tests often leak state, depend on fragile external staging environments, and pollute working directories, Release-Harness enforces <strong>sealed, deterministic local adjudication</strong>.
+        <strong>Release-Harness</strong> provides a rock-solid referee between development and production. Traditional end-to-end tests frequently pollute working directories, require fragile live staging clusters, and leave AI agents guessing whether a build is truly ready. Release-Harness enforces <strong>sealed, non-polluting local adjudication</strong>.
       </p>
 
       <div class="grid-2">
-        <div class="card">
-          <div class="card-title">🎯 Product-Owned Intent</div>
-          <div class="card-body">Your repository defines its own topology, origins, and test scenarios under <code>.release-harness/</code>. The harness provides the generic, deterministic execution engine.</div>
+        <div class="tech-card">
+          <div class="card-tag">ARCHITECTURE</div>
+          <div class="card-title">Project-Owned Intent</div>
+          <div class="card-desc">Your project repository owns its own topology, origins, and declarative scenarios under <code>.release-harness/</code>. The harness provides the generic, deterministic engine.</div>
         </div>
-        <div class="card">
-          <div class="card-title">🛡️ Detached & Non-Polluting</div>
-          <div class="card-body">Every test run materializes code into an isolated external scratch space. Your source repository, working branch, and <code>.git</code> remain strictly untouched.</div>
+
+        <div class="tech-card">
+          <div class="card-tag">ISOLATION</div>
+          <div class="card-title">Detached & Non-Polluting</div>
+          <div class="card-desc">Every run materializes code into an isolated external scratch space. Your source repository, working branch, and <code>.git</code> tree remain 100% immutable.</div>
         </div>
-        <div class="card">
-          <div class="card-title">⚡ Real Playwright Automation</div>
-          <div class="card-body">Declarative JSON/YAML scenarios are executed in Chromium with request routing, egress policy filtering, and screenshot capture.</div>
+
+        <div class="tech-card">
+          <div class="card-tag">FIDELITY</div>
+          <div class="card-title">Real Playwright Automation</div>
+          <div class="card-desc">Declarative scenarios run in real Chromium with multi-origin request routing, strict egress interception, and screenshot capture.</div>
         </div>
-        <div class="card">
-          <div class="card-title">🔒 Sealed Evidence & Signatures</div>
-          <div class="card-body">Verdicts are computed by pure functions from sealed evidence with independent SHA-256 integrity verification. Tampering or incomplete evidence is caught immediately.</div>
+
+        <div class="tech-card">
+          <div class="card-tag">AUDITABILITY</div>
+          <div class="card-title">Cryptographically Sealed Evidence</div>
+          <div class="card-desc">Verdicts are computed by pure functions from sealed evidence with independent SHA-256 integrity verification. Tampering is caught instantly.</div>
         </div>
       </div>
     </section>
@@ -111,82 +147,112 @@
     <!-- Core Invariants -->
     <section id="core-invariants">
       <h2 id="core-invariants">Core Invariants</h2>
-      <ul>
-        <li><strong>Deterministic Adjudication:</strong> <code>PASS (Exit 0)</code>, <code>FAIL (Exit 1)</code>, <code>UNPROVEN (Exit 2)</code>, <code>HARNESS_ERROR (Exit 3)</code>, <code>EVIDENCE_INVALID (Exit 4)</code>.</li>
-        <li><strong>Zero Repository Mutation:</strong> Execution must never write into or mutate the source repository or <code>.git/</code>.</li>
-        <li><strong>Sealed Network Execution:</strong> Outbound requests to undeclared external endpoints are blocked by default.</li>
-        <li><strong>Independent Side-Effect Proof:</strong> S3/MinIO bucket uploads, database rows, and Redis state are probed out-of-band.</li>
-      </ul>
-    </section>
-
-    <!-- Quick Start -->
-    <section id="installation">
-      <h2 id="installation">Installation & CLI</h2>
-      <p>Install the public facade package in your product repository:</p>
-
-      <div class="code-header">
-        <span>Terminal</span>
-        <button class="copy-btn">Copy</button>
-      </div>
-      <pre><code>npm install -D @xibodev/release-harness</code></pre>
-
-      <h3 id="cli-commands">CLI Commands</h3>
-      <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+      <table class="tech-table">
         <thead>
-          <tr style="border-bottom: 2px solid var(--border); text-align: left;">
-            <th style="padding: 10px;">Command</th>
-            <th style="padding: 10px;">Purpose</th>
+          <tr>
+            <th>Status Code</th>
+            <th>Exit Code</th>
+            <th>Adjudication Meaning</th>
           </tr>
         </thead>
         <tbody>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>npx release-harness doctor</code></td>
-            <td style="padding: 10px;">Validates host prerequisites (Node, Git, Docker, Compose, Playwright/Chromium).</td>
+          <tr>
+            <td><code style="color: var(--success); font-weight: bold;">PASS</code></td>
+            <td><code>0</code></td>
+            <td>All required and conditional scenarios passed with verified side-effects. Certified for release.</td>
           </tr>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>npx release-harness init</code></td>
-            <td style="padding: 10px;">Scaffolds a clean product-owned <code>.release-harness/</code> contract directory.</td>
+          <tr>
+            <td><code style="color: var(--danger); font-weight: bold;">FAIL</code></td>
+            <td><code>1</code></td>
+            <td>One or more required scenarios failed due to product defects or unmet required dependencies.</td>
           </tr>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>npx release-harness check-pr</code></td>
-            <td style="padding: 10px;">Level 1 PR Integration Gate: checks contracts, schema validity, and clean git provenance.</td>
+          <tr>
+            <td><code style="color: var(--warning); font-weight: bold;">UNPROVEN</code></td>
+            <td><code>2</code></td>
+            <td>Preconditions unmet or active waivers present (e.g. non-certifying local development mode).</td>
           </tr>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>npx release-harness run-local</code></td>
-            <td style="padding: 10px;">Level 2 Local Release Gate: materializes detached source, spins up Docker stack, runs Playwright journeys, verifies side-effects, seals evidence, and outputs verdict.</td>
+          <tr>
+            <td><code style="color: var(--danger); font-weight: bold;">HARNESS_ERROR</code></td>
+            <td><code>3</code></td>
+            <td>Malformed scenario, environment missing, or Docker Compose startup failure.</td>
           </tr>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>npx release-harness clean</code></td>
-            <td style="padding: 10px;">Cleans up detached workspaces and removes scoped test containers.</td>
+          <tr>
+            <td><code style="color: var(--danger); font-weight: bold;">EVIDENCE_INVALID</code></td>
+            <td><code>4</code></td>
+            <td>Evidence file tampering, missing artifacts, or SHA-256 checksum divergence detected.</td>
           </tr>
         </tbody>
       </table>
     </section>
 
-    <!-- Product Onboarding -->
-    <section id="onboarding-product">
-      <h2 id="onboarding-product">Onboarding a Product Repository</h2>
-      <p>Follow these 3 steps to onboard any existing or new software repository:</p>
+    <!-- Developer Quickstart -->
+    <section id="installation">
+      <h2 id="installation">Developer Quickstart & CLI</h2>
+      <p>Install the package into your project as a development dependency:</p>
+
+      <div class="code-header">
+        <span>TERMINAL</span>
+        <button class="copy-btn">COPY</button>
+      </div>
+      <pre><code>npm install -D @xibodev/release-harness</code></pre>
+
+      <h3 id="cli-commands">Supported CLI Commands</h3>
+      <table class="tech-table">
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>npx release-harness doctor</code></td>
+            <td>Validates host prerequisites (Node, Git, Docker, Compose, and Playwright Chromium).</td>
+          </tr>
+          <tr>
+            <td><code>npx release-harness init</code></td>
+            <td>Scaffolds a clean project-owned <code>.release-harness/</code> contract directory.</td>
+          </tr>
+          <tr>
+            <td><code>npx release-harness check-pr</code></td>
+            <td>Level 1 PR Integration Gate: checks schemas, contract validity, and clean git provenance.</td>
+          </tr>
+          <tr>
+            <td><code>npx release-harness run-local</code></td>
+            <td>Level 2 Local Release Gate: materializes detached source, spins up Docker stack, runs Playwright journeys, verifies side-effects, seals evidence, and outputs verdict.</td>
+          </tr>
+          <tr>
+            <td><code>npx release-harness clean</code></td>
+            <td>Cleans up detached workspaces and removes scoped test containers.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Onboarding a Project -->
+    <section id="onboarding-project">
+      <h2 id="onboarding-project">Onboarding an Existing Project</h2>
+      <p>Follow these 3 steps to onboard any software project from scratch:</p>
 
       <h3>Step 1: Run Doctor & Init</h3>
       <div class="code-header">
-        <span>Terminal</span>
-        <button class="copy-btn">Copy</button>
+        <span>TERMINAL</span>
+        <button class="copy-btn">COPY</button>
       </div>
       <pre><code>npx release-harness doctor
 npx release-harness init</code></pre>
 
-      <h3>Step 2: Customize Served Origins & Topology</h3>
-      <p>Open <code>.release-harness/topology.json</code> and declare your service nodes (e.g. Next.js web frontend, FastAPI backend, PostgreSQL database):</p>
+      <h3>Step 2: Declare Service Nodes in <code>topology.json</code></h3>
+      <p>Open <code>.release-harness/topology.json</code> and declare your project service graph:</p>
       
       <div class="code-header">
         <span>.release-harness/topology.json</span>
-        <button class="copy-btn">Copy</button>
+        <button class="copy-btn">COPY</button>
       </div>
       <pre><code>{
   "$schema": "https://json.xibo.dev/schemas/release-harness/topology-v1.json",
   "schema_version": "1.0.0",
-  "product_slug": "my-saas-app",
+  "product_slug": "my-project",
   "topology_type": "monorepo",
   "nodes": [
     {
@@ -210,7 +276,7 @@ npx release-harness init</code></pre>
 
       <div class="code-header">
         <span>.release-harness/scenarios/smoke.json</span>
-        <button class="copy-btn">Copy</button>
+        <button class="copy-btn">COPY</button>
       </div>
       <pre><code>{
   "id": "SMOKE-001",
@@ -229,22 +295,38 @@ npx release-harness init</code></pre>
 }</code></pre>
     </section>
 
-    <!-- AI Coding Agent Guide -->
-    <section id="ai-agent-guide">
-      <h2 id="ai-agent-guide">Using with AI Coding Agents</h2>
+    <!-- AI Agent Integration & Onboarding -->
+    <section id="ai-agent-onboarding">
+      <h2 id="ai-agent-onboarding">Using with AI Coding Agents</h2>
       <p>
-        Release-Harness is designed from the ground up to be orchestrated by AI agents (Claude Code, GitHub Copilot CLI, opencode, Cursor, Codex).
+        Release-Harness is purpose-built to act as an impartial referee for AI coding agents (Claude Code, GitHub Copilot CLI, opencode, Cursor, Codex).
       </p>
 
       <div class="callout">
-        <div class="callout-title">🤖 The Autonomous Verification Loop</div>
+        <div class="callout-title">💡 HOW TO ONBOARD AN EXISTING PROJECT USING AN AI AGENT</div>
         <p>
-          You tell the AI agent what to build or fix. The agent writes the code, then invokes <code>npx release-harness run-local</code>. The deterministic harness acts as the referee—the agent reads the structured failure causes in <code>verdict.json</code> and iterates autonomously until achieving a certified <code>PASS (Exit 0)</code>.
+          If you are already in your project repository working with an AI agent, copy and paste the onboarding prompt below. The AI agent will install the package, initialize contracts, and map your services automatically:
         </p>
       </div>
 
+      <div class="code-header">
+        <span>ONBOARDING PROMPT FOR AI AGENT</span>
+        <button class="copy-btn">COPY</button>
+      </div>
+      <pre><code>We are onboarding this project to @xibodev/release-harness for deterministic quality gating.
+Please follow these steps:
+1. Install the tool: `npm install -D @xibodev/release-harness`
+2. Check prerequisites: `npx release-harness doctor`
+3. Initialize the contract scaffolding: `npx release-harness init`
+4. Inspect our docker-compose and package scripts to configure `.release-harness/topology.json` and `.release-harness/origins.json` with our real service ports and health endpoints.
+5. Create an initial smoke scenario in `.release-harness/scenarios/smoke.json` covering our landing and login pages.
+6. Verify Level 1: `npx release-harness check-pr`
+7. Run the local gate: `npx release-harness run-local` and confirm exit code 0.</code></pre>
+
+      <h3 id="ai-prompts">Autonomous Workflow Recipes by Task</h3>
+      <p>Select your AI tool to view targeted prompt recipes for feature development, bug fixes, and pre-commit checks:</p>
+
       <!-- Agent Switcher Tabs -->
-      <h3 id="agent-prompts">Agent Prompting Recipes</h3>
       <div class="tab-container">
         <div class="tab-nav">
           <button class="tab-btn active">Claude Code</button>
@@ -253,64 +335,68 @@ npx release-harness init</code></pre>
           <button class="tab-btn">Cursor / Codex</button>
         </div>
 
+        <!-- Claude Code -->
         <div class="tab-pane active">
-          <p><strong>Prompt Recipe for Claude Code:</strong></p>
+          <p><strong>Autonomous Bug-Fix / Feature Loop:</strong></p>
           <div class="code-header">
-            <span>Prompt</span>
-            <button class="copy-btn">Copy</button>
+            <span>PROMPT FOR CLAUDE CODE</span>
+            <button class="copy-btn">COPY</button>
           </div>
-          <pre><code>I want to implement the user registration feature. 
-Use @release-conductor or follow this loop:
-1. Run `npx release-harness check-pr` to ensure our contracts are valid.
-2. Implement the feature in frontend and backend.
-3. Run `npx release-harness run-local --evidence-dir .quality-run/evidence`.
-4. Read `verdict.json` and fix any failing scenarios or unmet preconditions.
-5. Loop until you get a certified PASS (exit code 0). Do not declare done until exit code is 0.</code></pre>
-        </div>
-
-        <div class="tab-pane">
-          <p><strong>Prompt Recipe for GitHub Copilot CLI:</strong></p>
-          <div class="code-header">
-            <span>Prompt</span>
-            <button class="copy-btn">Copy</button>
-          </div>
-          <pre><code>copilot: Run the deterministic quality gate:
-npx release-harness run-local
-If verdict.json has failed scenarios or exit code != 0, inspect the screenshot evidence in the evidence directory, resolve the defects in code, and re-run until exit code 0.</code></pre>
-        </div>
-
-        <div class="tab-pane">
-          <p><strong>Prompt Recipe for opencode:</strong></p>
-          <div class="code-header">
-            <span>Prompt</span>
-            <button class="copy-btn">Copy</button>
-          </div>
-          <pre><code>Run the release-conductor workflow on our current branch:
+          <pre><code>Implement the checkout billing flow.
+Follow the release-conductor quality loop:
 1. Validate contracts: `npx release-harness check-pr`
-2. Execute local UAT: `npx release-harness run-local`
-3. If exit code is 1 or 2, use fix-planner and fix-executor to resolve defects.
-4. Clean up workspaces when done with `npx release-harness clean`.</code></pre>
+2. Implement your changes in code.
+3. Run local UAT: `npx release-harness run-local --evidence-dir .quality-run/evidence`
+4. Inspect `verdict.json`. If exit code != 0, fix the failing scenarios and re-run.
+5. Loop until you achieve a certified PASS (exit code 0). Do not declare completion until exit code is 0.</code></pre>
         </div>
 
+        <!-- Copilot CLI -->
         <div class="tab-pane">
-          <p><strong>Prompt Recipe for Cursor / Codex:</strong></p>
+          <p><strong>GitHub Copilot CLI Execution:</strong></p>
           <div class="code-header">
-            <span>Prompt</span>
-            <button class="copy-btn">Copy</button>
+            <span>PROMPT FOR GITHUB COPILOT CLI</span>
+            <button class="copy-btn">COPY</button>
           </div>
-          <pre><code>Please execute `npx release-harness run-local` in the terminal to verify the changes against the product-owned scenarios in `.release-harness/scenarios/`.
-Inspect the generated `verdict.json` summary. If there are failures, fix the root cause and re-run until the verdict is PASS.</code></pre>
+          <pre><code>copilot: Execute the deterministic local release gate:
+npx release-harness run-local
+If verdict.json reports any failures or unproven status, review the screenshot evidence in the evidence directory, resolve the code defects, and iterate until exit code 0.</code></pre>
+        </div>
+
+        <!-- opencode -->
+        <div class="tab-pane">
+          <p><strong>opencode Subagent Orchestration:</strong></p>
+          <div class="code-header">
+            <span>PROMPT FOR OPENCODE</span>
+            <button class="copy-btn">COPY</button>
+          </div>
+          <pre><code>Run the release-conductor verification workflow:
+1. Verify contract syntax with `npx release-harness check-pr`.
+2. Run local Docker UAT via `npx release-harness run-local`.
+3. If failures occur, sequence remedies with fix-planner and fix-executor.
+4. When certified green, clean workspaces with `npx release-harness clean`.</code></pre>
+        </div>
+
+        <!-- Cursor / Codex -->
+        <div class="tab-pane">
+          <p><strong>Cursor / Codex Prompt:</strong></p>
+          <div class="code-header">
+            <span>PROMPT FOR CURSOR / CODEX</span>
+            <button class="copy-btn">COPY</button>
+          </div>
+          <pre><code>Please run `npx release-harness run-local` in the integrated terminal.
+Examine the generated `verdict.json`. If any scenario fails, update the application code to fix the root cause and re-run until you get PASS (exit code 0).</code></pre>
         </div>
       </div>
 
       <h3 id="deterministic-boundary">The Deterministic Core Authority Boundary</h3>
       <p>
-        AI agents are prone to hallucinating "everything looks good" or dismissing test failures as minor. Release-Harness eliminates this through an unbreakable boundary:
+        AI models can hallucinate or downplay test failures. Release-Harness eliminates this through an ironclad boundary:
       </p>
       <ul>
-        <li><strong>Sole Verdict Authority:</strong> Only the deterministic CLI engine derives verdicts from cryptographically sealed evidence.</li>
         <li><strong>No Verbal Overrides:</strong> An AI agent cannot prompt or talk a release into being green.</li>
-        <li><strong>Tamper Proof:</strong> If an agent modifies an evidence file or injects fake results, the SHA-256 evidence manifest divergence triggers an immediate <code>EVIDENCE_INVALID (Exit 4)</code>.</li>
+        <li><strong>Pure-Function Adjudication:</strong> The CLI evaluates sealed evidence files strictly against formal JSON schemas.</li>
+        <li><strong>Tamper Detection:</strong> If an agent modifies an evidence file or injects fake results, the SHA-256 evidence manifest checksum mismatch triggers an immediate <code>EVIDENCE_INVALID (Exit 4)</code>.</li>
       </ul>
     </section>
 
@@ -319,39 +405,39 @@ Inspect the generated `verdict.json` summary. If there are failures, fix the roo
       <h2 id="scenario-dsl">Scenario DSL Guide</h2>
       <p>Scenarios support standard browser actions and deep observability assertions:</p>
 
-      <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+      <table class="tech-table">
         <thead>
-          <tr style="border-bottom: 2px solid var(--border); text-align: left;">
-            <th style="padding: 10px;">Action Verb</th>
-            <th style="padding: 10px;">Parameters</th>
-            <th style="padding: 10px;">Example</th>
+          <tr>
+            <th>Action Verb</th>
+            <th>Parameters</th>
+            <th>Example</th>
           </tr>
         </thead>
         <tbody>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>navigate</code></td>
-            <td style="padding: 10px;"><code>target</code> (path or full URL)</td>
-            <td style="padding: 10px;"><code>{ "action": "navigate", "target": "/login" }</code></td>
+          <tr>
+            <td><code>navigate</code></td>
+            <td><code>target</code> (path or full URL)</td>
+            <td><code>{ "action": "navigate", "target": "/login" }</code></td>
           </tr>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>fill</code></td>
-            <td style="padding: 10px;"><code>target</code> (selector), <code>value</code></td>
-            <td style="padding: 10px;"><code>{ "action": "fill", "target": "#user", "value": "alice" }</code></td>
+          <tr>
+            <td><code>fill</code></td>
+            <td><code>target</code> (selector), <code>value</code></td>
+            <td><code>{ "action": "fill", "target": "#user", "value": "alice" }</code></td>
           </tr>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>click</code></td>
-            <td style="padding: 10px;"><code>target</code> (selector)</td>
-            <td style="padding: 10px;"><code>{ "action": "click", "target": "button.submit" }</code></td>
+          <tr>
+            <td><code>click</code></td>
+            <td><code>target</code> (selector)</td>
+            <td><code>{ "action": "click", "target": "button.submit" }</code></td>
           </tr>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>assert</code></td>
-            <td style="padding: 10px;"><code>target</code> (<code>text:...</code>, <code>url:...</code>, or selector)</td>
-            <td style="padding: 10px;"><code>{ "action": "assert", "target": "text:Success" }</code></td>
+          <tr>
+            <td><code>assert</code></td>
+            <td><code>target</code> (<code>text:...</code>, <code>url:...</code>, or selector)</td>
+            <td><code>{ "action": "assert", "target": "text:Success" }</code></td>
           </tr>
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 10px;"><code>screenshot</code></td>
-            <td style="padding: 10px;">none</td>
-            <td style="padding: 10px;"><code>{ "action": "screenshot" }</code></td>
+          <tr>
+            <td><code>screenshot</code></td>
+            <td>none</td>
+            <td><code>{ "action": "screenshot" }</code></td>
           </tr>
         </tbody>
       </table>
@@ -360,8 +446,8 @@ Inspect the generated `verdict.json` summary. If there are failures, fix the roo
       <p>Negative controls verify that security rejections work properly (e.g. invalid password, spoofed webcam, expired token):</p>
       
       <div class="code-header">
-        <span>Negative Control Scenario</span>
-        <button class="copy-btn">Copy</button>
+        <span>NEGATIVE CONTROL SCENARIO</span>
+        <button class="copy-btn">COPY</button>
       </div>
       <pre><code>{
   "id": "SEC-001",
@@ -384,8 +470,8 @@ Inspect the generated `verdict.json` summary. If there are failures, fix the roo
       <p>Verify that expected out-of-band state changes actually occurred in storage, database, or queues:</p>
 
       <div class="code-header">
-        <span>Side-Effect Verification</span>
-        <button class="copy-btn">Copy</button>
+        <span>SIDE-EFFECT PROBE SPECIFICATION</span>
+        <button class="copy-btn">COPY</button>
       </div>
       <pre><code>{
   "id": "DOC-UPLOAD-01",
@@ -412,9 +498,9 @@ Inspect the generated `verdict.json` summary. If there are failures, fix the roo
     </section>
 
     <!-- Footer -->
-    <footer style="margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 13px; display: flex; justify-content: space-between;">
-      <div>Released under the MIT License. Copyright © 2026 XiboDev.</div>
-      <div><a href="https://github.com/xibodev/release-harness" style="color: var(--accent-light); text-decoration: none;">GitHub</a> • <a href="https://www.npmjs.com/package/@xibodev/release-harness" style="color: var(--accent-light); text-decoration: none;">npm</a></div>
+    <footer style="margin-top: 80px; padding-top: 24px; border-top: 2px solid var(--border); color: var(--text-muted); font-size: 13px; font-family: var(--font-mono); display: flex; justify-content: space-between; flex-wrap: gap; gap: 12px;">
+      <div>RELEASED UNDER THE MIT LICENSE. COPYRIGHT © 2026 XIBODEV.</div>
+      <div><a href="https://github.com/xibodev/release-harness" style="color: var(--accent); font-weight: bold; text-decoration: none;">GITHUB</a> • <a href="https://www.npmjs.com/package/@xibodev/release-harness" style="color: var(--accent); font-weight: bold; text-decoration: none;">NPM</a></div>
     </footer>
 
   </main>
