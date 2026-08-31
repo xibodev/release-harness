@@ -66,7 +66,7 @@
         "type": "object",
         "required": ["service", "probe_type", "params"],
         "properties": {
-          "service": { "type": "string", "enum": ["minio", "s3", "postgres", "mysql", "redis", "mailpit", "custom"] },
+          "service": { "type": "string", "enum": ["minio", "s3", "postgres", "redis", "mailpit", "custom"] },
           "probe_type": {
             "type": "string",
             "enum": [
@@ -74,7 +74,10 @@
               "s3_object_absent",
               "sql_query",
               "redis_key_exists",
+              "redis_key_value_equals",
+              "redis_key_absent",
               "mail_received",
+              "mailpit_inbox_empty",
               "custom"
             ]
           },

@@ -11,9 +11,10 @@
     "test": "npm run test:all",
     "test:schemas": "node packages/release-harness-schemas/test.js",
     "test:core": "node packages/release-harness-core/test/index.js",
+    "test:neutral": "node tests/neutral/neutral-fixtures.test.js",
     "test:smoke": "node tests/smoke/run-harness-acceptance.js",
     "test:install": "node tests/package/test-installability.mjs",
-    "test:all": "npm run test:schemas && npm run test:core && npm run test:smoke && npm run test:install"
+    "test:all": "npm run test:schemas && npm run test:core && npm run test:neutral && npm run test:smoke && npm run test:install"
   },
   "devDependencies": {
     "playwright": "^1.50.0"
