@@ -7,3 +7,4 @@ export * from './probes.js';
 export * from './evaluator.js';
 export * from './runner.js';
 export * from './scenario-runner.js';
+export * from './playwright-adapter.js';

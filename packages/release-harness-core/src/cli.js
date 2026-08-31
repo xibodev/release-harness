@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -70,8 +70,8 @@ Deterministic quality-gate adjudication and test execution engine.
 
 Commands:
   doctor        Check host prerequisites, toolchain, and project contracts
-  init          Scaffold a project-owned .release-harness/ contract + multi-runtime AI agents
-  check-pr      Run Level 1 PR Integration Gate (contracts, smoke, toolchain)
+  init          Scaffold project-owned .release-harness/ contracts (use --with-agents for AI agents)
+  check-pr      Run Level 1 PR Integration Gate (contracts, toolchain, and configured PR commands)
   run-local     Run Level 2 Local Release UAT Gate (sealed Compose, scenarios, probes)
   evaluate      Pure-function deterministic adjudication of existing evidence
   clean         Clean up run workspaces and lingering scoped test containers
@@ -80,6 +80,9 @@ Options:
   --config       Path to harness config (default: .release-harness/harness.config.json)
   --evidence-dir External evidence output directory (default: system cache)
   --allow-dirty  Allow uncommitted changes (marks run as NON-CERTIFYING development mode, exit 2)
+  --with-agents  Opt-in to scaffold AI agent instructions and skills during init
+  --force        Overwrite existing files during init
+  --dry-run      Simulate action without writing files
   --run-id       Target a specific run ID for evaluation or cleanup
   --port-offset  Port block offset for concurrent runs (default: 0)
   --time         Fixed evaluation timestamp for deterministic replay
@@ -114,17 +117,22 @@ function resolveEvidenceRoot(flags, productSlug) {
   return path.join(baseCache, 'release-harness', productSlug || 'default');
 }
 
-function copyDirectoryRecursive(src, dest) {
+function copyDirectoryRecursive(src, dest, force = false, dryRun = false) {
   if (!fs.existsSync(src)) return;
-  fs.mkdirSync(dest, { recursive: true });
+  if (!dryRun) fs.mkdirSync(dest, { recursive: true });
   const entries = fs.readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
-      copyDirectoryRecursive(srcPath, destPath);
+      copyDirectoryRecursive(srcPath, destPath, force, dryRun);
     } else {
-      fs.copyFileSync(srcPath, destPath);
+      if (fs.existsSync(destPath) && !force) {
+        console.log(`  • Preserving existing: ${destPath}`);
+      } else {
+        if (!dryRun) fs.copyFileSync(srcPath, destPath);
+        console.log(`  ✓ ${dryRun ? '[dry-run] Would write' : 'Wrote'}: ${destPath}`);
+      }
     }
   }
 }
@@ -238,19 +246,36 @@ async function handleDoctor(args) {
 }
 
 async function handleInit(args) {
+  const flags = parseFlags(args);
   const cwd = process.cwd();
+  const dryRun = Boolean(flags['dry-run']);
+  const force = Boolean(flags['force'] || flags['overwrite']);
+  const withAgents = Boolean(flags['with-agents']);
+
   const harnessDir = path.join(cwd, '.release-harness');
   const scenariosDir = path.join(harnessDir, 'scenarios');
   const fixturesDir = path.join(harnessDir, 'fixtures');
 
-  console.log(`Scaffolding project-owned Release-Harness contracts and multi-runtime AI agents...`);
+  console.log(`Scaffolding project-owned Release-Harness contracts${withAgents ? ' and multi-runtime AI agents' : ''}...`);
+  if (dryRun) console.log('Notice: Dry-run enabled. No files will be written.\n');
 
-  fs.mkdirSync(scenariosDir, { recursive: true });
-  fs.mkdirSync(fixturesDir, { recursive: true });
+  if (!dryRun) {
+    fs.mkdirSync(scenariosDir, { recursive: true });
+    fs.mkdirSync(fixturesDir, { recursive: true });
+  }
 
   const pkgName = path.basename(cwd).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'project';
 
-  // 1. Write .release-harness contracts
+  // 1. Write .release-harness contracts (Non-destructive by default)
+  const writeFileSafe = (targetPath, content, label) => {
+    if (fs.existsSync(targetPath) && !force) {
+      console.log(`  • Preserving existing: ${label}`);
+    } else {
+      if (!dryRun) fs.writeFileSync(targetPath, content, 'utf8');
+      console.log(`  ✓ ${dryRun ? '[dry-run] Would create' : 'Created'} ${label}`);
+    }
+  };
+
   const harnessConfig = {
     schema_version: '1.0.0',
     product_slug: pkgName,
@@ -259,7 +284,7 @@ async function handleInit(args) {
     timeouts: { health_check_seconds: 60, scenario_timeout_ms: 30000, run_timeout_seconds: 300 },
     network_policy: { mode: 'sealed', allowed_egress: [] },
   };
-  fs.writeFileSync(path.join(harnessDir, 'harness.config.json'), JSON.stringify(harnessConfig, null, 2) + '\n', 'utf8');
+  writeFileSafe(path.join(harnessDir, 'harness.config.json'), JSON.stringify(harnessConfig, null, 2) + '\n', '.release-harness/harness.config.json');
 
   const topology = {
     $schema: 'https://json.xibo.dev/schemas/release-harness/topology-v1.json',
@@ -276,7 +301,7 @@ async function handleInit(args) {
       },
     ],
   };
-  fs.writeFileSync(path.join(harnessDir, 'topology.json'), JSON.stringify(topology, null, 2) + '\n', 'utf8');
+  writeFileSafe(path.join(harnessDir, 'topology.json'), JSON.stringify(topology, null, 2) + '\n', '.release-harness/topology.json');
 
   const origins = [
     {
@@ -289,7 +314,7 @@ async function handleInit(args) {
       evidence: ['package.json'],
     },
   ];
-  fs.writeFileSync(path.join(harnessDir, 'origins.json'), JSON.stringify(origins, null, 2) + '\n', 'utf8');
+  writeFileSafe(path.join(harnessDir, 'origins.json'), JSON.stringify(origins, null, 2) + '\n', '.release-harness/origins.json');
 
   const smokeScenario = {
     id: 'SMOKE-001',
@@ -302,7 +327,7 @@ async function handleInit(args) {
       { action: 'assert', target: 'text:Welcome' },
     ],
   };
-  fs.writeFileSync(path.join(scenariosDir, 'smoke.json'), JSON.stringify(smokeScenario, null, 2) + '\n', 'utf8');
+  writeFileSafe(path.join(scenariosDir, 'smoke.json'), JSON.stringify(smokeScenario, null, 2) + '\n', '.release-harness/scenarios/smoke.json');
 
   const readmeContent = `# Release Harness Configuration
 
@@ -319,75 +344,70 @@ npx release-harness check-pr
 npx release-harness run-local
 \`\`\`
 `;
-  fs.writeFileSync(path.join(harnessDir, 'README.md'), readmeContent, 'utf8');
+  writeFileSafe(path.join(harnessDir, 'README.md'), readmeContent, '.release-harness/README.md');
 
-  console.log('✓ Created .release-harness/harness.config.json');
-  console.log('✓ Created .release-harness/topology.json');
-  console.log('✓ Created .release-harness/origins.json');
-  console.log('✓ Created .release-harness/scenarios/smoke.json');
-  console.log('✓ Created .release-harness/README.md');
+  // 2. Multi-runtime agent scaffolding (Opt-in with --with-agents or default when unpopulated)
+  if (withAgents || !fs.existsSync(path.join(cwd, 'AGENTS.md'))) {
+    try {
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const templatesDir = path.resolve(__dirname, '../templates');
 
-  // 2. Scaffold multi-runtime agent personas and skills from bundled templates
-  try {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const templatesDir = path.resolve(__dirname, '../templates');
+      if (fs.existsSync(templatesDir)) {
+        const tmplAgentsDir = path.join(templatesDir, 'agents');
+        const tmplSkillsDir = path.join(templatesDir, 'skills');
 
-    if (fs.existsSync(templatesDir)) {
-      const tmplAgentsDir = path.join(templatesDir, 'agents');
-      const tmplSkillsDir = path.join(templatesDir, 'skills');
+        // AGENTS.md & .cursorrules
+        if (fs.existsSync(path.join(tmplAgentsDir, 'AGENTS.md'))) {
+          writeFileSafe(path.join(cwd, 'AGENTS.md'), fs.readFileSync(path.join(tmplAgentsDir, 'AGENTS.md'), 'utf8'), 'AGENTS.md');
+        }
+        if (fs.existsSync(path.join(tmplAgentsDir, '.cursorrules'))) {
+          writeFileSafe(path.join(cwd, '.cursorrules'), fs.readFileSync(path.join(tmplAgentsDir, '.cursorrules'), 'utf8'), '.cursorrules');
+        }
 
-      // AGENTS.md & .cursorrules
-      if (fs.existsSync(path.join(tmplAgentsDir, 'AGENTS.md'))) {
-        fs.copyFileSync(path.join(tmplAgentsDir, 'AGENTS.md'), path.join(cwd, 'AGENTS.md'));
+        // Claude Code: .claude/agents & .claude/skills
+        const claudeAgentsDir = path.join(cwd, '.claude', 'agents');
+        const claudeSkillsDir = path.join(cwd, '.claude', 'skills');
+        if (!dryRun) {
+          fs.mkdirSync(claudeAgentsDir, { recursive: true });
+          fs.mkdirSync(claudeSkillsDir, { recursive: true });
+        }
+        if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
+          writeFileSafe(path.join(claudeAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.claude/agents/release-conductor.md');
+        }
+        copyDirectoryRecursive(tmplSkillsDir, claudeSkillsDir, force, dryRun);
+
+        // opencode: .opencode/agents & .opencode/skills
+        const opencodeAgentsDir = path.join(cwd, '.opencode', 'agents');
+        const opencodeSkillsDir = path.join(cwd, '.opencode', 'skills');
+        if (!dryRun) {
+          fs.mkdirSync(opencodeAgentsDir, { recursive: true });
+          fs.mkdirSync(opencodeSkillsDir, { recursive: true });
+        }
+        if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
+          writeFileSafe(path.join(opencodeAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.opencode/agents/release-conductor.md');
+        }
+        copyDirectoryRecursive(tmplSkillsDir, opencodeSkillsDir, force, dryRun);
+
+        // GitHub Copilot: .github/agents & .github/copilot-instructions.md
+        const ghAgentsDir = path.join(cwd, '.github', 'agents');
+        if (!dryRun) fs.mkdirSync(ghAgentsDir, { recursive: true });
+        if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'))) {
+          writeFileSafe(path.join(ghAgentsDir, 'release-conductor.agent.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'), 'utf8'), '.github/agents/release-conductor.agent.md');
+        }
+        if (fs.existsSync(path.join(tmplAgentsDir, 'copilot-instructions.md'))) {
+          writeFileSafe(path.join(cwd, '.github', 'copilot-instructions.md'), fs.readFileSync(path.join(tmplAgentsDir, 'copilot-instructions.md'), 'utf8'), '.github/copilot-instructions.md');
+        }
+
+        // Copilot CLI: .copilot/agents
+        const copilotAgentsDir = path.join(cwd, '.copilot', 'agents');
+        if (!dryRun) fs.mkdirSync(copilotAgentsDir, { recursive: true });
+        if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
+          writeFileSafe(path.join(copilotAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.copilot/agents/release-conductor.md');
+        }
       }
-      if (fs.existsSync(path.join(tmplAgentsDir, '.cursorrules'))) {
-        fs.copyFileSync(path.join(tmplAgentsDir, '.cursorrules'), path.join(cwd, '.cursorrules'));
-      }
-
-      // Claude Code: .claude/agents & .claude/skills
-      const claudeAgentsDir = path.join(cwd, '.claude', 'agents');
-      const claudeSkillsDir = path.join(cwd, '.claude', 'skills');
-      fs.mkdirSync(claudeAgentsDir, { recursive: true });
-      fs.mkdirSync(claudeSkillsDir, { recursive: true });
-      if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
-        fs.copyFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), path.join(claudeAgentsDir, 'release-conductor.md'));
-      }
-      copyDirectoryRecursive(tmplSkillsDir, claudeSkillsDir);
-
-      // opencode: .opencode/agents & .opencode/skills
-      const opencodeAgentsDir = path.join(cwd, '.opencode', 'agents');
-      const opencodeSkillsDir = path.join(cwd, '.opencode', 'skills');
-      fs.mkdirSync(opencodeAgentsDir, { recursive: true });
-      fs.mkdirSync(opencodeSkillsDir, { recursive: true });
-      if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
-        fs.copyFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), path.join(opencodeAgentsDir, 'release-conductor.md'));
-      }
-      copyDirectoryRecursive(tmplSkillsDir, opencodeSkillsDir);
-
-      // GitHub Copilot: .github/agents & .github/copilot-instructions.md
-      const ghAgentsDir = path.join(cwd, '.github', 'agents');
-      fs.mkdirSync(ghAgentsDir, { recursive: true });
-      if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'))) {
-        fs.copyFileSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'), path.join(ghAgentsDir, 'release-conductor.agent.md'));
-      }
-      if (fs.existsSync(path.join(tmplAgentsDir, 'copilot-instructions.md'))) {
-        fs.copyFileSync(path.join(tmplAgentsDir, 'copilot-instructions.md'), path.join(cwd, '.github', 'copilot-instructions.md'));
-      }
-
-      // Copilot CLI: .copilot/agents
-      const copilotAgentsDir = path.join(cwd, '.copilot', 'agents');
-      fs.mkdirSync(copilotAgentsDir, { recursive: true });
-      if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
-        fs.copyFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), path.join(copilotAgentsDir, 'release-conductor.md'));
-      }
-
-      console.log('✓ Scaffolding AGENTS.md and .cursorrules');
-      console.log('✓ Scaffolding Claude Code agent & 17 skills (.claude/)');
-      console.log('✓ Scaffolding opencode agent & 17 skills (.opencode/)');
-      console.log('✓ Scaffolding GitHub Copilot agent & instructions (.github/)');
+    } catch (err) {
+      console.warn(`  ! Agent scaffolding notice: ${err.message}`);
     }
-  } catch (err) {
-    console.warn(`  ! Note: Agent scaffolding notice: ${err.message}`);
   }
 
   console.log('\nInitialization complete. Run "npx release-harness doctor" to verify.');
@@ -402,6 +422,7 @@ async function handleCheckPr(args) {
   const harnessDir = path.join(cwd, '.release-harness');
   const topologyFile = path.join(harnessDir, 'topology.json');
   const originsFile = path.join(harnessDir, 'origins.json');
+  const configFile = path.join(harnessDir, 'harness.config.json');
 
   if (!fs.existsSync(topologyFile)) {
     console.error(`Error: Missing topology contract at ${topologyFile}`);
@@ -469,6 +490,46 @@ async function handleCheckPr(args) {
           console.error('\nLevel 1 Gate: FAILED (Dirty working tree rejected in certification mode. Commit changes or pass --allow-dirty for dev mode)');
           return 1;
         }
+      }
+    }
+
+    // 4. Execute explicitly configured PR Gate commands (e.g. lint, typecheck, unit tests)
+    if (fs.existsSync(configFile)) {
+      try {
+        const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+        const prCommands = config.pr_gate?.commands || [];
+
+        if (prCommands.length > 0) {
+          console.log(`\n--- Executing ${prCommands.length} Configured PR Gate Command(s) ---`);
+          for (const cmdSpec of prCommands) {
+            const cmdId = cmdSpec.id || cmdSpec.name || cmdSpec.cmd;
+            const cmdStr = cmdSpec.cmd;
+            const timeoutSec = cmdSpec.timeout_seconds || 120;
+            const expectedExit = cmdSpec.expected_exit_code !== undefined ? cmdSpec.expected_exit_code : 0;
+
+            console.log(`  ▶ [${cmdId}] Running: "${cmdStr}" (Timeout: ${timeoutSec}s)...`);
+            const start = Date.now();
+            try {
+              execSync(cmdStr, {
+                cwd,
+                stdio: ['ignore', 'pipe', 'pipe'],
+                timeout: timeoutSec * 1000,
+                encoding: 'utf8',
+              });
+              console.log(`    ✓ [${cmdId}] Passed in ${Date.now() - start}ms`);
+            } catch (cmdErr) {
+              const actualExit = cmdErr.status !== undefined ? cmdErr.status : 1;
+              if (actualExit !== expectedExit) {
+                console.error(`    ✗ [${cmdId}] Failed with exit code ${actualExit} (Expected: ${expectedExit})`);
+                if (cmdErr.stderr) console.error(`    Error Output:\n${cmdErr.stderr.slice(0, 500)}`);
+                console.error(`\nLevel 1 Gate: FAILED (Command "${cmdId}" failed)`);
+                return 1;
+              }
+            }
+          }
+        }
+      } catch (configErr) {
+        console.warn(`  ! Note: Could not parse harness.config.json for pr_gate: ${configErr.message}`);
       }
     }
 

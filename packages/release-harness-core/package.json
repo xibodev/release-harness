@@ -13,6 +13,7 @@
     "./evaluator": "./src/evaluator.js",
     "./runner": "./src/runner.js",
     "./scenario-runner": "./src/scenario-runner.js",
+    "./playwright-adapter": "./src/playwright-adapter.js",
     "./probes": "./src/probes.js",
     "./sealer": "./src/sealer.js",
     "./redactor": "./src/redactor.js",

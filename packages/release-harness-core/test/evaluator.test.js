@@ -567,4 +567,46 @@ console.log('Running Evaluator Golden Tests...');
   });
 }
 
+// 21. Playwright Suite Adapter: Normalization & Expected Inventory Detection
+{
+  import('../src/playwright-adapter.js').then(({ PlaywrightSuiteAdapter }) => {
+    const adapter = new PlaywrightSuiteAdapter({
+      workingDir: os.tmpdir(),
+      expectedTestIds: ['spec1-should_login', 'spec2-missing_test'],
+    });
+
+    const mockJsonStdout = JSON.stringify({
+      config: { projects: [{ name: 'chromium' }] },
+      suites: [
+        {
+          file: 'tests/auth.spec.ts',
+          specs: [
+            {
+              id: 'spec1-should_login',
+              title: 'should login with valid credentials',
+              tests: [
+                {
+                  results: [
+                    { status: 'passed', duration: 180, attachments: [{ path: 'screenshots/login.png' }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const parsed = adapter.parseAndNormalize(mockJsonStdout, '', 0, 300);
+    assert.strictEqual(parsed.discovered_count, 1);
+    assert.strictEqual(parsed.passed_count, 1);
+    assert.strictEqual(parsed.failed_count, 0);
+    assert.strictEqual(parsed.missing_expected_ids.length, 1);
+    assert.strictEqual(parsed.missing_expected_ids[0], 'spec2-missing_test');
+    assert.strictEqual(parsed.ok, false, 'Missing expected test ID must fail suite normalization');
+    assert.ok(parsed.causes.includes('HARNESS_FIXTURE_MISSING'));
+    console.log('✓ Playwright Suite Adapter correctly normalized JSON reporter output and caught missing expected test ID');
+  });
+}
+
 console.log('\nAll Evaluator, Sealer, and Observation Regression Tests PASSED successfully!');
