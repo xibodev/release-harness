@@ -227,6 +227,7 @@ function startMockHttpServer(port, handler) {
 // AC-06: Independent Side-Effect Verification
 // ----------------------------------------------------------------------------
 {
+  // Test Case A: Unreachable or unsupported probe fails closed
   const mockSideEffect = {
     service: 'minio',
     probe_type: 's3_object_exists',
@@ -235,24 +236,54 @@ function startMockHttpServer(port, handler) {
   const probeRes = await verifySideEffect(mockSideEffect);
   assert.strictEqual(probeRes.ok, false, 'Probe against unreachable MinIO must return false');
 
-  const scenarios = [
-    {
-      id: 'S-SIDE',
-      name: 'Storage write',
-      origin_id: 'web',
-      tier: 'core',
-      policy: 'required',
-      steps: [{ action: 'navigate' }],
-      expected_side_effects: [mockSideEffect],
-    },
-  ];
+  // Test Case B: Neutral Storage Bypass Regression (upload succeeds in app, but DB stores /tmp path and bucket object is absent)
+  const mockPort = 34567;
+  const srv = await startMockHttpServer(mockPort, (req, res) => {
+    const body = JSON.stringify({ status: 'uploaded', path: '/tmp/local-only-file.jpg' });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) });
+    res.end(body);
+  });
 
-  const raw = [{ id: 'S-SIDE', failed: false, side_effects_failed: true, side_effect_error: '/tmp bypass detected' }];
+  const runner = new ScenarioRunner({
+    origins: [{ origin_id: 'upload-web', type: 'browser_app', auth: 'none', url_source: `http://127.0.0.1:${mockPort}`, route_families: ['/'], safe_for_live: true, evidence: ['test'] }],
+    evidenceDir: os.tmpdir(),
+  });
+
+  const bypassScenario = {
+    id: 'S-SIDE-BYPASS',
+    name: 'Document Upload with Storage Assertion',
+    origin_id: 'upload-web',
+    tier: 'core',
+    policy: 'required',
+    steps: [{ action: 'navigate', target: '/upload', timeout: 5000 }],
+    expected_side_effects: [
+      {
+        service: 'minio',
+        probe_type: 's3_object_exists',
+        params: {
+          host: '127.0.0.1',
+          port: 65432,
+          bucket: 'documents',
+          key: 'passport.jpg',
+          forbidden_paths: ['/tmp/*', 'C:/Temp/*'],
+          observed_storage_path: '/tmp/local-only-file.jpg',
+        },
+      },
+    ],
+  };
+
+  const bypassResult = await runner.runScenario(bypassScenario);
+  srv.close();
+
+  assert.strictEqual(bypassResult.failed, true, 'Storage bypass scenario must fail');
+  assert.strictEqual(bypassResult.side_effects_failed, true);
+  assert.ok(bypassResult.error_message.includes('Storage bypass violation') || bypassResult.side_effect_error.includes('Storage bypass violation'));
+
   const verdict = evaluateRun({
     runId: 'ac06-test',
-    scenarios,
-    rawResults: raw,
-    origins: [{ origin_id: 'web', type: 'browser_app', auth: 'cookie', url_source: 'APP_URL', route_families: ['/'], safe_for_live: true, evidence: ['web/app.tsx'] }],
+    scenarios: [bypassScenario],
+    rawResults: [bypassResult],
+    origins: [{ origin_id: 'upload-web', type: 'browser_app', auth: 'none', url_source: `http://127.0.0.1:${mockPort}`, route_families: ['/'], safe_for_live: true, evidence: ['test'] }],
     skipIntegrityVerification: true,
   });
 

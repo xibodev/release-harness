@@ -512,4 +512,59 @@ console.log('Running Evaluator Golden Tests...');
   fs.rmSync(tmpEvidenceDir, { recursive: true, force: true });
 }
 
+// 18. Fail-Closed on Unknown / Unsupported Probe Combinations
+{
+  import('../src/probes.js').then(async ({ verifySideEffect }) => {
+    const res = await verifySideEffect({
+      service: 'unsupported_db',
+      probe_type: 'magic_check',
+      params: {},
+    });
+
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.cause, 'HARNESS_CONFIGURATION');
+    assert.ok(res.message.includes('Unsupported side-effect probe combination'));
+    console.log('✓ Unsupported probe combinations fail closed with HARNESS_CONFIGURATION');
+  });
+}
+
+// 19. Neutral Storage Bypass Regression Test (/tmp local path bypass)
+{
+  import('../src/probes.js').then(async ({ verifySideEffect }) => {
+    const res = await verifySideEffect({
+      service: 'minio',
+      probe_type: 's3_object_exists',
+      params: {
+        bucket: 'kyc-documents',
+        key: 'id-doc.webp',
+        forbidden_paths: ['/tmp/*', 'C:/Temp/*'],
+        observed_storage_path: '/tmp/uploaded-file.webp',
+      },
+    });
+
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.cause, 'PRODUCT_BUG');
+    assert.ok(res.message.includes('Storage bypass violation'));
+    console.log('✓ Storage bypass defect (/tmp local path) detected and failed as PRODUCT_BUG');
+  });
+}
+
+// 20. PostgreSQL Mutating SQL Rejection
+{
+  import('../src/probes.js').then(async ({ verifySideEffect }) => {
+    const res = await verifySideEffect({
+      service: 'postgres',
+      probe_type: 'sql_query',
+      params: {
+        query: 'DROP TABLE users;',
+      },
+    });
+
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.cause, 'HARNESS_CONFIGURATION');
+    assert.ok(res.message.includes('mutating SQL queries are strictly forbidden'));
+    console.log('✓ PostgreSQL mutating SQL queries rejected as HARNESS_CONFIGURATION');
+  });
+}
+
 console.log('\nAll Evaluator, Sealer, and Observation Regression Tests PASSED successfully!');
