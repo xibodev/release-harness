@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/topology-v1.json",
+  "title": "ReleaseHarnessTopology",
+  "description": "Product graph and service topology specification for single-repo, monorepo, and multi-repo architectures",
+  "type": "object",
+  "required": ["schema_version", "product_slug", "topology_type"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "product_slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "topology_type": {
+      "type": "string",
+      "enum": ["single_repo", "monorepo", "multi_repo"]
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["repo_id", "source"],
+        "properties": {
+          "repo_id": { "type": "string" },
+          "source": {
+            "type": "object",
+            "required": ["type", "revision_policy"],
+            "properties": {
+              "type": { "type": "string", "enum": ["git", "local_path"] },
+              "url": { "type": "string" },
+              "local_path": { "type": "string" },
+              "revision_policy": { "type": "string", "enum": ["exact_sha", "current_head"] },
+              "expected_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+              "allow_dirty": { "type": "boolean", "default": false }
+            }
+          },
+          "role": { "type": "string" },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "contracts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "type", "path"],
+              "properties": {
+                "id": { "type": "string" },
+                "type": { "type": "string", "enum": ["openapi", "graphql", "protobuf", "json_schema", "custom"] },
+                "path": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+              }
+            }
+          },
+          "services": {
+            "$ref": "#/definitions/servicesList"
+          }
+        }
+      }
+    },
+    "nodes": {
+      "$ref": "#/definitions/servicesList"
+    },
+    "network_policy": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["sealed", "open"] },
+        "allowed_egress": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["host", "port"],
+            "properties": {
+              "host": { "type": "string" },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "purpose": { "type": "string" },
+              "declared_in": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["caddy", "nginx", "traefik", "envoy", "direct_tls", "none", "custom"] },
+        "tls": { "type": "boolean", "default": true },
+        "config_path": { "type": "string" },
+        "security_headers": {
+          "type": "object",
+          "properties": {
+            "required": { "type": "array", "items": { "type": "string" } },
+            "forbidden": { "type": "array", "items": { "type": "string" } },
+            "exact": { "type": "object", "additionalProperties": { "type": "string" } },
+            "normalized": { "type": "object", "additionalProperties": { "type": "string" } },
+            "environment_substitutions": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "servicesList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" },
+          "type": { "type": "string", "enum": ["browser_app", "api", "worker", "database", "mock_service"] },
+          "served_origin_id": { "type": "string" },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "build": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "enum": ["dockerfile", "compose_service", "command", "prebuilt_image"] },
+              "path": { "type": "string" },
+              "command": { "type": "string" },
+              "image_tag": { "type": "string" }
+            }
+          },
+          "health_probe": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": { "type": "string", "enum": ["http", "tcp", "container-state", "command"] },
+              "scheme": { "type": "string", "enum": ["http", "https"], "default": "http" },
+              "host": { "type": "string", "default": "127.0.0.1" },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "path": { "type": "string", "default": "/health" },
+              "timeout_seconds": { "type": "integer", "default": 30 },
+              "expected_status": { "type": "integer", "default": 200 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

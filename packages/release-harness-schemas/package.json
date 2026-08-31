@@ -1,0 +1,29 @@
+{
+  "name": "@xibodev/release-harness-schemas",
+  "version": "1.0.0",
+  "description": "Formal JSON schemas for the versioned release harness architecture",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./schemas/*": "./schemas/*"
+  },
+  "files": [
+    "index.js",
+    "schemas"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "release-harness",
+    "schemas",
+    "quality",
+    "adjudication"
+  ],
+  "author": "XiboDev",
+  "license": "MIT"
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@xibodev/release-harness",
+  "version": "1.0.0",
+  "description": "Portable, versioned release-harness assistant and quality gate runner for software products",
+  "type": "module",
+  "main": "./index.js",
+  "bin": {
+    "release-harness": "./bin/release-harness.js"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "index.js"
+  ],
+  "dependencies": {
+    "@xibodev/release-harness-core": "1.0.0",
+    "@xibodev/release-harness-schemas": "1.0.0"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "release-harness",
+    "quality-gate",
+    "uat",
+    "playwright",
+    "docker",
+    "testing"
+  ],
+  "author": "XiboDev",
+  "license": "MIT"
+}

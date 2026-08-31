@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/brand-contract-v1.json",
+  "title": "ReleaseHarnessBrandContract",
+  "description": "External brand contract and deterministic vision canaries per origin",
+  "type": "object",
+  "required": ["brand", "origins"],
+  "properties": {
+    "brand": { "type": "string" },
+    "origins": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["required_identity", "forbidden_identity"],
+        "properties": {
+          "required_identity": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "forbidden_identity": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "canary": {
+            "type": "object",
+            "required": ["id", "asset", "expected_verdict", "purpose"],
+            "properties": {
+              "id": { "type": "string" },
+              "asset": { "type": "string" },
+              "expected_verdict": { "type": "string", "enum": ["pass", "fail"] },
+              "purpose": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

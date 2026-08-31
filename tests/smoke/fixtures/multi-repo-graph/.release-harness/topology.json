@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json.xibo.dev/schemas/release-harness/topology-v1.json",
+  "schema_version": "1.0.0",
+  "product_slug": "multi-repo-graph",
+  "topology_type": "multi_repo",
+  "repositories": [
+    {
+      "repo_id": "contracts-repo",
+      "source": {
+        "type": "local_path",
+        "local_path": "contracts-repo",
+        "revision_policy": "exact_sha",
+        "expected_sha": "b0295832a9301d28583f6ed13d19412a3ff0c72a",
+        "allow_dirty": false
+      },
+      "role": "contract_provider",
+      "contracts": [
+        {
+          "id": "openapi-spec",
+          "type": "openapi",
+          "path": "contracts-repo/openapi.json"
+        }
+      ]
+    },
+    {
+      "repo_id": "backend-repo",
+      "source": {
+        "type": "local_path",
+        "local_path": "backend-repo",
+        "revision_policy": "exact_sha",
+        "expected_sha": "96e20316d35bcf909da90ca96bcee14a4b22aa17",
+        "allow_dirty": false
+      },
+      "depends_on": ["contracts-repo"],
+      "services": [
+        {
+          "id": "multi-api",
+          "type": "api",
+          "served_origin_id": "multi-api",
+          "health_probe": {
+            "type": "http",
+            "host": "127.0.0.1",
+            "port": 8080,
+            "path": "/health",
+            "expected_status": 200
+          }
+        }
+      ]
+    },
+    {
+      "repo_id": "frontend-repo",
+      "source": {
+        "type": "local_path",
+        "local_path": "frontend-repo",
+        "revision_policy": "exact_sha",
+        "expected_sha": "d34bcf8f50a527f1b35ffbcb655d9894054e30b5",
+        "allow_dirty": false
+      },
+      "depends_on": ["backend-repo"],
+      "services": [
+        {
+          "id": "multi-web",
+          "type": "browser_app",
+          "served_origin_id": "multi-web",
+          "health_probe": {
+            "type": "http",
+            "host": "127.0.0.1",
+            "port": 3030,
+            "path": "/",
+            "expected_status": 200
+          }
+        }
+      ]
+    }
+  ]
+}

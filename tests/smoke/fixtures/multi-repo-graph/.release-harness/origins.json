@@ -1,0 +1,20 @@
+[
+  {
+    "origin_id": "multi-web",
+    "type": "browser_app",
+    "auth": "session-cookie",
+    "url_source": "env:APP_URL (default http://localhost:3030)",
+    "route_families": ["/"],
+    "safe_for_live": true,
+    "evidence": ["frontend/index.html"]
+  },
+  {
+    "origin_id": "multi-api",
+    "type": "api",
+    "auth": "bearer-jwt",
+    "url_source": "env:API_URL (default http://localhost:8080)",
+    "route_families": ["/health", "/v1"],
+    "safe_for_live": true,
+    "evidence": ["backend/main.py"]
+  }
+]

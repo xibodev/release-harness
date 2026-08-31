@@ -1,0 +1,54 @@
+{
+  "name": "@xibodev/release-harness-core",
+  "version": "1.0.0",
+  "description": "Deterministic release-harness core engine and adjudication CLI",
+  "type": "module",
+  "bin": {
+    "release-harness": "./bin/release-harness.js"
+  },
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./cli": "./src/cli.js",
+    "./evaluator": "./src/evaluator.js",
+    "./runner": "./src/runner.js",
+    "./scenario-runner": "./src/scenario-runner.js",
+    "./probes": "./src/probes.js",
+    "./sealer": "./src/sealer.js",
+    "./redactor": "./src/redactor.js",
+    "./materializer": "./src/materializer.js",
+    "./toolchain": "./src/toolchain.js",
+    "./validator": "./src/validator.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "scripts": {
+    "test": "node test/index.js"
+  },
+  "dependencies": {
+    "@xibodev/release-harness-schemas": "1.0.0",
+    "yaml": "^2.7.0"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "release-harness",
+    "adjudication",
+    "quality-gate",
+    "deterministic",
+    "testing"
+  ],
+  "author": "XiboDev",
+  "license": "MIT"
+}

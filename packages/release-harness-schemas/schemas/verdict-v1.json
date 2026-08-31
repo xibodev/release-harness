@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/verdict-v1.json",
+  "title": "ReleaseHarnessVerdict",
+  "description": "Deterministic release adjudication verdict and diagnostic report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "evaluation_time",
+    "certification_status",
+    "run_integrity",
+    "exit_code",
+    "causes",
+    "scenarios",
+    "summary",
+    "evidence_manifest_sha256"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["1.0.0"] },
+    "run_id": { "type": "string" },
+    "evaluation_time": { "type": "string", "format": "date-time" },
+    "certification_status": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "UNPROVEN"]
+    },
+    "run_integrity": {
+      "type": "string",
+      "enum": ["COMPLETE", "HARNESS_ERROR", "EVIDENCE_INVALID"]
+    },
+    "exit_code": {
+      "type": "integer",
+      "enum": [0, 1, 2, 3, 4]
+    },
+    "causes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "PRODUCT_BUG",
+          "HARNESS_ENVIRONMENT",
+          "HARNESS_FIXTURE_MISSING",
+          "HARNESS_CANARY_MISMATCH",
+          "HARNESS_CONFIGURATION",
+          "UNKNOWN",
+          "NONE"
+        ]
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "origin_id", "policy", "status", "disposition", "cause"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "origin_id": { "type": "string" },
+          "policy": { "type": "string", "enum": ["required", "conditional", "manual", "unsupported"] },
+          "status": { "type": "string", "enum": ["PASS", "FAIL", "UNPROVEN", "ERROR", "SKIPPED"] },
+          "disposition": {
+            "type": "string",
+            "enum": ["EXECUTED", "CONDITION_UNMET", "MANUAL_APPROVED", "WAIVED", "NOT_APPLICABLE"]
+          },
+          "cause": {
+            "type": "string",
+            "enum": [
+              "PRODUCT_BUG",
+              "HARNESS_ENVIRONMENT",
+              "HARNESS_FIXTURE_MISSING",
+              "HARNESS_CANARY_MISMATCH",
+              "HARNESS_CONFIGURATION",
+              "UNKNOWN",
+              "NONE"
+            ]
+          },
+          "duration_ms": { "type": "number" },
+          "evidence_files": { "type": "array", "items": { "type": "string" } },
+          "error_message": { "type": "string" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "passed", "failed", "unproven", "error", "skipped", "by_origin"],
+      "properties": {
+        "total": { "type": "integer" },
+        "passed": { "type": "integer" },
+        "failed": { "type": "integer" },
+        "unproven": { "type": "integer" },
+        "error": { "type": "integer" },
+        "skipped": { "type": "integer" },
+        "by_origin": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["total", "passed", "failed", "unproven", "skipped", "status"],
+            "properties": {
+              "total": { "type": "integer" },
+              "passed": { "type": "integer" },
+              "failed": { "type": "integer" },
+              "unproven": { "type": "integer" },
+              "skipped": { "type": "integer" },
+              "status": { "type": "string", "enum": ["PASS", "FAIL", "UNPROVEN"] }
+            }
+          }
+        }
+      }
+    },
+    "evidence_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "violations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "description"],
+        "properties": {
+          "type": { "type": "string" },
+          "description": { "type": "string" },
+          "details": { "type": "object" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tiny
+      POSTGRES_PASSWORD: tiny
+      POSTGRES_DB: tiny
+    ports:
+      - "5432:5432"
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://tiny:tiny@postgres:5432/tiny
+    depends_on: [postgres]
+    ports:
+      - "8000:8000"
+  web:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on: [api]

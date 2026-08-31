@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/waivers-v1.json",
+  "title": "ReleaseHarnessWaivers",
+  "description": "Structured waivers and manual sign-offs for release scenarios",
+  "type": "object",
+  "required": ["waivers"],
+  "properties": {
+    "waivers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "scenario_id", "policy_override", "reason", "authorized_by", "created_at", "expires_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "scenario_id": { "type": "string" },
+          "policy_override": { "type": "string", "enum": ["unsupported", "manual"] },
+          "reason": { "type": "string" },
+          "authorized_by": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "applicable_origins": { "type": "array", "items": { "type": "string" } },
+          "commit_sha": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "TINY-001",
+  "name": "Smoke items listing",
+  "origin_id": "tiny-web",
+  "tier": "smoke",
+  "policy": "required",
+  "steps": [
+    { "action": "navigate", "target": "/" },
+    { "action": "assert", "target": "text:Items" }
+  ]
+}

@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tiny
+      POSTGRES_PASSWORD: tiny
+      POSTGRES_DB: tiny_test
+    networks: [sealed]
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://tiny:tiny@postgres:5432/tiny_test
+      RUN_MODE: test
+    depends_on: [postgres]
+    networks: [sealed]
+networks:
+  sealed:
+    driver: bridge
+    internal: true

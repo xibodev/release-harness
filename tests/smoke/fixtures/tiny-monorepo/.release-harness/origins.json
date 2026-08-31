@@ -1,0 +1,20 @@
+[
+  {
+    "origin_id": "tiny-web",
+    "type": "browser_app",
+    "auth": "session-cookie",
+    "url_source": "env:APP_URL (default http://localhost:3000)",
+    "route_families": ["/", "/items"],
+    "safe_for_live": true,
+    "evidence": ["frontend/src/app/page.tsx", "docker-compose.test.yml:services.frontend"]
+  },
+  {
+    "origin_id": "tiny-api",
+    "type": "api",
+    "auth": "bearer-jwt",
+    "url_source": "env:API_URL (default http://localhost:8000)",
+    "route_families": ["/health", "/items", "/auth"],
+    "safe_for_live": true,
+    "evidence": ["backend/tinyapp/main.py", "docker-compose.test.yml:services.backend"]
+  }
+]

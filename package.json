@@ -1,0 +1,29 @@
+{
+  "name": "release-harness-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deterministic, versioned quality-gate and local UAT release harness for software products",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test:all",
+    "test:schemas": "node packages/release-harness-schemas/test.js",
+    "test:core": "node packages/release-harness-core/test/index.js",
+    "test:smoke": "node tests/smoke/run-harness-acceptance.js",
+    "test:install": "node tests/package/test-installability.mjs",
+    "test:all": "npm run test:schemas && npm run test:core && npm run test:smoke && npm run test:install"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xibodev/release-harness.git"
+  }
+}

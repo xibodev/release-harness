@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/scenario-v1.json",
+  "title": "ReleaseHarnessScenario",
+  "description": "Declarative scenario schema for unified headless and headed release testing",
+  "type": "object",
+  "required": ["id", "name", "origin_id", "tier", "policy", "steps"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "origin_id": {
+      "type": "string"
+    },
+    "persona_id": {
+      "type": "string"
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["smoke", "core", "full"]
+    },
+    "policy": {
+      "type": "string",
+      "enum": ["required", "conditional", "manual", "unsupported"]
+    },
+    "preconditions": {
+      "type": "object",
+      "properties": {
+        "fixtures": { "type": "array", "items": { "type": "string" } },
+        "capabilities": { "type": "array", "items": { "type": "string" } },
+        "env_vars": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["action"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "pattern": "^(navigate|fill|click|select|check|upload|wait-for|assert|screenshot|extension:.+)$"
+          },
+          "target": { "type": "string" },
+          "value": { "type": ["string", "number", "boolean"] },
+          "timeout": { "type": "integer" },
+          "assertions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "params": { "type": "object" }
+        }
+      }
+    },
+    "expected_side_effects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["service", "probe_type", "params"],
+        "properties": {
+          "service": { "type": "string", "enum": ["minio", "s3", "postgres", "mysql", "redis", "mailpit", "custom"] },
+          "probe_type": {
+            "type": "string",
+            "enum": [
+              "s3_object_exists",
+              "s3_object_absent",
+              "sql_query",
+              "redis_key_exists",
+              "mail_received",
+              "custom"
+            ]
+          },
+          "params": { "type": "object" }
+        }
+      }
+    },
+    "negative_control": {
+      "type": "object",
+      "required": ["expected_rejection_reason"],
+      "properties": {
+        "expected_rejection_reason": { "type": "string" },
+        "expected_http_status": { "type": "integer" },
+        "prohibited_effects": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

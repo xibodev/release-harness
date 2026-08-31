@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/run-manifest-v1.json",
+  "title": "ReleaseHarnessRunManifest",
+  "description": "Root run manifest binding source identity, harness version, toolchain, and evidence digests",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "product_slug",
+    "topology_type",
+    "started_at",
+    "harness_core_version",
+    "sources",
+    "toolchain",
+    "config_hashes"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["1.0.0"] },
+    "run_id": { "type": "string" },
+    "product_slug": { "type": "string" },
+    "topology_type": { "type": "string", "enum": ["single_repo", "monorepo", "multi_repo"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "harness_core_version": { "type": "string" },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["commit_sha", "is_clean"],
+        "properties": {
+          "repo_id": { "type": "string" },
+          "path": { "type": "string" },
+          "url": { "type": "string" },
+          "commit_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+          "is_clean": { "type": "boolean" },
+          "dirty_files": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "service_id", "artifact_type", "content_digest"],
+        "properties": {
+          "id": { "type": "string" },
+          "service_id": { "type": "string" },
+          "artifact_type": { "type": "string", "enum": ["oci_image", "spa_bundle", "package", "file"] },
+          "content_digest": { "type": "string" },
+          "tag_aliases": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "properties": {
+        "node": { "type": "string" },
+        "git": { "type": "string" },
+        "docker_engine": { "type": "string" },
+        "docker_compose": { "type": "string" },
+        "playwright": { "type": "string" },
+        "chromium": { "type": "string" },
+        "firefox": { "type": "string" },
+        "webkit": { "type": "string" }
+      }
+    },
+    "config_hashes": {
+      "type": "object",
+      "required": ["harness_config_sha256", "topology_sha256", "scenarios_manifest_sha256"],
+      "properties": {
+        "harness_config_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "topology_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "scenarios_manifest_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "brand_contract_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "waivers_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "evidence_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "verdict_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

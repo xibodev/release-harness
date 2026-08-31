@@ -1,0 +1,11 @@
+{
+  "id": "MULTI-001",
+  "name": "Cross-repo contract verification",
+  "origin_id": "multi-web",
+  "tier": "smoke",
+  "policy": "required",
+  "steps": [
+    { "action": "navigate", "target": "/" },
+    { "action": "assert", "target": "text:MultiRepo App" }
+  ]
+}
