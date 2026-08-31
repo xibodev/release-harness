@@ -43,5 +43,10 @@
     "testing"
   ],
   "author": "XiboDev",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xibodev/release-harness.git",
+    "directory": "packages/release-harness-core"
+  }
 }
