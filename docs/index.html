@@ -59,6 +59,7 @@
       <ul class="nav-links">
         <li><a href="#project-contracts" class="nav-link">Project Contracts Reference</a></li>
         <li><a href="#scenario-dsl" class="nav-link">Scenario DSL Guide</a></li>
+        <li><a href="#playwright-adapter-guide" class="nav-link">Playwright Suite Adapter</a></li>
         <li><a href="#negative-controls" class="nav-link">Negative Controls</a></li>
         <li><a href="#side-effects" class="nav-link">Side-Effect Probes</a></li>
         <li><a href="#multi-repo-guide" class="nav-link">Multi-Repo Product Graph</a></li>
@@ -66,8 +67,9 @@
     </div>
 
     <div class="nav-section">
-      <div class="nav-header">Operations</div>
+      <div class="nav-header">Operations & Roadmap</div>
       <ul class="nav-links">
+        <li><a href="#roadmap-levels" class="nav-link">Roadmap (Levels 3 & 4)</a></li>
         <li><a href="#troubleshooting" class="nav-link">Troubleshooting & FAQs</a></li>
       </ul>
     </div>
@@ -696,6 +698,35 @@ npx release-harness init</code></pre>
 }</code></pre>
     </section>
 
+    <!-- Existing Playwright Suite Adapter -->
+    <section id="playwright-adapter-guide">
+      <h2 id="playwright-adapter-guide">Existing Playwright Test Suite Adapter</h2>
+      <p>
+        Mature projects with existing TypeScript Playwright suites do <strong>not</strong> need to rewrite tests into JSON. Release-Harness includes a first-class adapter:
+      </p>
+
+      <div class="code-header">
+        <span>Adapter Execution Flow</span>
+        <button class="copy-btn">COPY</button>
+      </div>
+      <pre><code>// Programmatic or CLI integration
+import { PlaywrightSuiteAdapter } from '@xibodev/release-harness-core/playwright-adapter';
+
+const adapter = new PlaywrightSuiteAdapter({
+  workingDir: './e2e',
+  configPath: 'playwright.config.ts',
+  expectedTestIds: ['auth-login', 'billing-checkout'],
+});
+
+const result = await adapter.executeSuite();
+// Ingests native JSON reporter, extracts test IDs, durations, attachments, traces, and normalizes into raw-results.json</code></pre>
+      <ul>
+        <li><strong>Native Execution:</strong> Executes <code>npx playwright test --reporter=json</code> directly.</li>
+        <li><strong>Inventory & Skip Enforcement:</strong> Validates that expected test IDs were discovered and flags unexpected skips on required tests as <code>PRODUCT_BUG</code>.</li>
+        <li><strong>Evidence Binding:</strong> Automatically extracts screenshot attachments and trace zip files into the sealed evidence directory.</li>
+      </ul>
+    </section>
+
     <!-- Multi-Repo & Product Graph Guide -->
     <section id="multi-repo-guide">
       <h2 id="multi-repo-guide">Multi-Repo Product Graph Architecture</h2>
@@ -707,6 +738,35 @@ npx release-harness init</code></pre>
         <li><strong>Product Graph Digest:</strong> The harness computes a single cryptographic hash across all component commit SHAs and contract versions.</li>
         <li><strong>Build-Once OCI Continuity:</strong> Inspects and pins immutable container image digests (<code>sha256:...</code>) so exact verified binaries are promoted to production with zero rebuild drift.</li>
       </ul>
+    </section>
+
+    <!-- Roadmap Levels 3 & 4 -->
+    <section id="roadmap-levels">
+      <h2 id="roadmap-levels">Roadmap: Levels 3 & 4 (Design-Only)</h2>
+      <div class="callout warning">
+        <div class="callout-title">⚠️ ROADMAP NOTICE</div>
+        <p>
+          <strong>Level 1 (PR Gate)</strong> and <strong>Level 2 (Local Release UAT Gate)</strong> are fully implemented and proven in v1.1.0. <strong>Levels 3 and 4</strong> are currently design-only specifications and are intentionally disabled in the CLI until their full acceptance suites pass.
+        </p>
+      </div>
+
+      <div class="grid-2">
+        <div class="tech-card">
+          <div class="card-tag">LEVEL 3 (ROADMAP v1.2)</div>
+          <div class="card-title">run-ephemeral</div>
+          <div class="card-desc">
+            Deploys the exact frozen product lock to an ephemeral PR preview environment with production-equivalent TLS and proxy routing, executes full-product scenarios, archives sealed evidence, and proves environment destruction.
+          </div>
+        </div>
+
+        <div class="tech-card">
+          <div class="card-tag">LEVEL 4 (ROADMAP v1.3)</div>
+          <div class="card-title">verify-canary</div>
+          <div class="card-desc">
+            Runs narrow, reversible synthetic canary assertions in production to verify deployed release digests, health telemetry, and webhook side-effects before completing deployment promotion.
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- Troubleshooting & FAQs -->
