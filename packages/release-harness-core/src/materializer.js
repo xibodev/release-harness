@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { enumerateSource } from './source-enumerator.js';
+import { enumerateSource, enumerateEmptyDirectories } from './source-enumerator.js';
 
 /**
  * Detached source workspace materializer.
@@ -19,13 +19,20 @@ export class SourceMaterializer {
    * Sharing `enumerateSource` is the point: a digest computed over a different
    * set than the one built is not a provenance record. There is deliberately
    * no depth bound - a change at any depth must move the digest.
+   *
+   * `files` is an optional pre-computed enumeration. When supplied, no
+   * enumeration of its own is performed, which is what lets `materializeRepo`
+   * hash and copy the one identical list: two enumerations, however
+   * deterministic, are two observations of a mutable filesystem, and anything
+   * created, deleted or renamed between them puts a file in one set and not the
+   * other. Omitting it preserves the standalone one-argument behaviour.
    */
-  computeTreeDigest(dir) {
+  computeTreeDigest(dir, files = null) {
     const absPath = path.resolve(dir);
     const hash = crypto.createHash('sha256');
-    const { files } = enumerateSource(absPath);
+    const list = files === null || files === undefined ? enumerateSource(absPath).files : files;
 
-    for (const rel of files) {
+    for (const rel of list) {
       const full = path.join(absPath, rel);
       let content;
       try {
@@ -40,7 +47,14 @@ export class SourceMaterializer {
     return hash.digest('hex');
   }
 
-  getSourceInfo(sourceRepoPath) {
+  /**
+   * `enumeration` is an optional pre-computed `enumerateSource` result, passed
+   * straight through to `computeTreeDigest` so that a caller which has already
+   * enumerated does not enumerate a second time. Omitting it preserves the
+   * standalone one-argument behaviour used by `cli.js` and
+   * `resolveMultiRepoGraph`.
+   */
+  getSourceInfo(sourceRepoPath, enumeration = null) {
     const absPath = path.resolve(sourceRepoPath);
     if (!fs.existsSync(absPath)) {
       return {
@@ -101,7 +115,7 @@ export class SourceMaterializer {
       // Git status failed
     }
 
-    const treeDigest = this.computeTreeDigest(absPath);
+    const treeDigest = this.computeTreeDigest(absPath, enumeration ? enumeration.files : null);
     return {
       path: absPath,
       exists: true,
@@ -181,56 +195,160 @@ export class SourceMaterializer {
   /**
    * Materializes a detached copy of the repository into the external workspace.
    * Excludes source .git directory to guarantee isolation.
+   *
+   * The tree is enumerated EXACTLY ONCE and that one list feeds both the digest
+   * and the copy. Enumerating twice - as this did previously, once via
+   * `getSourceInfo` and once for the copy - leaves a window (measured at several
+   * seconds on a real repo, spanning ~11 git subprocess spawns) in which a file
+   * can be written, deleted or renamed. The digest would then be a faithful
+   * record of a tree that was never materialized: exactly the property this
+   * class exists to establish. A single list makes divergence impossible by
+   * construction rather than unlikely by timing.
+   *
+   * `options.includeUntracked` (default `true`) selects whether
+   * untracked-but-not-ignored files are materialized and digested. It is passed
+   * to the single enumeration, so it cannot differ between the digest and the
+   * copy. TODO(cli-wiring): `cli.js` should pass `!!flags['allow-dirty']` here,
+   * so that a certification run excludes leftover build and test output while an
+   * --allow-dirty development run still tests what is actually on disk. That
+   * wiring belongs to a later task; the default preserves current behaviour.
    */
-  materializeRepo(sourceRepoPath, destinationSubdir = 'source') {
+  materializeRepo(sourceRepoPath, destinationSubdir = 'source', options = {}) {
+    const { includeUntracked = true } = options;
     const sourceAbs = path.resolve(sourceRepoPath);
     const targetDir = path.join(this.workspaceRoot, destinationSubdir);
     fs.mkdirSync(targetDir, { recursive: true });
+    // Recorded before any work, not after: a failure part-way through must still
+    // leave `cleanup()` able to reclaim what has already been written.
+    this.materializedSubdir = targetDir;
 
     const startedAt = Date.now();
-    const info = this.getSourceInfo(sourceAbs);
-    const { files, strategy, warnings } = enumerateSource(sourceAbs);
+    const enumeration = enumerateSource(sourceAbs, { includeUntracked });
+    const { files, strategy } = enumeration;
+    const warnings = [...enumeration.warnings];
+    const info = this.getSourceInfo(sourceAbs, enumeration);
 
     let byteCount = 0;
+    let copiedCount = 0;
+    let skippedCount = 0;
+
+    /**
+     * Report a path that was enumerated but not materialized. Silence here is
+     * the worst outcome available: `fileCount` would count a file absent from
+     * disk and the digest would certify content the workspace does not hold.
+     */
+    const skip = (rel, reason, err) => {
+      skippedCount += 1;
+      const code = err && err.code ? err.code : err && err.message ? err.message : 'unknown error';
+      warnings.push(
+        `Skipped "${rel}" during materialization: ${reason} (${code}). ` +
+          'The tree digest covers this path but the workspace does not contain it.'
+      );
+    };
+
+    /**
+     * `copyFileSync` is not atomic: a failure part-way leaves a truncated
+     * destination that looks like a complete file to everything downstream,
+     * including any consumer of the digest that certifies it. Remove it.
+     */
+    const discardPartial = (dstPath) => {
+      try {
+        fs.rmSync(dstPath, { force: true });
+      } catch {
+        // Best effort - the skip warning already names the path.
+      }
+    };
+
     for (const rel of files) {
       const srcPath = path.join(sourceAbs, rel);
       const dstPath = path.join(targetDir, rel);
-      fs.mkdirSync(path.dirname(dstPath), { recursive: true });
 
+      try {
+        fs.mkdirSync(path.dirname(dstPath), { recursive: true });
+      } catch (err) {
+        skip(rel, 'the destination directory could not be created', err);
+        continue;
+      }
+
+      // Everything from here to the end of the iteration sits in the race
+      // window the enumeration opened: the file may vanish, be replaced, or be
+      // held open by another process (a Playwright trace or video mid-write
+      // raises EBUSY on Windows). None of that may abort the run.
       let stat;
       try {
         stat = fs.lstatSync(srcPath);
-      } catch {
-        continue; // Vanished between enumeration and copy
+      } catch (err) {
+        skip(rel, 'it vanished or became unreadable between enumeration and copy', err);
+        continue;
       }
 
       if (stat.isSymbolicLink()) {
-        const linkTarget = fs.readlinkSync(srcPath);
+        let linkTarget;
+        try {
+          linkTarget = fs.readlinkSync(srcPath);
+        } catch (err) {
+          skip(rel, 'the symlink could not be read', err);
+          continue;
+        }
+
         try {
           fs.symlinkSync(linkTarget, dstPath);
+          copiedCount += 1;
         } catch {
           // Windows without developer mode cannot create symlinks. Copy the
           // resolved content so the build still sees a real file.
           try {
             fs.copyFileSync(srcPath, dstPath);
             byteCount += fs.statSync(dstPath).size;
-          } catch {
-            // Dangling link - nothing to materialize
+            copiedCount += 1;
+          } catch (err) {
+            discardPartial(dstPath);
+            skip(rel, 'the symlink could not be recreated and its target could not be copied', err);
           }
         }
       } else if (stat.isFile()) {
-        fs.copyFileSync(srcPath, dstPath);
-        byteCount += stat.size;
+        try {
+          fs.copyFileSync(srcPath, dstPath);
+          byteCount += stat.size;
+          copiedCount += 1;
+        } catch (err) {
+          discardPartial(dstPath);
+          skip(rel, 'the file could not be copied', err);
+        }
+      } else {
+        skip(rel, 'it is no longer a regular file', { code: 'ENOTFILE' });
       }
     }
 
-    this.materializedSubdir = targetDir;
+    // Git does not track empty directories, so they must be recreated
+    // separately or a build expecting uploads/ or tmp/cache/ fails in the
+    // workspace but not locally. They hold no content and therefore do NOT
+    // participate in the tree digest - git's own model does not track them.
+    let emptyDirCount = 0;
+    for (const rel of enumerateEmptyDirectories(sourceAbs, warnings)) {
+      const dstPath = path.join(targetDir, rel);
+      if (fs.existsSync(dstPath)) continue;
+      try {
+        fs.mkdirSync(dstPath, { recursive: true });
+        emptyDirCount += 1;
+      } catch (err) {
+        warnings.push(
+          `Could not recreate empty source directory "${rel}" in the workspace (${err && err.code ? err.code : err.message}).`
+        );
+      }
+    }
 
     return {
       targetDir,
       sourceInfo: info,
       stats: {
-        fileCount: files.length,
+        // What is actually on disk in the workspace. `enumeratedCount` is what
+        // the digest covers; the two are equal unless something was skipped,
+        // and every difference is named in `warnings`.
+        fileCount: copiedCount,
+        enumeratedCount: files.length,
+        skippedCount,
+        emptyDirCount,
         byteCount,
         elapsedMs: Date.now() - startedAt,
         strategy,
@@ -239,10 +357,28 @@ export class SourceMaterializer {
     };
   }
 
+  /**
+   * Reclaim what this materializer created.
+   *
+   * `cli.js` builds `evidenceRoot/workspaces/<runId>` and hands it to the
+   * constructor as the workspace root, so the run's whole workspace is ours to
+   * remove - including sibling artifacts written beside `source/`, which a
+   * subdir-scoped cleanup left behind along with the run directory itself.
+   * Removing the root is only safe because it is per-run and materializer-owned,
+   * so we remove it only when we actually materialized into it: a materializer
+   * that never ran must not delete a caller's directory.
+   *
+   * Task 11 replaces `materializedSubdir` with a plural accumulator for
+   * multi-repo runs. That change is unobstructed - the root removal stays
+   * correct for any number of subdirs beneath it, and the guard only needs to
+   * become "did we materialize anything".
+   */
   cleanup() {
-    const target = this.materializedSubdir || this.workspaceRoot;
+    if (!this.materializedSubdir) return;
+    const target = this.workspaceRoot;
     if (fs.existsSync(target)) {
       fs.rmSync(target, { recursive: true, force: true });
     }
+    this.materializedSubdir = null;
   }
 }

@@ -139,8 +139,16 @@ function gitOutputToPaths(stdout) {
     .map((p) => p.replace(/\\/g, '/'));
 }
 
-function gitEnumerate(absPath) {
-  const stdout = execSync('git ls-files -z --cached --others --exclude-standard', {
+function gitEnumerate(absPath, includeUntracked) {
+  // `--others` admits untracked-but-not-ignored paths. That is required for an
+  // --allow-dirty run (the workspace must mirror what is actually on disk) and
+  // wrong for a certification run, where leftover test output such as
+  // test-results/ or playwright-report/ would otherwise enter both the copy and
+  // the tree digest, making provenance a function of the last test run.
+  const command = includeUntracked
+    ? 'git ls-files -z --cached --others --exclude-standard'
+    : 'git ls-files -z --cached';
+  const stdout = execSync(command, {
     cwd: absPath,
     encoding: 'buffer',
     stdio: ['ignore', 'pipe', 'ignore'],
@@ -438,6 +446,59 @@ function fsEnumerate(absPath, warnings) {
 }
 
 /**
+ * Directories that are empty on disk in the source tree.
+ *
+ * Git has no concept of an empty directory, so a workspace built purely from an
+ * enumerated file list silently loses `uploads/`, `tmp/cache/` and friends — a
+ * product whose build or compose expects a runtime directory then fails in the
+ * workspace but not locally. These carry no content, so they must never reach
+ * the tree digest (git's own model does not track them); they exist only to make
+ * the copy faithful.
+ *
+ * Exclusions mirror the enumeration's: `.git`, dependency and tooling
+ * directories (FALLBACK_IGNORED_NAMES), and symlinked directories, which are not
+ * traversed on either enumeration strategy. Dirent reflects lstat, so a symlink
+ * to a directory is not `isDirectory()` and is never descended into.
+ *
+ * Never throws: an unreadable directory is reported as a warning and skipped.
+ */
+export function enumerateEmptyDirectories(sourcePath, warnings = []) {
+  const absPath = path.resolve(sourcePath);
+  const empty = [];
+
+  const walk = (dir, relBase) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (err) {
+      warnings.push(
+        `Skipped unreadable directory "${relBase || '.'}" while scanning for empty directories (${err && err.code ? err.code : err.message}).`
+      );
+      return;
+    }
+    if (entries.length === 0 && relBase) {
+      empty.push(relBase);
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (FALLBACK_IGNORED_NAMES.has(entry.name)) continue;
+      walk(path.join(dir, entry.name), relBase ? `${relBase}/${entry.name}` : entry.name);
+    }
+  };
+
+  try {
+    if (!fs.statSync(absPath).isDirectory()) return [];
+  } catch {
+    return [];
+  }
+
+  walk(absPath, '');
+  empty.sort();
+  return empty;
+}
+
+/**
  * Scan for git-ignored files present on disk that a build plausibly needs, so
  * their exclusion can be reported rather than silently inferred. Dependency and
  * tooling directories are skipped: their contents are not the adopter's to
@@ -479,8 +540,17 @@ function collectExclusionWarnings(absPath) {
  * deduplicated list of relative POSIX paths, each naming a regular file that
  * exists on disk. It never throws: every failure mode degrades to a narrower
  * list plus a warning that names the cause.
+ *
+ * `options.includeUntracked` (default `true`, preserving the historical
+ * behaviour of every existing caller) selects whether untracked-but-not-ignored
+ * files participate. Pass `false` for a certification run so that leftover build
+ * or test output cannot alter the tree digest; pass `true` for an --allow-dirty
+ * development run, where the workspace must mirror what is on disk. It applies
+ * only to the git strategy: the filesystem fallback has no notion of tracking
+ * and always reports what it finds, minus FALLBACK_IGNORED_NAMES.
  */
-export function enumerateSource(sourcePath) {
+export function enumerateSource(sourcePath, options = {}) {
+  const { includeUntracked = true } = options;
   const absPath = path.resolve(sourcePath);
   const warnings = [];
 
@@ -532,7 +602,7 @@ export function enumerateSource(sourcePath) {
     );
   } else if (samePath(topLevel, absPath)) {
     try {
-      files = gitEnumerate(absPath);
+      files = gitEnumerate(absPath, includeUntracked);
       strategy = 'git';
       indexModes = readIndexModes(absPath);
     } catch (err) {

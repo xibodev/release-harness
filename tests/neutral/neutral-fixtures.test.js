@@ -767,13 +767,71 @@ function recordPass(num, name) {
     'Deep file must be copied'
   );
   assert.strictEqual(res.stats.fileCount, 2, 'Stats must count exactly the two tracked files');
+  assert.strictEqual(res.stats.enumeratedCount, 2, 'Stats must report the digest-covered set');
+  assert.strictEqual(res.stats.skippedCount, 0, 'Nothing should be skipped in a quiescent tree');
   assert.ok(res.stats.byteCount > 0, 'Stats must report bytes copied');
   assert.strictEqual(typeof res.stats.elapsedMs, 'number', 'Stats must report elapsed time');
   assert.strictEqual(res.stats.strategy, 'git', 'A git repo must use git enumeration');
 
+  // The digest recorded by materializeRepo must describe the tree that was
+  // actually copied. The copy set and the digest set come from ONE enumeration,
+  // so they cannot diverge; this asserts the resulting property end to end.
+  const digestOf = (root) => {
+    const walk = (dir, base) => {
+      const out = [];
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const rel = base ? `${base}/${e.name}` : e.name;
+        if (e.isDirectory()) out.push(...walk(path.join(dir, e.name), rel));
+        else out.push(rel);
+      }
+      return out;
+    };
+    const h = crypto.createHash('sha256');
+    for (const rel of walk(root, '').sort()) {
+      const content = fs.readFileSync(path.join(root, rel));
+      h.update(`${rel}:${crypto.createHash('sha256').update(content).digest('hex')}\n`);
+    }
+    return h.digest('hex');
+  };
+  assert.strictEqual(
+    res.sourceInfo.treeDigest,
+    digestOf(res.targetDir),
+    'Recorded digest must equal the digest of what was actually materialized'
+  );
+
   mat.cleanup();
+  assert.ok(!fs.existsSync(wsRoot), 'Cleanup must reclaim the per-run workspace root it materialized into');
+
+  // Untracked build/test output must not be able to move the digest, but an
+  // --allow-dirty run must still materialize what is on disk. Both sides read
+  // from the same single enumeration, so the choice cannot differ between the
+  // copy and the digest.
+  fs.mkdirSync(path.join(tmp, 'test-results'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'test-results', 'trace.zip'), 'leftover\n');
+  fs.mkdirSync(path.join(tmp, 'uploads'), { recursive: true });
+
+  const wsExcl = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-excl-'));
+  const matExcl = new SourceMaterializer(wsExcl);
+  const excl = matExcl.materializeRepo(tmp, 'source', { includeUntracked: false });
+  assert.strictEqual(excl.sourceInfo.treeDigest, after, 'Leftover test output must not change the digest');
+  assert.ok(!fs.existsSync(path.join(excl.targetDir, 'test-results')), 'Untracked output must not be copied');
+  // Empty directories are untracked by git and must be recreated for the build,
+  // yet must NOT affect the digest - git's own model does not track them.
+  assert.ok(fs.existsSync(path.join(excl.targetDir, 'uploads')), 'Empty source directories must be recreated');
+  assert.strictEqual(excl.stats.emptyDirCount, 1, 'Exactly the one empty directory must be recreated');
+  matExcl.cleanup();
+
+  const wsIncl = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-incl-'));
+  const matIncl = new SourceMaterializer(wsIncl);
+  const incl = matIncl.materializeRepo(tmp, 'source', { includeUntracked: true });
+  assert.notStrictEqual(incl.sourceInfo.treeDigest, after, 'An --allow-dirty run must see untracked files');
+  assert.ok(fs.existsSync(path.join(incl.targetDir, 'test-results', 'trace.zip')), 'Untracked files must materialize when included');
+  matIncl.cleanup();
+
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(wsRoot, { recursive: true, force: true });
+  fs.rmSync(wsExcl, { recursive: true, force: true });
+  fs.rmSync(wsIncl, { recursive: true, force: true });
   recordPass(30, 'Digest Covers Every Materialized File At Any Depth');
 }
 
