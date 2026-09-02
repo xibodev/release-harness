@@ -538,12 +538,15 @@ function recordPass(num, name) {
       'Symlinked-directory contents must be counted exactly once, under their real path'
     );
 
-    // The equivalence itself, asserted directly: the SAME tree shape enumerated
-    // by each strategy must produce byte-identical file lists.
+    // Symlinked-directory handling, asserted directly against BOTH strategies:
+    // the same tree shape, enumerated each way, must reach the same answer about
+    // the linked directory. The tree is built to contain nothing else the two
+    // strategies treat differently, so the comparison isolates that one behavior.
     const equivGit = fs.mkdtempSync(path.join(os.tmpdir(), 'f29-equiv-git-'));
     const equivFs = fs.mkdtempSync(path.join(os.tmpdir(), 'f29-equiv-fs-'));
     let equivBuilt = true;
-    for (const root of [equivGit, equivFs]) {
+    const equivLinkFailed = [];
+    for (const [label, root] of [['git-side', equivGit], ['fs-side', equivFs]]) {
       fs.writeFileSync(path.join(root, 'top.txt'), 'top\n');
       fs.mkdirSync(path.join(root, 'real'), { recursive: true });
       fs.writeFileSync(path.join(root, 'real', 'deep.txt'), 'deep\n');
@@ -551,7 +554,17 @@ function recordPass(num, name) {
         fs.symlinkSync(path.join(root, 'real'), path.join(root, 'alias'), 'junction');
       } catch {
         equivBuilt = false;
+        equivLinkFailed.push(label);
       }
+    }
+    if (!equivBuilt) {
+      // The outer skip prints a note; so must this one. A silent skip here would
+      // drop the cross-strategy assertions below with no output at all, which is
+      // indistinguishable from them having passed.
+      console.log(
+        `  … [F-29] cross-strategy symlinked-directory probe skipped: could not create the directory link on ${equivLinkFailed.join(' and ')}. ` +
+          'NOT RUN: strategy-selection checks, the git/filesystem agreement assertion, and the non-traversing expected-list assertion.'
+      );
     }
     if (equivBuilt) {
       execSync('git init -b main', { cwd: equivGit, stdio: 'ignore' });
@@ -561,10 +574,21 @@ function recordPass(num, name) {
       const fsSide = enumerateSource(equivFs);
       assert.strictEqual(gitSide.strategy, 'git', 'Equivalence probe: git side must use git enumeration');
       assert.strictEqual(fsSide.strategy, 'filesystem', 'Equivalence probe: fs side must use filesystem enumeration');
+      // SCOPE: this asserts agreement on SYMLINKED-DIRECTORY HANDLING, not general
+      // cross-strategy equivalence — which is deliberately NOT a contract. The two
+      // strategies serve disjoint tree populations: a git-enumerable tree always
+      // takes the git path, and the filesystem path runs only where git cannot
+      // enumerate (vendored local_path repos, nested sub-repos). FALLBACK_IGNORED_NAMES
+      // applies on that path alone, so on a tree tracking generated output the two
+      // measurably differ — a tree tracking .cache/, coverage/ and test-results/
+      // enumerates 7 entries by git and 4 by filesystem, which is by design and
+      // never happens on the same tree in production. The tree above contains no
+      // denylisted name, so the lists coincide and the comparison isolates the
+      // linked directory, which is what is under test.
       assert.deepStrictEqual(
         gitSide.files,
         fsSide.files,
-        `Both strategies must enumerate an identical tree identically (git=${JSON.stringify(gitSide.files)} fs=${JSON.stringify(fsSide.files)})`
+        `Both strategies must handle a symlinked directory identically on a tree that differs in nothing else (git=${JSON.stringify(gitSide.files)} fs=${JSON.stringify(fsSide.files)})`
       );
       assert.deepStrictEqual(
         gitSide.files,
@@ -574,6 +598,71 @@ function recordPass(num, name) {
     }
     fs.rmSync(equivGit, { recursive: true, force: true });
     fs.rmSync(equivFs, { recursive: true, force: true });
+  }
+
+  // CONTRACT: a symlink to a regular file OUTSIDE the tree is not in-tree content.
+  // The ancestor check above covers linked DIRECTORIES only; a link straight to an
+  // outside file lstats as an ordinary regular file and would otherwise be
+  // enumerated, then read and copied — widening the declared source boundary and
+  // hashing bytes that exist only in this checkout. A link to a file INSIDE the
+  // tree is within the boundary and stays enumerated.
+  //
+  // File symlinks need elevation on Windows (EPERM without Developer Mode), so
+  // creation is attempted and the case SKIPS WITH A PRINTED NOTE when it fails —
+  // never silently. On POSIX CI both links are created and the assertions run.
+  {
+    const linkTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'f29-extlink-'));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f29-outside-'));
+    fs.writeFileSync(path.join(outsideDir, 'secret.txt'), 'not in the tree\n');
+    fs.writeFileSync(path.join(linkTmp, 'inside.txt'), 'in the tree\n');
+
+    let fileLinksCreated = false;
+    let linkFailure = '';
+    try {
+      fs.symlinkSync(path.join(outsideDir, 'secret.txt'), path.join(linkTmp, 'external-link.txt'), 'file');
+      fs.symlinkSync(path.join(linkTmp, 'inside.txt'), path.join(linkTmp, 'internal-link.txt'), 'file');
+      fileLinksCreated =
+        fs.lstatSync(path.join(linkTmp, 'external-link.txt')).isSymbolicLink() &&
+        fs.lstatSync(path.join(linkTmp, 'internal-link.txt')).isSymbolicLink();
+    } catch (err) {
+      fileLinksCreated = false;
+      linkFailure = err && err.code ? err.code : String(err && err.message);
+    }
+
+    if (!fileLinksCreated) {
+      console.log(
+        `  … [F-29] out-of-tree file-symlink case skipped: this environment cannot create a file symlink (${linkFailure || 'unknown cause'}; ` +
+          'Windows requires Developer Mode or elevation). NOT RUN: the exclusion of a symlink resolving outside the tree, ' +
+          'its named warning, and the retention of a symlink resolving inside the tree.'
+      );
+    } else {
+      const linkRes = enumerateSource(linkTmp);
+      assert.ok(
+        !linkRes.files.includes('external-link.txt'),
+        `A symlink resolving outside the source tree must not be enumerated (got: ${JSON.stringify(linkRes.files)})`
+      );
+      assert.ok(
+        linkRes.warnings.some((w) => w.includes('external-link.txt') && w.includes('outside the source tree')),
+        `Excluding an out-of-tree symlink must warn, naming the entry and the reason (got: ${JSON.stringify(linkRes.warnings)})`
+      );
+      assert.ok(
+        linkRes.files.includes('inside.txt'),
+        'The real file inside the tree must still be enumerated'
+      );
+      assert.ok(
+        linkRes.files.includes('internal-link.txt'),
+        'A symlink resolving INSIDE the tree stays within the declared boundary and must be enumerated'
+      );
+      for (const rel of linkRes.files) {
+        assert.ok(
+          fs.statSync(path.join(linkTmp, rel)).isFile(),
+          `Enumerated entry must be a readable regular file: ${rel}`
+        );
+      }
+    }
+
+    fs.rmSync(linkTmp, { recursive: true, force: true });
+    fs.rmSync(outsideDir, { recursive: true, force: true });
   }
 
   // CONTRACT: a file deleted but not staged is in the index, not on disk (ENOENT).

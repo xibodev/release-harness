@@ -151,12 +151,31 @@ function gitEnumerate(absPath) {
 }
 
 /**
+ * True when `abs` resolves to a location inside `canonicalRoot` (or to the root
+ * itself). Both sides go through `canonicalizePath`, so symlinks, 8.3 short
+ * names and Windows drive-letter case are resolved before comparison: a textual
+ * prefix test on unresolved paths is not a containment proof.
+ */
+function resolvesInsideRoot(abs, canonicalRoot) {
+  const target = canonicalizePath(abs);
+  return target === canonicalRoot || target.startsWith(`${canonicalRoot}/`);
+}
+
+/**
  * Classify one candidate path by what is actually on disk. Symlinks are
  * resolved so that both enumeration strategies agree on what a "file" is: a
  * symlink to a regular file counts as a file, a symlink to a directory or a
  * dangling symlink does not.
+ *
+ * A symlink to a regular file is additionally required to resolve INSIDE the
+ * enumerated root. The boundary argument that keeps linked directories
+ * untraversed (see `refineEntries`) applies unchanged to a single linked file:
+ * following it would widen the declared source boundary, copying bytes the
+ * adopter never placed in the tree and hashing content that exists only in this
+ * checkout. A link whose target IS inside the tree stays enumerated — its bytes
+ * are within the declared boundary, and both strategies list it alike.
  */
-function classifyEntry(abs) {
+function classifyEntry(abs, canonicalRoot) {
   let linkStat;
   try {
     linkStat = fs.lstatSync(abs);
@@ -172,7 +191,7 @@ function classifyEntry(abs) {
     } catch {
       return 'dangling';
     }
-    if (targetStat.isFile()) return 'file';
+    if (targetStat.isFile()) return resolvesInsideRoot(abs, canonicalRoot) ? 'file' : 'externalLink';
     if (targetStat.isDirectory()) return 'linkedDirectory';
     return 'special';
   }
@@ -290,12 +309,14 @@ function refineEntries(absPath, candidates, warnings, indexModes = new Map()) {
   const seen = new Set();
   const files = [];
   const symlinkAncestorOf = makeSymlinkAncestorResolver(absPath);
+  const canonicalRoot = canonicalizePath(absPath);
   const dropped = {
     directory: [],
     missing: [],
     missingSymlinkBlob: [],
     dangling: [],
     linkedDirectory: [],
+    externalLink: [],
     underLinkedDirectory: [],
     unreadable: [],
     special: [],
@@ -318,7 +339,7 @@ function refineEntries(absPath, candidates, warnings, indexModes = new Map()) {
       continue;
     }
 
-    const kind = classifyEntry(path.join(absPath, rel));
+    const kind = classifyEntry(path.join(absPath, rel), canonicalRoot);
     if (kind === 'file') files.push(rel);
     else if (kind === 'missing' && indexModes.get(rel) === '120000') dropped.missingSymlinkBlob.push(rel);
     else dropped[kind].push(rel);
@@ -352,6 +373,13 @@ function refineEntries(absPath, candidates, warnings, indexModes = new Map()) {
   if (dropped.linkedDirectory.length > 0) {
     warnings.push(
       `Excluded ${dropped.linkedDirectory.length} symlink(s) that resolve to a directory rather than a file: ${summarizePaths(dropped.linkedDirectory)}.`
+    );
+  }
+  if (dropped.externalLink.length > 0) {
+    warnings.push(
+      `Excluded ${dropped.externalLink.length} symlink(s) whose target resolves outside the source tree: ${summarizePaths(dropped.externalLink)}. ` +
+        'Following them would widen the declared source boundary, copying bytes the adopter never placed in the tree and hashing content ' +
+        'that exists only in this checkout. Copy the target into the tree if the build needs it.'
     );
   }
   if (dropped.underLinkedDirectory.length > 0) {
