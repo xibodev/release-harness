@@ -8,7 +8,7 @@
   "properties": {
     "schema_version": { "type": "string", "enum": ["1.0.0"] },
     "product_slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-    "harness_version": { "type": "string", "enum": ["1.0.0"] },
+    "harness_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
     "port_block": {
       "type": "object",
       "required": ["start", "range"],
@@ -52,6 +52,26 @@
         "exact": { "type": "object", "additionalProperties": { "type": "string" } },
         "normalized": { "type": "object", "additionalProperties": { "type": "string" } },
         "environment_substitutions": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "pr_gate": {
+      "type": "object",
+      "description": "Level 1 PR gate commands executed by check-pr in the project working directory",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["cmd"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "cmd": { "type": "string" },
+              "timeout_seconds": { "type": "integer", "minimum": 1 },
+              "expected_exit_code": { "type": "integer" }
+            }
+          }
+        }
       }
     },
     "paths": {
