@@ -828,10 +828,102 @@ function recordPass(num, name) {
   assert.ok(fs.existsSync(path.join(incl.targetDir, 'test-results', 'trace.zip')), 'Untracked files must materialize when included');
   matIncl.cleanup();
 
+  // Empty-directory recreation must obey the SAME ignore rules as the file
+  // enumeration, not a second hardcoded basename list. A repo that ignores
+  // dist/ build/ vendor/ target/ .tox/ would otherwise have every one of those
+  // build trees recreated as an empty skeleton in a certification workspace -
+  // the same build-state leakage that excluding untracked output prevents.
+  const ig = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-ignore-'));
+  execSync('git init -b main', { cwd: ig, stdio: 'ignore' });
+  execSync('git config user.email "t@t.t"', { cwd: ig, stdio: 'ignore' });
+  execSync('git config user.name "t"', { cwd: ig, stdio: 'ignore' });
+  fs.writeFileSync(path.join(ig, '.gitignore'), 'dist/\nbuild/\nvendor/\ntarget/\n.tox/\n*.log\n');
+  fs.writeFileSync(path.join(ig, 'app.js'), 'console.log(1)\n');
+  for (const d of ['dist', 'build', 'vendor', 'target', '.tox']) {
+    fs.mkdirSync(path.join(ig, d, 'empty-skeleton'), { recursive: true });
+    fs.writeFileSync(path.join(ig, d, 'artifact.bin'), 'junk\n');
+  }
+  fs.mkdirSync(path.join(ig, 'uploads'), { recursive: true });
+  fs.mkdirSync(path.join(ig, 'tmp', 'cache'), { recursive: true });
+  // A directory whose ONLY contents are ignored contributes no copied file, so
+  // it is empty from the workspace's perspective and must still be recreated -
+  // otherwise a build expecting logs/ fails in the workspace but not locally.
+  fs.mkdirSync(path.join(ig, 'logs'), { recursive: true });
+  fs.writeFileSync(path.join(ig, 'logs', 'run.log'), 'noise\n');
+  execSync('git add -A', { cwd: ig, stdio: 'ignore' });
+  execSync('git commit -m init', { cwd: ig, stdio: 'ignore' });
+
+  const wsIg = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-igws-'));
+  const matIg = new SourceMaterializer(wsIg);
+  const igRes = matIg.materializeRepo(ig, 'source', { includeUntracked: false });
+
+  for (const d of ['dist', 'build', 'vendor', 'target', '.tox']) {
+    assert.ok(
+      !fs.existsSync(path.join(igRes.targetDir, d)),
+      `Git-ignored directory "${d}/" must not be recreated in the workspace`
+    );
+  }
+  assert.ok(fs.existsSync(path.join(igRes.targetDir, 'uploads')), 'A genuinely empty source directory must still be recreated');
+  assert.ok(fs.existsSync(path.join(igRes.targetDir, 'tmp', 'cache')), 'A nested empty source directory must still be recreated');
+  assert.ok(
+    fs.existsSync(path.join(igRes.targetDir, 'logs')),
+    'A directory whose only contents are ignored must still be recreated - it is empty from the workspace perspective'
+  );
+  assert.ok(
+    !fs.existsSync(path.join(igRes.targetDir, 'logs', 'run.log')),
+    'The ignored file itself must not be copied'
+  );
+  assert.strictEqual(igRes.stats.emptyDirCount, 4, 'Exactly uploads/, tmp/, tmp/cache/ and logs/ are workspace-empty');
+
+  // Empty directories carry no content and must leave the digest untouched:
+  // git does not track them, so a tree with and without them is the same tree.
+  const digestWithEmpty = igRes.sourceInfo.treeDigest;
+  for (const d of ['uploads', 'tmp', 'logs']) fs.rmSync(path.join(ig, d), { recursive: true, force: true });
+  assert.strictEqual(
+    matIg.computeTreeDigest(ig, enumerateSource(ig, { includeUntracked: false }).files),
+    digestWithEmpty,
+    'Empty directories must not affect the tree digest'
+  );
+  matIg.cleanup();
+
+  // A non-git tree has no ignore authority to consult and must keep working:
+  // the conservative basename denylist still applies, and empty product
+  // directories are still recreated.
+  const plainSrc = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-plain-'));
+  fs.writeFileSync(path.join(plainSrc, 'app.js'), 'x\n');
+  fs.mkdirSync(path.join(plainSrc, 'uploads'), { recursive: true });
+  fs.mkdirSync(path.join(plainSrc, 'coverage'), { recursive: true });
+  const wsPlain = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-plainws-'));
+  const matPlain = new SourceMaterializer(wsPlain);
+  const plainRes = matPlain.materializeRepo(plainSrc, 'source');
+  assert.strictEqual(plainRes.stats.strategy, 'filesystem', 'A non-git tree must use filesystem enumeration');
+  assert.ok(fs.existsSync(path.join(plainRes.targetDir, 'uploads')), 'The non-git fallback must still recreate empty directories');
+  assert.ok(!fs.existsSync(path.join(plainRes.targetDir, 'coverage')), 'The non-git fallback must still honour the basename denylist');
+  matPlain.cleanup();
+
+  // A non-directory already occupying the destination path cannot be silently
+  // passed over: the workspace then differs structurally from the source with
+  // nothing recorded to explain why.
+  const wsCol = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-col-'));
+  fs.mkdirSync(path.join(wsCol, 'source'), { recursive: true });
+  fs.writeFileSync(path.join(wsCol, 'source', 'uploads'), 'a file, not a directory\n');
+  const matCol = new SourceMaterializer(wsCol);
+  const colRes = matCol.materializeRepo(plainSrc, 'source');
+  assert.ok(
+    colRes.stats.warnings.some((w) => w.includes('uploads') && w.includes('non-directory')),
+    'A destination collision must warn rather than pass silently'
+  );
+  matCol.cleanup();
+
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(wsRoot, { recursive: true, force: true });
   fs.rmSync(wsExcl, { recursive: true, force: true });
   fs.rmSync(wsIncl, { recursive: true, force: true });
+  fs.rmSync(ig, { recursive: true, force: true });
+  fs.rmSync(wsIg, { recursive: true, force: true });
+  fs.rmSync(plainSrc, { recursive: true, force: true });
+  fs.rmSync(wsPlain, { recursive: true, force: true });
+  fs.rmSync(wsCol, { recursive: true, force: true });
   recordPass(30, 'Digest Covers Every Materialized File At Any Depth');
 }
 

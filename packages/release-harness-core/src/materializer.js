@@ -322,12 +322,32 @@ export class SourceMaterializer {
 
     // Git does not track empty directories, so they must be recreated
     // separately or a build expecting uploads/ or tmp/cache/ fails in the
-    // workspace but not locally. They hold no content and therefore do NOT
-    // participate in the tree digest - git's own model does not track them.
+    // workspace but not locally. "Empty" here means empty from the WORKSPACE's
+    // perspective - a directory whose only contents are ignored contributes no
+    // copied file and would otherwise be absent with nothing said. They hold no
+    // content and therefore do NOT participate in the tree digest - git's own
+    // model does not track them.
     let emptyDirCount = 0;
     for (const rel of enumerateEmptyDirectories(sourceAbs, warnings)) {
       const dstPath = path.join(targetDir, rel);
-      if (fs.existsSync(dstPath)) continue;
+      let existing = null;
+      try {
+        existing = fs.lstatSync(dstPath);
+      } catch {
+        // Absent, which is the ordinary case - fall through and create it.
+      }
+      if (existing) {
+        // Already a directory: nothing to do, and nothing worth saying.
+        if (existing.isDirectory()) continue;
+        // A file occupies the path the source holds a directory at. Creating it
+        // is impossible and skipping silently leaves the workspace structurally
+        // unlike the source with no trace of why.
+        warnings.push(
+          `Could not recreate empty source directory "${rel}" in the workspace: a non-directory already occupies that path. ` +
+            'The workspace structure differs from the source tree at this path.'
+        );
+        continue;
+      }
       try {
         fs.mkdirSync(dstPath, { recursive: true });
         emptyDirCount += 1;

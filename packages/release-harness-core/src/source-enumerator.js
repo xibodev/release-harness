@@ -446,7 +446,78 @@ function fsEnumerate(absPath, warnings) {
 }
 
 /**
- * Directories that are empty on disk in the source tree.
+ * The set of paths git considers ignored in this tree, resolved in TWO
+ * subprocesses total regardless of tree size.
+ *
+ * Returns `null` — meaning "no git opinion is available" — for a non-git tree,
+ * a nested sub-repo, or any git failure. A null result is what sends the caller
+ * back to the basename denylist; an EMPTY result means git ran and found nothing
+ * ignored, which is a different and equally load-bearing answer.
+ *
+ * Two spawns rather than one because `git ls-files --others --ignored
+ * --directory` collapses its answer: it reports `logs/` for a directory that is
+ * NOT itself ignored but whose every entry is (`logs/run.log`), using the same
+ * trailing-slash spelling it uses for a genuinely ignored `dist/`. Treating that
+ * listing alone as "these directories are ignored" would delete exactly the
+ * NEW-2 case from the workspace. `git check-ignore` is therefore asked to
+ * confirm which of those directory entries are ignored *in their own right*; it
+ * takes the whole batch on stdin, so the cost is one spawn, not one per
+ * directory.
+ *
+ * `check-ignore` exits 1 with empty stdout when NOTHING in the batch is ignored.
+ * That is a successful answer, not a failure, and is reported as such.
+ */
+function resolveGitIgnoreSets(absPath) {
+  let listed;
+  try {
+    listed = gitOutputToPaths(
+      execSync('git ls-files -z --others --ignored --directory --exclude-standard', {
+        cwd: absPath,
+        encoding: 'buffer',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 30000,
+        maxBuffer: 64 * 1024 * 1024,
+      })
+    );
+  } catch {
+    return null;
+  }
+
+  // `gitOutputToPaths` strips nothing, so a directory entry is still spelled
+  // with its trailing slash here and is distinguishable from a file entry.
+  const ignoredFiles = new Set();
+  const candidateDirs = [];
+  for (const entry of listed) {
+    if (entry.endsWith('/')) candidateDirs.push(entry.replace(/\/+$/, ''));
+    else ignoredFiles.add(entry);
+  }
+
+  const ignoredDirs = new Set();
+  if (candidateDirs.length > 0) {
+    let stdout = null;
+    try {
+      stdout = execSync('git check-ignore -z --stdin', {
+        cwd: absPath,
+        input: Buffer.from(`${candidateDirs.join('\0')}\0`, 'utf8'),
+        stdio: ['pipe', 'pipe', 'ignore'],
+        timeout: 30000,
+        maxBuffer: 64 * 1024 * 1024,
+      });
+    } catch (err) {
+      // Exit 1 = "none of the batch is ignored", which arrives as a thrown
+      // error with empty stdout. Anything that produced no stdout at all and
+      // did not exit 1 is a real failure: fall back rather than assert.
+      if (err && err.status === 1 && err.stdout !== undefined) stdout = err.stdout;
+      else return null;
+    }
+    for (const p of gitOutputToPaths(stdout)) ignoredDirs.add(p.replace(/\/+$/, ''));
+  }
+
+  return { ignoredDirs, ignoredFiles };
+}
+
+/**
+ * Directories that hold nothing the workspace will contain.
  *
  * Git has no concept of an empty directory, so a workspace built purely from an
  * enumerated file list silently loses `uploads/`, `tmp/cache/` and friends — a
@@ -455,10 +526,24 @@ function fsEnumerate(absPath, warnings) {
  * the tree digest (git's own model does not track them); they exist only to make
  * the copy faithful.
  *
- * Exclusions mirror the enumeration's: `.git`, dependency and tooling
- * directories (FALLBACK_IGNORED_NAMES), and symlinked directories, which are not
- * traversed on either enumeration strategy. Dirent reflects lstat, so a symlink
- * to a directory is not `isDirectory()` and is never descended into.
+ * "Empty" is judged from the WORKSPACE's perspective, not the disk's. A
+ * directory whose only contents are ignored — `logs/` holding just `run.log` —
+ * contributes no enumerated file, so the workspace would otherwise lack it
+ * entirely with nothing said. It is empty as far as the copy is concerned, and
+ * is recreated as such.
+ *
+ * Exclusions mirror what `enumerateSource` already excludes, and by the same
+ * authority: on a git tree the ignore rules come from git itself, so a repo
+ * ignoring `dist/ target/ .tox/` gets no recreated build-tree skeletons — the
+ * previous basename-only filter recreated every one of them, reintroducing the
+ * build-state leakage the untracked-file exclusion exists to prevent. A non-git
+ * tree has no such authority available and keeps the conservative basename
+ * denylist. Symlinked directories are excluded on both paths: a Dirent reflects
+ * lstat, so a symlink to a directory is not `isDirectory()` and is never
+ * descended into, matching both enumeration strategies.
+ *
+ * Cost is bounded at two git subprocesses for the whole tree, plus the same
+ * single directory walk as before — never a subprocess per directory.
  *
  * Never throws: an unreadable directory is reported as a warning and skipped.
  */
@@ -466,6 +551,49 @@ export function enumerateEmptyDirectories(sourcePath, warnings = []) {
   const absPath = path.resolve(sourcePath);
   const empty = [];
 
+  try {
+    if (!fs.statSync(absPath).isDirectory()) return [];
+  } catch {
+    return [];
+  }
+
+  // Only a tree that IS its own repository may use git's ignore rules; a nested
+  // sub-repo's ignores are the parent's business, exactly as in `enumerateSource`.
+  let ignoreSets = null;
+  try {
+    const topLevel = execSync('git rev-parse --show-toplevel', {
+      cwd: absPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5000,
+    }).trim();
+    if (topLevel && samePath(topLevel, absPath)) ignoreSets = resolveGitIgnoreSets(absPath);
+  } catch {
+    ignoreSets = null;
+  }
+
+  /**
+   * True when this path must not appear in the workspace at all. On the git
+   * path `.git` is excluded explicitly — git does not report its own directory
+   * as ignored — and everything else is git's own answer.
+   */
+  const isExcludedDir = (rel, name) => {
+    if (name === '.git') return true;
+    if (ignoreSets === null) return FALLBACK_IGNORED_NAMES.has(name);
+    return ignoreSets.ignoredDirs.has(rel);
+  };
+
+  const isExcludedFile = (rel, name) => {
+    if (ignoreSets === null) return FALLBACK_IGNORED_NAMES.has(name) || name.endsWith('.pyc');
+    return ignoreSets.ignoredFiles.has(rel);
+  };
+
+  /**
+   * Returns true when `relBase` contributes no file to the workspace, having
+   * already recorded it as an empty directory. A parent is judged by the same
+   * rule, so an `onlyempty/nested-empty` chain is recreated in full and a
+   * directory holding only ignored files counts as empty.
+   */
   const walk = (dir, relBase) => {
     let entries;
     try {
@@ -474,24 +602,27 @@ export function enumerateEmptyDirectories(sourcePath, warnings = []) {
       warnings.push(
         `Skipped unreadable directory "${relBase || '.'}" while scanning for empty directories (${err && err.code ? err.code : err.message}).`
       );
-      return;
+      // Unknown contents: do not claim it is empty.
+      return false;
     }
-    if (entries.length === 0 && relBase) {
-      empty.push(relBase);
-      return;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (FALLBACK_IGNORED_NAMES.has(entry.name)) continue;
-      walk(path.join(dir, entry.name), relBase ? `${relBase}/${entry.name}` : entry.name);
-    }
-  };
 
-  try {
-    if (!fs.statSync(absPath).isDirectory()) return [];
-  } catch {
-    return [];
-  }
+    let contributesContent = false;
+    for (const entry of entries) {
+      const rel = relBase ? `${relBase}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (isExcludedDir(rel, entry.name)) continue;
+        if (!walk(path.join(dir, entry.name), rel)) contributesContent = true;
+      } else {
+        // A symlink is not isDirectory(); it is a workspace-visible entry
+        // unless ignored, and it keeps its parent from counting as empty.
+        if (isExcludedFile(rel, entry.name)) continue;
+        contributesContent = true;
+      }
+    }
+
+    if (!contributesContent && relBase) empty.push(relBase);
+    return !contributesContent;
+  };
 
   walk(absPath, '');
   empty.sort();
