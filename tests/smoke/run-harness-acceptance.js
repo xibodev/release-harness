@@ -393,7 +393,8 @@ function startMockHttpServer(port, handler) {
   assert.deepStrictEqual(beforeStat, afterStat, 'Source repository must remain completely untouched');
 
   materializer.cleanup();
-  assert.ok(!fs.existsSync(tmpDir));
+  assert.ok(!fs.existsSync(mat.targetDir), 'Cleanup must remove the materialized workspace');
+  fs.rmSync(tmpDir, { recursive: true, force: true });
   recordPass('AC-08', 'Detached Source Materialization and Zero Repository/Git Pollution', 'INTEGRATION');
 }
 

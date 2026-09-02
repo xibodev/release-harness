@@ -13,7 +13,7 @@ import { enumerateSource, FALLBACK_IGNORED_NAMES, LIKELY_NEEDED_IGNORED } from '
 import { validateTopology, validateOrigins, validateScenario, validateHarnessConfig, ValidationError } from '../../packages/release-harness-core/src/validator.js';
 
 console.log('======================================================================');
-console.log('       Release-Harness: 29 Neutral Acceptance Fixtures Suite         ');
+console.log('       Release-Harness: 30 Neutral Acceptance Fixtures Suite         ');
 console.log('======================================================================\n');
 
 const testResults = [];
@@ -737,6 +737,46 @@ function recordPass(num, name) {
   recordPass(29, 'Git-Aware Source Enumeration Preserves Nested Product Directories');
 }
 
+// F-30: Digest Covers Every Materialized File At Any Depth
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-digest-'));
+  execSync('git init -b main', { cwd: tmp, stdio: 'ignore' });
+  execSync('git config user.email "t@t.t"', { cwd: tmp, stdio: 'ignore' });
+  execSync('git config user.name "t"', { cwd: tmp, stdio: 'ignore' });
+
+  // Depth 6 - beyond the old maxDepth=4 digest cap
+  const deep = path.join(tmp, 'a', 'b', 'c', 'd', 'e', 'f');
+  fs.mkdirSync(deep, { recursive: true });
+  fs.writeFileSync(path.join(deep, 'deep.txt'), 'original\n');
+  fs.writeFileSync(path.join(tmp, 'shallow.txt'), 'top\n');
+  execSync('git add -A', { cwd: tmp, stdio: 'ignore' });
+  execSync('git commit -m init', { cwd: tmp, stdio: 'ignore' });
+
+  const wsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-ws-'));
+  const mat = new SourceMaterializer(wsRoot);
+
+  const before = mat.computeTreeDigest(tmp);
+  fs.writeFileSync(path.join(deep, 'deep.txt'), 'MUTATED\n');
+  const after = mat.computeTreeDigest(tmp);
+
+  assert.notStrictEqual(before, after, 'Digest must change when a file at depth 6 changes');
+
+  const res = mat.materializeRepo(tmp, 'source');
+  assert.ok(
+    fs.existsSync(path.join(res.targetDir, 'a', 'b', 'c', 'd', 'e', 'f', 'deep.txt')),
+    'Deep file must be copied'
+  );
+  assert.strictEqual(res.stats.fileCount, 2, 'Stats must count exactly the two tracked files');
+  assert.ok(res.stats.byteCount > 0, 'Stats must report bytes copied');
+  assert.strictEqual(typeof res.stats.elapsedMs, 'number', 'Stats must report elapsed time');
+  assert.strictEqual(res.stats.strategy, 'git', 'A git repo must use git enumeration');
+
+  mat.cleanup();
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.rmSync(wsRoot, { recursive: true, force: true });
+  recordPass(30, 'Digest Covers Every Materialized File At Any Depth');
+}
+
 // F-28: Component & Contract Mismatch in Multi-Repo Graph
 {
   const top = {
@@ -754,5 +794,5 @@ function recordPass(num, name) {
 }
 
 console.log('\n======================================================================');
-console.log(`  ALL 29 / 29 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
+console.log(`  ALL 30 / 30 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
 console.log('======================================================================\n');

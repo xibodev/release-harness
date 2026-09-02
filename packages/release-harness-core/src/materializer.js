@@ -2,30 +2,7 @@ import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-
-const IGNORED_NAMES = new Set([
-  '.git',
-  '.brains',
-  '.quality-run',
-  'node_modules',
-  '.pytest_cache',
-  '.ruff_cache',
-  'test-results',
-  'playwright-report',
-  'uploads',
-  'research',
-  'brand',
-  'docs',
-  '.venv',
-  'venv',
-  'dist',
-  'build',
-  '.next',
-  '.turbo',
-  '__pycache__',
-  '.cache',
-  'coverage',
-]);
+import { enumerateSource } from './source-enumerator.js';
 
 /**
  * Detached source workspace materializer.
@@ -37,31 +14,27 @@ export class SourceMaterializer {
     this.workspaceRoot = path.resolve(workspaceRoot);
   }
 
-  computeTreeDigest(dir, maxDepth = 4) {
+  /**
+   * Content digest over the SAME file list the workspace copy materializes.
+   * Sharing `enumerateSource` is the point: a digest computed over a different
+   * set than the one built is not a provenance record. There is deliberately
+   * no depth bound - a change at any depth must move the digest.
+   */
+  computeTreeDigest(dir) {
+    const absPath = path.resolve(dir);
     const hash = crypto.createHash('sha256');
-    const files = [];
+    const { files } = enumerateSource(absPath);
 
-    const walk = (d, depth = 0) => {
-      if (depth > maxDepth || !fs.existsSync(d)) return;
-      for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
-        if (IGNORED_NAMES.has(entry.name) || entry.name.endsWith('.pyc')) {
-          continue;
-        }
-        const full = path.join(d, entry.name);
-        if (entry.isDirectory()) {
-          walk(full, depth + 1);
-        } else if (entry.isFile()) {
-          files.push(full);
-        }
+    for (const rel of files) {
+      const full = path.join(absPath, rel);
+      let content;
+      try {
+        content = fs.readFileSync(full);
+      } catch {
+        continue; // Unreadable, a symlink target, or vanished between calls
       }
-    };
-
-    walk(dir, 0);
-    files.sort();
-    for (const file of files) {
-      const rel = path.relative(dir, file).replace(/\\/g, '/');
-      const content = fs.readFileSync(file);
-      hash.update(`${rel}:${crypto.createHash('sha256').update(content).digest('hex')}\n`);
+      hash.update(`${rel}:${crypto.createHash('sha256').update(content).digest('hex')}
+`);
     }
 
     return hash.digest('hex');
@@ -214,38 +187,62 @@ export class SourceMaterializer {
     const targetDir = path.join(this.workspaceRoot, destinationSubdir);
     fs.mkdirSync(targetDir, { recursive: true });
 
+    const startedAt = Date.now();
     const info = this.getSourceInfo(sourceAbs);
+    const { files, strategy, warnings } = enumerateSource(sourceAbs);
 
-    // Copy files recursively, ignoring .git, .brains, node_modules build caches
-    const copyRecursive = (src, dst) => {
-      const entries = fs.readdirSync(src, { withFileTypes: true });
-      for (const entry of entries) {
-        if (IGNORED_NAMES.has(entry.name) || entry.name.endsWith('.pyc')) {
-          continue; // Skip VCS & build caches
-        }
-        const srcPath = path.join(src, entry.name);
-        const dstPath = path.join(dst, entry.name);
+    let byteCount = 0;
+    for (const rel of files) {
+      const srcPath = path.join(sourceAbs, rel);
+      const dstPath = path.join(targetDir, rel);
+      fs.mkdirSync(path.dirname(dstPath), { recursive: true });
 
-        if (entry.isDirectory()) {
-          fs.mkdirSync(dstPath, { recursive: true });
-          copyRecursive(srcPath, dstPath);
-        } else if (entry.isFile()) {
-          fs.copyFileSync(srcPath, dstPath);
-        }
+      let stat;
+      try {
+        stat = fs.lstatSync(srcPath);
+      } catch {
+        continue; // Vanished between enumeration and copy
       }
-    };
 
-    copyRecursive(sourceAbs, targetDir);
+      if (stat.isSymbolicLink()) {
+        const linkTarget = fs.readlinkSync(srcPath);
+        try {
+          fs.symlinkSync(linkTarget, dstPath);
+        } catch {
+          // Windows without developer mode cannot create symlinks. Copy the
+          // resolved content so the build still sees a real file.
+          try {
+            fs.copyFileSync(srcPath, dstPath);
+            byteCount += fs.statSync(dstPath).size;
+          } catch {
+            // Dangling link - nothing to materialize
+          }
+        }
+      } else if (stat.isFile()) {
+        fs.copyFileSync(srcPath, dstPath);
+        byteCount += stat.size;
+      }
+    }
+
+    this.materializedSubdir = targetDir;
 
     return {
       targetDir,
       sourceInfo: info,
+      stats: {
+        fileCount: files.length,
+        byteCount,
+        elapsedMs: Date.now() - startedAt,
+        strategy,
+        warnings,
+      },
     };
   }
 
   cleanup() {
-    if (fs.existsSync(this.workspaceRoot)) {
-      fs.rmSync(this.workspaceRoot, { recursive: true, force: true });
+    const target = this.materializedSubdir || this.workspaceRoot;
+    if (fs.existsSync(target)) {
+      fs.rmSync(target, { recursive: true, force: true });
     }
   }
 }
