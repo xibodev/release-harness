@@ -1307,6 +1307,25 @@ function recordPass(num, name) {
   assert.strictEqual(g3.nodes[2].missing, true, 'The absent repository must be reported missing');
   assert.strictEqual(g3.nodes[2].status_resolved, false, 'A missing repository resolves no git status');
 
+  // The graph digest must be computed under the SAME inclusion rules the
+  // subsequent materialization uses. Otherwise a certification run excludes
+  // untracked files from the workspace while still digesting them, and the
+  // recorded provenance describes a tree that was never materialized.
+  fs.writeFileSync(path.join(base, 'api', 'untracked-leak.txt'), 'not committed\n');
+  const graphWithUntracked = matDigest.resolveMultiRepoGraph(mkTop(['api', 'web']), base, { includeUntracked: true }).graph_digest;
+  const graphWithoutUntracked = matDigest.resolveMultiRepoGraph(mkTop(['api', 'web']), base, { includeUntracked: false }).graph_digest;
+  assert.notStrictEqual(
+    graphWithUntracked,
+    graphWithoutUntracked,
+    'includeUntracked must change the graph digest, or the option is not reaching each repository enumeration'
+  );
+  assert.strictEqual(
+    matDigest.resolveMultiRepoGraph(mkTop(['api', 'web']), base).graph_digest,
+    graphWithUntracked,
+    'Omitting options must preserve the historical default (untracked included)'
+  );
+  fs.rmSync(path.join(base, 'api', 'untracked-leak.txt'), { force: true });
+
   // CONTRACT: materializeGraph copies EVERY declared repository into its own
   // subdirectory. Level 2 previously materialized one repo regardless of
   // topology_type, so a multi_repo product was certified against a tree that

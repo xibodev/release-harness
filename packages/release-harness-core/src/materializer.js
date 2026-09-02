@@ -40,8 +40,7 @@ export class SourceMaterializer {
       } catch {
         continue; // Unreadable, a symlink target, or vanished between calls
       }
-      hash.update(`${rel}:${crypto.createHash('sha256').update(content).digest('hex')}
-`);
+      hash.update(`${rel}:${crypto.createHash('sha256').update(content).digest('hex')}\n`);
     }
 
     return hash.digest('hex');
@@ -146,7 +145,16 @@ export class SourceMaterializer {
     };
   }
 
-  resolveMultiRepoGraph(topology, baseDir) {
+  /**
+   * Resolves every repository in a multi-repo product graph.
+   *
+   * `options.includeUntracked` is forwarded to each repository's enumeration so
+   * the graph digest is computed under the same inclusion rules the subsequent
+   * materialization will use. Without it a certification run would exclude
+   * untracked files from the workspace while still digesting them, and the
+   * recorded provenance would describe a tree that was never materialized.
+   */
+  resolveMultiRepoGraph(topology, baseDir, options = {}) {
     const repos = topology.repositories || [];
     const resolvedNodes = [];
     const errors = [];
@@ -157,7 +165,7 @@ export class SourceMaterializer {
         ? path.resolve(baseDir, repo.source.local_path)
         : path.resolve(baseDir, repo.repo_id);
 
-      const info = this.getSourceInfo(repoDir);
+      const info = this.getSourceInfo(repoDir, enumerateSource(repoDir, options));
 
       // EVERY declared repository contributes, including a missing one. Skipping
       // the absent case - as a `continue` above this line did - let a graph
@@ -432,7 +440,7 @@ export class SourceMaterializer {
    * `includeUntracked` cannot differ between repositories in one graph.
    */
   materializeGraph(topology, baseDir, options = {}) {
-    const graph = this.resolveMultiRepoGraph(topology, baseDir);
+    const graph = this.resolveMultiRepoGraph(topology, baseDir, options);
     const workspaces = [];
 
     if (graph.ok) {
