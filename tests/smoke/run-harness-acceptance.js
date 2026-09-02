@@ -492,13 +492,48 @@ function startMockHttpServer(port, handler) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ac08-mat-'));
   const materializer = new SourceMaterializer(tmpDir);
 
+  const listRecursive = (root) => {
+    const out = [];
+    const walk = (dir, base) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (e.name === '.git') continue;
+        const rel = base ? `${base}/${e.name}` : e.name;
+        if (e.isDirectory()) walk(path.join(dir, e.name), rel);
+        else out.push(rel);
+      }
+    };
+    walk(root, '');
+    return out.sort();
+  };
+
   const beforeStat = fs.readdirSync(tinyMonorepoDir);
   const mat = materializer.materializeRepo(tinyMonorepoDir, 'source');
 
   assert.ok(fs.existsSync(mat.targetDir));
   assert.ok(!fs.existsSync(path.join(mat.targetDir, '.git')), 'External source must not contain .git');
+
+  // The copy must actually contain files. Asserting only that the target
+  // directory exists passes even when zero files were copied, which is exactly
+  // how a materializer that silently dropped a directory looked like a clean run.
+  const copied = listRecursive(mat.targetDir);
+  assert.ok(copied.length > 0, 'Materialization must copy at least one file');
+  assert.strictEqual(copied.length, mat.stats.fileCount, 'Reported file count must match files on disk');
+
+  // Nested product directories named docs must survive byte-for-byte: this
+  // fixture carries a docs/ tree precisely because the 1.1.0 basename denylist
+  // dropped it, and an assertion that never reads it cannot see that happen.
+  const docFiles = copied.filter((f) => f.includes('docs/'));
+  assert.ok(docFiles.length > 0, 'Fixture docs/ content must be materialized');
+  for (const rel of docFiles) {
+    assert.strictEqual(
+      fs.readFileSync(path.join(mat.targetDir, rel), 'utf8'),
+      fs.readFileSync(path.join(tinyMonorepoDir, rel), 'utf8'),
+      `Materialized ${rel} must be byte-identical to source`
+    );
+  }
+
   const afterStat = fs.readdirSync(tinyMonorepoDir);
-  assert.deepStrictEqual(beforeStat, afterStat, 'Source repository must remain completely untouched');
+  assert.deepStrictEqual(afterStat, beforeStat, 'Source repository must remain completely untouched');
 
   materializer.cleanup();
   assert.ok(!fs.existsSync(mat.targetDir), 'Cleanup must remove the materialized workspace');
@@ -673,7 +708,50 @@ function startMockHttpServer(port, handler) {
   const sourceInfo = materializer.getSourceInfo(repoRoot);
 
   assert.ok(sourceInfo.commitSha, 'Must resolve git commit SHA');
-  assert.ok(sourceInfo.treeDigest, 'Must calculate tree content digest');
+  assert.match(
+    sourceInfo.treeDigest,
+    /^[0-9a-f]{64}$/,
+    `Tree digest must be a 64-char sha256 hex string (got ${sourceInfo.treeDigest})`
+  );
+
+  // A digest that is merely truthy proves nothing about provenance. What
+  // provenance needs is that the digest is a function of content: stable when
+  // nothing changed, and different when anything changed at any depth. The
+  // 1.1.0 digest walked only four levels, so a file deeper than that could be
+  // swapped without moving the digest at all.
+  //
+  // Deliberately NOT asserted: that a given tree digests to the same value on
+  // every platform. A repository carrying committed symlink blobs, cloned on
+  // Windows with core.symlinks=false, materializes those entries as regular
+  // files and legitimately digests differently than on POSIX.
+  const digestAgain = materializer.getSourceInfo(repoRoot).treeDigest;
+  assert.strictEqual(digestAgain, sourceInfo.treeDigest, 'Digest must be stable across calls on an unchanged tree');
+
+  const deepRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'ac12-deep-'));
+  try {
+    const deepRel = path.join('a', 'b', 'c', 'd', 'e', 'deep.txt');
+    const deepAbs = path.join(deepRepo, deepRel);
+    fs.mkdirSync(path.dirname(deepAbs), { recursive: true });
+    fs.writeFileSync(deepAbs, 'original\n', 'utf8');
+    execSync('git init -q .', { cwd: deepRepo, stdio: 'ignore' });
+    execSync('git -c user.name=fixture -c user.email=fixture@test add -A', { cwd: deepRepo, stdio: 'ignore' });
+    execSync('git -c user.name=fixture -c user.email=fixture@test commit -qm ac12', { cwd: deepRepo, stdio: 'ignore' });
+
+    const deepMat = new SourceMaterializer(path.join(os.tmpdir(), 'ac12-deep-work'));
+    const before = deepMat.getSourceInfo(deepRepo).treeDigest;
+    assert.match(before, /^[0-9a-f]{64}$/, 'Deep-tree digest must be a 64-char sha256 hex string');
+
+    fs.writeFileSync(deepAbs, 'mutated\n', 'utf8');
+    const after = deepMat.getSourceInfo(deepRepo).treeDigest;
+    assert.notStrictEqual(
+      after,
+      before,
+      `Digest must change when a file at depth 6 (${deepRel}) changes; a depth-bounded digest cannot see it`
+    );
+  } finally {
+    fs.rmSync(deepRepo, { recursive: true, force: true });
+  }
+
   materializer.cleanup();
   recordPass('AC-12', 'Exact Source and Artifact Provenance (Git SHA + Tree Digest)', 'COMPONENT');
 }

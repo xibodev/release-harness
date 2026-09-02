@@ -6,6 +6,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { evaluateRun } from '../../packages/release-harness-core/src/evaluator.js';
+import { runCli } from '../../packages/release-harness-core/src/cli.js';
 import { EvidenceSealer } from '../../packages/release-harness-core/src/sealer.js';
 import { PlaywrightSuiteAdapter } from '../../packages/release-harness-core/src/playwright-adapter.js';
 import { verifySideEffect, probeS3, probePostgres, probeRedis, probeMailpit, probeCustom } from '../../packages/release-harness-core/src/probes.js';
@@ -391,9 +392,39 @@ function recordPass(num, name) {
   const customAgentsMd = path.join(tmpInitDir, 'AGENTS.md');
   fs.writeFileSync(customAgentsMd, '# Existing Project Agents\n', 'utf8');
 
-  // Verify non-destructive protection
-  assert.ok(fs.existsSync(customAgentsMd));
-  assert.strictEqual(fs.readFileSync(customAgentsMd, 'utf8'), '# Existing Project Agents\n');
+  // The CLI must actually run. Writing a file and asserting that same file
+  // exists tests the filesystem, not the harness: it passed identically whether
+  // --contracts-only was implemented, broken, or deleted outright.
+  const originalCwd = process.cwd();
+  let initExit;
+  try {
+    process.chdir(tmpInitDir);
+    initExit = await runCli(['init', '--contracts-only']);
+  } finally {
+    process.chdir(originalCwd);
+  }
+
+  assert.strictEqual(initExit, 0, 'init --contracts-only must exit 0');
+
+  // Contracts ARE written.
+  for (const rel of ['harness.config.json', 'topology.json', 'origins.json']) {
+    assert.ok(
+      fs.existsSync(path.join(tmpInitDir, '.release-harness', rel)),
+      `--contracts-only must write .release-harness/${rel}`
+    );
+  }
+
+  // The agent bundle is NOT written — that is the whole contract of the flag.
+  assert.ok(!fs.existsSync(path.join(tmpInitDir, '.claude')), '--contracts-only must not scaffold .claude/');
+  assert.ok(!fs.existsSync(path.join(tmpInitDir, '.cursorrules')), '--contracts-only must not write .cursorrules');
+
+  // And a pre-existing AGENTS.md survives byte-for-byte.
+  assert.strictEqual(
+    fs.readFileSync(customAgentsMd, 'utf8'),
+    '# Existing Project Agents\n',
+    'Existing AGENTS.md must be preserved byte-for-byte'
+  );
+
   fs.rmSync(tmpInitDir, { recursive: true, force: true });
   recordPass(26, 'Non-Destructive Initialization with Existing Instruction Preservation');
 }
