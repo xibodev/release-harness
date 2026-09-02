@@ -1,6 +1,6 @@
 ---
-name: fix-planner
-description: Merges fix-plan.json files from all analysis runs into one deduplicated, prioritized, dependency-sequenced plan and presents it for user approval. Produces execution-plan.json for fix-executor. Use for "consolidate fixes", "merge fix plans", "what needs fixing", "show all issues", or "build fix plan".
+name: release-harness-fix-planner
+description: Merges fix-plan.json files from all analysis runs into one deduplicated, prioritized, dependency-sequenced plan and presents it for user approval. Produces execution-plan.json for release-harness-fix-executor. Use for "consolidate fixes", "merge fix plans", "what needs fixing", "show all issues", or "build fix plan".
 compatibility: Requires fix-plan.json files from prior skill runs. Python 3.8+ for scripts.
 allowed-tools:
   - Read
@@ -150,7 +150,7 @@ Produce the following artifacts:
 4. Add cross-references.
 5. Prioritize and dependency-sort.
 6. Present the plan for approval.
-7. Write `execution-plan.json` for `fix-executor`.
+7. Write `execution-plan.json` for `release-harness-fix-executor`.
 
 ## Pipeline Contract
 
@@ -173,5 +173,5 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 
 ### Gates
 
-- STOP after writing `consolidated-plan.json` and present the proposed execution plan to the operator. Wait for an explicit "approved" message before writing `execution-plan.json` as approved or invoking `fix-executor`.
+- STOP after writing `consolidated-plan.json` and present the proposed execution plan to the operator. Wait for an explicit "approved" message before writing `execution-plan.json` as approved or invoking `release-harness-fix-executor`.
 - Do not auto-approve. Do not collapse the approval gate into a single message even if the plan is small.

@@ -159,6 +159,15 @@ export class SourceMaterializer {
 
       const info = this.getSourceInfo(repoDir);
 
+      // EVERY declared repository contributes, including a missing one. Skipping
+      // the absent case - as a `continue` above this line did - let a graph
+      // declaring three repositories, one of them absent, digest identically to
+      // a graph that only ever declared two: the graph digest stopped being a
+      // record of what was declared. The missing-directory sentinel supplies a
+      // distinct, stable contribution ('MISSING' plus an all-zero tree digest),
+      // so the two graphs separate.
+      graphHasher.update(`${repo.repo_id}:${info.commitSha}:${info.isClean}:${info.treeDigest}\n`);
+
       if (!info.exists) {
         errors.push(`Repository node "${repo.repo_id}" not found at ${repoDir}`);
         resolvedNodes.push({
@@ -170,6 +179,7 @@ export class SourceMaterializer {
           expected_sha: repo.source.expected_sha,
           sha_mismatch: true,
           is_clean: false,
+          status_resolved: info.statusResolved,
           dirty_files: info.dirtyFiles,
           tree_digest: info.treeDigest,
         });
@@ -184,8 +194,6 @@ export class SourceMaterializer {
         }
       }
 
-      graphHasher.update(`${repo.repo_id}:${info.commitSha}:${info.isClean}:${info.treeDigest}\n`);
-
       resolvedNodes.push({
         repo_id: repo.repo_id,
         path: repoDir,
@@ -195,6 +203,7 @@ export class SourceMaterializer {
         expected_sha: repo.source.expected_sha,
         sha_mismatch: shaMismatch,
         is_clean: info.isClean,
+        status_resolved: info.statusResolved,
         dirty_files: info.dirtyFiles,
         is_independent_repo: info.isIndependentRepo,
         git_top_level: info.gitTopLevel,
@@ -226,10 +235,9 @@ export class SourceMaterializer {
    * `options.includeUntracked` (default `true`) selects whether
    * untracked-but-not-ignored files are materialized and digested. It is passed
    * to the single enumeration, so it cannot differ between the digest and the
-   * copy. TODO(cli-wiring): `cli.js` should pass `!!flags['allow-dirty']` here,
-   * so that a certification run excludes leftover build and test output while an
-   * --allow-dirty development run still tests what is actually on disk. That
-   * wiring belongs to a later task; the default preserves current behaviour.
+   * copy. `handleRunLocal` passes `!!flags['allow-dirty']`, so a certification
+   * run excludes leftover build and test output while an --allow-dirty
+   * development run still tests what is actually on disk.
    */
   materializeRepo(sourceRepoPath, destinationSubdir = 'source', options = {}) {
     const { includeUntracked = true } = options;
@@ -237,8 +245,12 @@ export class SourceMaterializer {
     const targetDir = path.join(this.workspaceRoot, destinationSubdir);
     fs.mkdirSync(targetDir, { recursive: true });
     // Recorded before any work, not after: a failure part-way through must still
-    // leave `cleanup()` able to reclaim what has already been written.
-    this.materializedSubdir = targetDir;
+    // leave `cleanup()` able to reclaim what has already been written. An
+    // accumulator rather than a single slot, because a multi-repo graph calls
+    // this once per repository and a single slot would leave `cleanup()` aware
+    // only of the last one.
+    if (!this.materializedSubdirs) this.materializedSubdirs = [];
+    if (!this.materializedSubdirs.includes(targetDir)) this.materializedSubdirs.push(targetDir);
 
     const startedAt = Date.now();
     const enumeration = enumerateSource(sourceAbs, { includeUntracked });
@@ -341,12 +353,17 @@ export class SourceMaterializer {
     // Git does not track empty directories, so they must be recreated
     // separately or a build expecting uploads/ or tmp/cache/ fails in the
     // workspace but not locally. "Empty" here means empty from the WORKSPACE's
-    // perspective - a directory whose only contents are ignored contributes no
-    // copied file and would otherwise be absent with nothing said. They hold no
-    // content and therefore do NOT participate in the tree digest - git's own
+    // perspective - a directory whose only contents are ignored, or whose only
+    // contents are untracked on a run that excludes untracked files, contributes
+    // no copied file and would otherwise be absent with nothing said. They hold
+    // no content and therefore do NOT participate in the tree digest - git's own
     // model does not track them.
+    //
+    // `includeUntracked` is threaded through so this walk judges emptiness by
+    // the SAME rule the file enumeration used. Judging by a different rule is
+    // how a directory ends up neither copied nor recreated.
     let emptyDirCount = 0;
-    for (const rel of enumerateEmptyDirectories(sourceAbs, warnings)) {
+    for (const rel of enumerateEmptyDirectories(sourceAbs, warnings, { includeUntracked })) {
       const dstPath = path.join(targetDir, rel);
       let existing = null;
       try {
@@ -396,6 +413,49 @@ export class SourceMaterializer {
   }
 
   /**
+   * Materializes EVERY repository in a multi-repo product graph, each into its
+   * own workspace subdirectory named for its `repo_id`.
+   *
+   * Level 1 already binds a multi-repo product per repository. Level 2 called
+   * `materializeRepo(cwd, 'source')` regardless of `topology_type`, so a
+   * declared multi_repo product was certified against one repository - the one
+   * the operator happened to be standing in - while its manifest claimed the
+   * graph. Certification then rested on a tree that was never fully inspected.
+   *
+   * Resolution comes first and is authoritative: when the graph does not resolve
+   * (a repository absent, or an exact_sha that does not match) NOTHING is
+   * materialized. Copying a partial graph would leave a workspace that looks
+   * like a product and is not one, and the caller must decide on the errors
+   * rather than on whatever happened to be copyable.
+   *
+   * `options` is forwarded unchanged to every `materializeRepo` call, so
+   * `includeUntracked` cannot differ between repositories in one graph.
+   */
+  materializeGraph(topology, baseDir, options = {}) {
+    const graph = this.resolveMultiRepoGraph(topology, baseDir);
+    const workspaces = [];
+
+    if (graph.ok) {
+      for (const repo of topology.repositories || []) {
+        const localPath = (repo.source && repo.source.local_path) || repo.repo_id;
+        const repoPath = path.resolve(baseDir, localPath);
+        // POSIX-joined so the subdirectory name matches the graph's own spelling
+        // on every platform; `path.join` normalizes the separator for the fs.
+        const res = this.materializeRepo(repoPath, path.join('sources', repo.repo_id), options);
+        workspaces.push({ repo_id: repo.repo_id, ...res });
+      }
+    }
+
+    return {
+      ok: graph.ok,
+      errors: graph.errors,
+      graphDigest: graph.graph_digest,
+      nodes: graph.nodes,
+      workspaces,
+    };
+  }
+
+  /**
    * Reclaim what this materializer created.
    *
    * `cli.js` builds `evidenceRoot/workspaces/<runId>` and hands it to the
@@ -406,17 +466,19 @@ export class SourceMaterializer {
    * so we remove it only when we actually materialized into it: a materializer
    * that never ran must not delete a caller's directory.
    *
-   * Task 11 replaces `materializedSubdir` with a plural accumulator for
-   * multi-repo runs. That change is unobstructed - the root removal stays
-   * correct for any number of subdirs beneath it, and the guard only needs to
-   * become "did we materialize anything".
+   * The guard reads the plural accumulator, so a multi-repo graph that
+   * materialized N repositories under `sources/` is reclaimed by the same single
+   * root removal. Removing each recorded subdirectory INSTEAD of the root would
+   * be a regression: it leaves the run directory itself and any sibling artifact
+   * written beside `sources/` behind, which is the defect the root removal
+   * exists to close.
    */
   cleanup() {
-    if (!this.materializedSubdir) return;
+    if (!this.materializedSubdirs || this.materializedSubdirs.length === 0) return;
     const target = this.workspaceRoot;
     if (fs.existsSync(target)) {
       fs.rmSync(target, { recursive: true, force: true });
     }
-    this.materializedSubdir = null;
+    this.materializedSubdirs = [];
   }
 }

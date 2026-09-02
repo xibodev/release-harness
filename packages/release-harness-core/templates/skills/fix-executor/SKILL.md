@@ -1,5 +1,5 @@
 ---
-name: fix-executor
+name: release-harness-fix-executor
 description: Executes an approved execution-plan.json item-by-item — previews the diff, applies, validates, and rolls back on failure — with a final full-suite release gate. Produces an execution report. Use for "execute fixes", "apply fix plan", "implement fixes", or "run fix plan".
 compatibility: Requires execution-plan.json from fix-plan-consolidator. Project-specific build and test tools must be available.
 allowed-tools:

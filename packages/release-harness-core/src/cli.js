@@ -170,16 +170,77 @@ function resolveEvidenceRoot(flags, productSlug) {
   return path.join(baseCache, 'release-harness', productSlug || 'default');
 }
 
-function copyDirectoryRecursive(src, dest, force = false, dryRun = false) {
+/**
+ * List the top-level directory names `copyDirectoryRecursive` would create in
+ * `dest`, given the same `src` and `namespacePrefix`. Skills are directories, so
+ * only directories are namespaced and only directories can collide.
+ */
+export function namespacedEntryNames(src, namespacePrefix = '') {
+  if (!fs.existsSync(src)) return [];
+  return fs
+    .readdirSync(src, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => `${namespacePrefix}${e.name}`);
+}
+
+/**
+ * Names in `names` that already exist in `destDir`. Reported before writing so
+ * an adopter sees the ambiguity rather than having it resolved by load order.
+ */
+export function detectCollisions(destDir, names) {
+  if (!fs.existsSync(destDir)) return [];
+  const existing = new Set(fs.readdirSync(destDir));
+  return names.filter((n) => existing.has(n));
+}
+
+/**
+ * Prefix applied to every scaffolded skill directory. The bundle's skills carry
+ * generic names (security-audit, fix-planner, ...) that a user very plausibly
+ * already has globally; without a namespace the copies shadow them, and a
+ * same-named skill with a different contract then resolves by load order.
+ */
+export const SKILL_NAMESPACE = 'release-harness-';
+
+/**
+ * Number of skills in the shipped bundle, or null when the templates cannot be
+ * read. Counted rather than hard-coded so the figure quoted to the operator
+ * cannot drift away from what is actually installed.
+ */
+export function countBundledSkills() {
+  try {
+    const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/skills');
+    return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).length;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Name and count any bundle skill already present at the destination, before a
+ * single file is written. Listing the ambiguity is the point: the adopter who
+ * hit this had 14 silent collisions, one of them a release-conductor with a
+ * different pipeline contract.
+ */
+function reportSkillCollisions(destDir, tmplSkillsDir, label, force = false) {
+  const collisions = detectCollisions(destDir, namespacedEntryNames(tmplSkillsDir, SKILL_NAMESPACE));
+  if (collisions.length === 0) return collisions;
+  const fate = force ? 'overwritten (--force)' : 'preserved; pass --force to overwrite';
+  console.log(`  ! ${collisions.length} skill name(s) already present in ${label} — ${fate}:`);
+  for (const c of collisions) console.log(`      ${c}`);
+  return collisions;
+}
+
+function copyDirectoryRecursive(src, dest, force = false, dryRun = false, namespacePrefix = '') {
   if (!fs.existsSync(src)) return;
   if (!dryRun) fs.mkdirSync(dest, { recursive: true });
   const entries = fs.readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
     const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
-      copyDirectoryRecursive(srcPath, destPath, force, dryRun);
+      // Only the top level is namespaced; contents keep their own names.
+      copyDirectoryRecursive(srcPath, path.join(dest, `${namespacePrefix}${entry.name}`), force, dryRun, '');
     } else {
+      const destPath = path.join(dest, entry.name);
       if (fs.existsSync(destPath) && !force) {
         console.log(`  • Preserving existing: ${destPath}`);
       } else {
@@ -308,6 +369,13 @@ async function handleInit(args) {
   const dryRun = Boolean(flags['dry-run']);
   const force = Boolean(flags['force'] || flags['overwrite']);
   const withAgents = Boolean(flags['with-agents']);
+  const contractsOnly = Boolean(flags['contracts-only']);
+
+  if (withAgents && contractsOnly) {
+    console.error('Error: --with-agents and --contracts-only are mutually exclusive.');
+    console.error('Pass --with-agents to scaffold the agent bundle, or --contracts-only for contracts alone.');
+    return 3;
+  }
 
   const harnessDir = path.join(cwd, '.release-harness');
   const scenariosDir = path.join(harnessDir, 'scenarios');
@@ -403,68 +471,86 @@ npx release-harness run-local
 `;
   writeFileSafe(path.join(harnessDir, 'README.md'), readmeContent, '.release-harness/README.md');
 
-  // 2. Multi-runtime agent scaffolding (Opt-in with --with-agents or default when unpopulated)
-  if (withAgents || !fs.existsSync(path.join(cwd, 'AGENTS.md'))) {
-    try {
-      const __dirname = path.dirname(fileURLToPath(import.meta.url));
-      const templatesDir = path.resolve(__dirname, '../templates');
+  // 2. Multi-runtime agent scaffolding (explicit opt-in only).
+  //
+  // This previously also fired whenever the project had no AGENTS.md, which
+  // made --with-agents a no-op for a bare init and, worse, left a project that
+  // keeps its own AGENTS.md for unrelated reasons with no skills at all.
+  // Whether a project has an AGENTS.md says nothing about whether it wants
+  // this bundle, so the flag alone decides.
+  if (withAgents) {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const templatesDir = path.resolve(__dirname, '../templates');
 
-      if (fs.existsSync(templatesDir)) {
-        const tmplAgentsDir = path.join(templatesDir, 'agents');
-        const tmplSkillsDir = path.join(templatesDir, 'skills');
-
-        // AGENTS.md & .cursorrules
-        if (fs.existsSync(path.join(tmplAgentsDir, 'AGENTS.md'))) {
-          writeFileSafe(path.join(cwd, 'AGENTS.md'), fs.readFileSync(path.join(tmplAgentsDir, 'AGENTS.md'), 'utf8'), 'AGENTS.md');
-        }
-        if (fs.existsSync(path.join(tmplAgentsDir, '.cursorrules'))) {
-          writeFileSafe(path.join(cwd, '.cursorrules'), fs.readFileSync(path.join(tmplAgentsDir, '.cursorrules'), 'utf8'), '.cursorrules');
-        }
-
-        // Claude Code: .claude/agents & .claude/skills
-        const claudeAgentsDir = path.join(cwd, '.claude', 'agents');
-        const claudeSkillsDir = path.join(cwd, '.claude', 'skills');
-        if (!dryRun) {
-          fs.mkdirSync(claudeAgentsDir, { recursive: true });
-          fs.mkdirSync(claudeSkillsDir, { recursive: true });
-        }
-        if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
-          writeFileSafe(path.join(claudeAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.claude/agents/release-conductor.md');
-        }
-        copyDirectoryRecursive(tmplSkillsDir, claudeSkillsDir, force, dryRun);
-
-        // opencode: .opencode/agents & .opencode/skills
-        const opencodeAgentsDir = path.join(cwd, '.opencode', 'agents');
-        const opencodeSkillsDir = path.join(cwd, '.opencode', 'skills');
-        if (!dryRun) {
-          fs.mkdirSync(opencodeAgentsDir, { recursive: true });
-          fs.mkdirSync(opencodeSkillsDir, { recursive: true });
-        }
-        if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
-          writeFileSafe(path.join(opencodeAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.opencode/agents/release-conductor.md');
-        }
-        copyDirectoryRecursive(tmplSkillsDir, opencodeSkillsDir, force, dryRun);
-
-        // GitHub Copilot: .github/agents & .github/copilot-instructions.md
-        const ghAgentsDir = path.join(cwd, '.github', 'agents');
-        if (!dryRun) fs.mkdirSync(ghAgentsDir, { recursive: true });
-        if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'))) {
-          writeFileSafe(path.join(ghAgentsDir, 'release-conductor.agent.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'), 'utf8'), '.github/agents/release-conductor.agent.md');
-        }
-        if (fs.existsSync(path.join(tmplAgentsDir, 'copilot-instructions.md'))) {
-          writeFileSafe(path.join(cwd, '.github', 'copilot-instructions.md'), fs.readFileSync(path.join(tmplAgentsDir, 'copilot-instructions.md'), 'utf8'), '.github/copilot-instructions.md');
-        }
-
-        // Copilot CLI: .copilot/agents
-        const copilotAgentsDir = path.join(cwd, '.copilot', 'agents');
-        if (!dryRun) fs.mkdirSync(copilotAgentsDir, { recursive: true });
-        if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
-          writeFileSafe(path.join(copilotAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.copilot/agents/release-conductor.md');
-        }
-      }
-    } catch (err) {
-      console.warn(`  ! Agent scaffolding notice: ${err.message}`);
+    // The bundle ships as a package asset. If it is missing the install is
+    // broken, and returning 0 for a scaffold that never happened is the precise
+    // failure --with-agents exists to prevent.
+    if (!fs.existsSync(templatesDir)) {
+      console.error(`Error: agent templates are missing from the installed package (expected at ${templatesDir}).`);
+      console.error('Reinstall @xibodev/release-harness-core, or omit --with-agents to scaffold contracts only.');
+      return 3;
     }
+
+    const tmplAgentsDir = path.join(templatesDir, 'agents');
+    const tmplSkillsDir = path.join(templatesDir, 'skills');
+
+    // AGENTS.md & .cursorrules
+    if (fs.existsSync(path.join(tmplAgentsDir, 'AGENTS.md'))) {
+      writeFileSafe(path.join(cwd, 'AGENTS.md'), fs.readFileSync(path.join(tmplAgentsDir, 'AGENTS.md'), 'utf8'), 'AGENTS.md');
+    }
+    if (fs.existsSync(path.join(tmplAgentsDir, '.cursorrules'))) {
+      writeFileSafe(path.join(cwd, '.cursorrules'), fs.readFileSync(path.join(tmplAgentsDir, '.cursorrules'), 'utf8'), '.cursorrules');
+    }
+
+    // Claude Code: .claude/agents & .claude/skills
+    const claudeAgentsDir = path.join(cwd, '.claude', 'agents');
+    const claudeSkillsDir = path.join(cwd, '.claude', 'skills');
+    if (!dryRun) {
+      fs.mkdirSync(claudeAgentsDir, { recursive: true });
+      fs.mkdirSync(claudeSkillsDir, { recursive: true });
+    }
+    if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
+      writeFileSafe(path.join(claudeAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.claude/agents/release-conductor.md');
+    }
+    reportSkillCollisions(claudeSkillsDir, tmplSkillsDir, '.claude/skills', force);
+    copyDirectoryRecursive(tmplSkillsDir, claudeSkillsDir, force, dryRun, SKILL_NAMESPACE);
+
+    // opencode: .opencode/agents & .opencode/skills
+    const opencodeAgentsDir = path.join(cwd, '.opencode', 'agents');
+    const opencodeSkillsDir = path.join(cwd, '.opencode', 'skills');
+    if (!dryRun) {
+      fs.mkdirSync(opencodeAgentsDir, { recursive: true });
+      fs.mkdirSync(opencodeSkillsDir, { recursive: true });
+    }
+    if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
+      writeFileSafe(path.join(opencodeAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.opencode/agents/release-conductor.md');
+    }
+    reportSkillCollisions(opencodeSkillsDir, tmplSkillsDir, '.opencode/skills', force);
+    copyDirectoryRecursive(tmplSkillsDir, opencodeSkillsDir, force, dryRun, SKILL_NAMESPACE);
+
+    // GitHub Copilot: .github/agents & .github/copilot-instructions.md
+    const ghAgentsDir = path.join(cwd, '.github', 'agents');
+    if (!dryRun) fs.mkdirSync(ghAgentsDir, { recursive: true });
+    if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'))) {
+      writeFileSafe(path.join(ghAgentsDir, 'release-conductor.agent.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'), 'utf8'), '.github/agents/release-conductor.agent.md');
+    }
+    if (fs.existsSync(path.join(tmplAgentsDir, 'copilot-instructions.md'))) {
+      writeFileSafe(path.join(cwd, '.github', 'copilot-instructions.md'), fs.readFileSync(path.join(tmplAgentsDir, 'copilot-instructions.md'), 'utf8'), '.github/copilot-instructions.md');
+    }
+
+    // Copilot CLI: .copilot/agents
+    const copilotAgentsDir = path.join(cwd, '.copilot', 'agents');
+    if (!dryRun) fs.mkdirSync(copilotAgentsDir, { recursive: true });
+    if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
+      writeFileSafe(path.join(copilotAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.copilot/agents/release-conductor.md');
+    }
+  } else {
+    // With the implicit trigger removed, the bundle would otherwise be
+    // undiscoverable, so name the flag that produces it.
+    const skillCount = countBundledSkills();
+    console.log('\n  Contracts written. To scaffold the AI agent bundle'
+      + ` (release-conductor${skillCount === null ? '' : ` + ${skillCount} skills`}):`);
+    console.log('    npx release-harness init --with-agents');
   }
 
   console.log('\nInitialization complete. Run "npx release-harness doctor" to verify.');
@@ -656,14 +742,62 @@ async function handleRunLocal(args) {
   try {
     // 1. Materialize detached source
     console.log('1. Materializing detached source workspace...');
-    const matResult = materializer.materializeRepo(cwd, 'source');
-    sourceInfo = matResult.sourceInfo;
-    const workSourceDir = matResult.targetDir;
-    console.log(`   Source SHA: ${sourceInfo.commitSha} (${sourceInfo.isClean ? 'clean' : 'dirty'})`);
 
-    const isDevelopmentMode = !sourceInfo.isClean && Boolean(flags['allow-dirty']);
-    if (!sourceInfo.isClean && !flags['allow-dirty']) {
-      console.error('   ✗ Dirty source rejected for certification gate.');
+    // A certification run must exclude untracked-but-not-ignored files, or
+    // leftover build and test output (test-results/, playwright-report/) enters
+    // both the workspace copy and the tree digest, making provenance a function
+    // of the last test run. An --allow-dirty development run is the opposite
+    // case: the workspace must mirror what is actually on disk.
+    const includeUntracked = Boolean(flags['allow-dirty']);
+
+    let workSourceDir;
+    let sourceInfos = [];
+
+    if (topology.topology_type === 'multi_repo') {
+      // Level 1 binds a multi-repo product per repository. Materializing only
+      // `cwd` here certified whichever repository the operator happened to be
+      // standing in while the manifest claimed the whole graph.
+      const graphRes = materializer.materializeGraph(topology, cwd, { includeUntracked });
+      if (!graphRes.ok) {
+        for (const e of graphRes.errors) console.error(`   ✗ ${e}`);
+        console.error('   ✗ Multi-repo product graph could not be resolved; nothing was materialized.');
+        return 3;
+      }
+      sourceInfos = graphRes.workspaces.map((w) => ({ repo_id: w.repo_id, ...w.sourceInfo }));
+      workSourceDir = path.join(workspaceDir, 'sources');
+      console.log(
+        `   Graph digest: ${graphRes.graphDigest.slice(0, 16)}… (${graphRes.workspaces.length} repositories)`
+      );
+      for (const w of graphRes.workspaces) {
+        const info = w.sourceInfo;
+        const state = info.statusResolved ? (info.isClean ? 'clean' : 'dirty') : 'status unresolved';
+        console.log(`   ${w.repo_id}: ${info.commitSha} (${state})`);
+        reportMaterialization(w.repo_id, w);
+      }
+    } else {
+      const matResult = materializer.materializeRepo(cwd, 'source', { includeUntracked });
+      sourceInfos = [matResult.sourceInfo];
+      workSourceDir = matResult.targetDir;
+      const state = matResult.sourceInfo.statusResolved
+        ? (matResult.sourceInfo.isClean ? 'clean' : 'dirty')
+        : 'status unresolved';
+      console.log(`   Source SHA: ${matResult.sourceInfo.commitSha} (${state})`);
+      reportMaterialization('Materialized', matResult);
+    }
+
+    sourceInfo = sourceInfos[0];
+
+    // The gate applies across EVERY repository: one dirty repo in a graph is a
+    // dirty product. `isClean` is false whenever status could not be resolved,
+    // so an unresolvable status is refused rather than certified.
+    const dirtySources = sourceInfos.filter((s) => !s.isClean);
+    const isDevelopmentMode = dirtySources.length > 0 && Boolean(flags['allow-dirty']);
+    if (dirtySources.length > 0 && !flags['allow-dirty']) {
+      for (const s of dirtySources) {
+        const which = s.repo_id ? `repository "${s.repo_id}"` : 'source';
+        const why = s.statusResolved ? 'working tree is dirty' : 'git status could not be resolved';
+        console.error(`   ✗ Dirty source rejected for certification gate: ${which} (${why}).`);
+      }
       return 1;
     }
 
@@ -739,6 +873,28 @@ async function handleRunLocal(args) {
 
     // Write execution logs into evidence directory (Redacted prior to sealing)
     const logContent = redactor.redactText(`Run ${runId} completed scenario sweep at ${runStartedAt}\n`);
+  /**
+   * Report what materialization actually did. Every diagnostic the enumerator
+   * and the copier produce reached no operator before this: `.stats` was
+   * discarded at the call site, so an enumeration that silently fell back to the
+   * basename denylist, or a file skipped mid-copy, looked exactly like a clean
+   * run. A degradation nobody can see is not a warning.
+   */
+  const reportMaterialization = (label, res) => {
+    const s = res.stats;
+    console.log(
+      `   ${label}: ${s.fileCount} file(s), ${s.byteCount} byte(s), ` +
+        `${s.emptyDirCount} empty dir(s) in ${s.elapsedMs}ms (${s.strategy} enumeration)`
+    );
+    if (s.skippedCount > 0) {
+      console.warn(
+        `   ! ${s.skippedCount} enumerated path(s) were NOT materialized; ` +
+          `the tree digest covers ${s.enumeratedCount} path(s) but the workspace holds ${s.fileCount}.`
+      );
+    }
+    for (const warn of s.warnings) console.warn(`   ! ${warn}`);
+  };
+
     fs.writeFileSync(path.join(runEvidenceDir, 'execution.log'), logContent, 'utf8');
 
     // Persist complete raw results into evidence directory before sealing
@@ -806,14 +962,19 @@ async function handleRunLocal(args) {
       harness_core_version: HARNESS_VERSION,
       execution_mode: isDevelopmentMode ? 'DEVELOPMENT' : 'CERTIFICATION',
       certification_eligible: !isDevelopmentMode,
-      sources: [
-        {
-          commit_sha: sourceInfo.commitSha,
-          is_clean: sourceInfo.isClean,
-          dirty_files: sourceInfo.dirtyFiles,
-          tree_digest: sourceInfo.treeDigest,
-        },
-      ],
+      // One entry per DECLARED repository. A multi_repo product previously
+      // recorded a single entry, so the manifest asserted a graph while binding
+      // one tree. `repo_id` is omitted rather than nulled for a single-repo run:
+      // the schema types it as a string, and an absent field says "not part of a
+      // graph" more honestly than a null does.
+      sources: sourceInfos.map((s) => ({
+        ...(s.repo_id ? { repo_id: s.repo_id } : {}),
+        commit_sha: s.commitSha,
+        is_clean: s.isClean,
+        status_resolved: s.statusResolved,
+        dirty_files: s.dirtyFiles,
+        tree_digest: s.treeDigest,
+      })),
       artifacts,
       toolchain: detectToolchain(),
       config_hashes: {

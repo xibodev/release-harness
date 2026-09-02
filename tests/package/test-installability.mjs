@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { execSync, spawn } from 'node:child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -76,16 +76,71 @@ console.log('  ✓ release-harness doctor executed');
 
 // 4d. Init scaffolding test
 console.log('\n5. Testing release-harness init scaffolding...');
-const initOut = execSync(`${npxCmd} release-harness init`, { cwd: consumerRepoDir, encoding: 'utf8' });
+
+// A bare init writes contracts only. Agent scaffolding is explicit opt-in, so
+// nothing may appear under .claude/ until --with-agents is passed.
+const bareInitOut = execSync(`${npxCmd} release-harness init`, { cwd: consumerRepoDir, encoding: 'utf8' });
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'topology.json')), 'topology.json must be created');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'origins.json')), 'origins.json must be created');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'scenarios', 'smoke.json')), 'smoke.json must be created');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'A bare init must not scaffold AGENTS.md');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.claude')), 'A bare init must not scaffold agents implicitly');
+assert.ok(bareInitOut.includes('--with-agents'), 'A bare init must name the flag that scaffolds the agent bundle');
+console.log('  ✓ Bare init wrote contracts only and pointed at --with-agents');
+
+// An unknown flag is a harness configuration error (exit 3), not a silent no-op.
+const unknownFlag = spawnSync(npxCmd, ['release-harness', 'init', '--nonsense'], {
+  cwd: consumerRepoDir, encoding: 'utf8', shell: true,
+});
+assert.strictEqual(unknownFlag.status, 3, 'An unknown flag must exit 3');
+assert.ok(String(unknownFlag.stderr).includes('unknown flag --nonsense'), 'The rejected flag must be named');
+console.log('  ✓ Unknown flags rejected with exit 3');
+
+// Contradictory scaffolding flags are a configuration error too.
+const conflictInit = spawnSync(npxCmd, ['release-harness', 'init', '--with-agents', '--contracts-only'], {
+  cwd: consumerRepoDir, encoding: 'utf8', shell: true,
+});
+assert.strictEqual(conflictInit.status, 3, '--with-agents with --contracts-only must exit 3');
+console.log('  ✓ --with-agents + --contracts-only rejected with exit 3');
+
+// Now the explicit opt-in.
+const initOut = execSync(`${npxCmd} release-harness init --with-agents`, { cwd: consumerRepoDir, encoding: 'utf8' });
 assert.ok(fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'AGENTS.md must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md')), 'Claude agent must be scaffolded');
-assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'skills', 'project-cartographer', 'SKILL.md')), 'Claude skill must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.github', 'agents', 'release-conductor.agent.md')), 'GitHub Copilot agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md')), 'opencode agent must be scaffolded');
-console.log('  ✓ .release-harness/ and multi-runtime AI agents scaffolded successfully');
+
+// Skills scaffold under the release-harness- namespace so they cannot shadow a
+// same-named skill the consumer already has installed globally.
+assert.ok(
+  fs.existsSync(path.join(consumerRepoDir, '.claude', 'skills', 'release-harness-project-cartographer', 'SKILL.md')),
+  'Claude skill must be scaffolded under its namespaced name'
+);
+assert.ok(
+  !fs.existsSync(path.join(consumerRepoDir, '.claude', 'skills', 'project-cartographer')),
+  'No skill may be scaffolded under its bare, shadowing name'
+);
+
+// Assert the count against the shipped bundle AND against a literal, so that
+// adding or removing a skill fails here until the docs are updated with it.
+const bundledSkills = fs
+  .readdirSync(path.join(corePkgDir, 'templates', 'skills'), { withFileTypes: true })
+  .filter((e) => e.isDirectory()).length;
+assert.strictEqual(bundledSkills, 18, 'The bundle must ship exactly 18 skills (update the docs and this number together)');
+
+for (const runtime of ['.claude', '.opencode']) {
+  const scaffolded = fs.readdirSync(path.join(consumerRepoDir, runtime, 'skills'));
+  assert.strictEqual(scaffolded.length, bundledSkills, `All ${bundledSkills} skills must be scaffolded into ${runtime}/skills`);
+  for (const skillDir of scaffolded) {
+    assert.ok(skillDir.startsWith('release-harness-'), `Skill "${skillDir}" in ${runtime} must be namespaced`);
+    // A runtime resolves a skill by its frontmatter name, not its directory, so
+    // both must carry the namespace or the skill still shadows a global one.
+    const frontmatter = fs.readFileSync(path.join(consumerRepoDir, runtime, 'skills', skillDir, 'SKILL.md'), 'utf8');
+    const declaredName = /^name:[ \t]*(\S+)/m.exec(frontmatter)?.[1];
+    assert.strictEqual(declaredName, skillDir, `Skill "${skillDir}" must declare its namespaced name in frontmatter (got "${declaredName}")`);
+  }
+}
+console.log(`  ✓ .release-harness/ and multi-runtime AI agents scaffolded (${bundledSkills} namespaced skills per runtime)`);
 
 // Point origin to designated test port 38500
 const originsPath = path.join(consumerRepoDir, '.release-harness', 'origins.json');

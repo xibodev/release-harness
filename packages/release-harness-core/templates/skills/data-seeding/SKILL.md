@@ -1,5 +1,5 @@
 ---
-name: data-seeding
+name: release-harness-data-seeding
 description: >-
   Infers the app's data model and seeds the sealed-UAT database at
   believable scale via its own seeding path, binding entities to persona
@@ -25,7 +25,7 @@ Empty databases lie. An app with zero users, zero projects, and zero history loo
 
 - AFTER `docker-uat` reports all services healthy AND sealed-network probes passed.
 - BEFORE `headless-e2e`, `full-site-crawler`, or `headed-e2e`.
-- Reads `results/<ts>/uat/env.json`. If `env.json.mode != "local-docker"`, **refuse to run** and write `results/<ts>/seed/seed.json` with `{aborted: true, reason: "data-seeding is local-docker only; staging is read-only"}`.
+- Reads `results/<ts>/uat/env.json`. If `env.json.mode != "local-docker"`, **refuse to run** and write `results/<ts>/seed/seed.json` with `{aborted: true, reason: "release-harness-data-seeding is local-docker only; staging is read-only"}`.
 
 ## Hard rules
 

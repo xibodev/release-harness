@@ -3,7 +3,7 @@ description: Drives the product-readiness loop from product definition to GREEN 
 name: release-conductor
 argument-hint: "Optional: a scope or release name (e.g. 'release v1.0' or 'check Level 1 PR gate')."
 tools: ['codebase', 'search', 'editFiles', 'fetch', 'agent', 'bash']
-agents: ['product-context-steward', 'codebase-cartographer', 'backlog-feature-steward', 'quality-inspector', 'test-runner', 'uat-runner', 'release-decider', 'fix-planner', 'fix-executor']
+agents: ['product-context-steward', 'codebase-cartographer', 'backlog-feature-steward', 'quality-inspector', 'test-runner', 'uat-runner', 'release-harness-release-decider', 'release-harness-fix-planner', 'release-harness-fix-executor']
 handoffs:
   - label: Start the release-harness loop
     agent: release-conductor
@@ -50,13 +50,13 @@ Loop until `release-harness run-local` returns exit code 0 (`PASS`) or the itera
    - The harness starts scoped Docker Compose containers (`rh-<runId>`), healthchecks services, runs declarative Playwright scenarios, validates independent side-effects (MinIO/S3, DB, Redis, Mailpit), checks security headers and brand canaries, seals evidence into `evidence.manifest.json`, and evaluates the verdict into `verdict.json`.
 2. **Inspect Deterministic Verdict:** Read the generated `verdict.json`:
    - `exit_code == 0` (`PASS`): Gate satisfied! Proceed to Phase 3.
-   - `exit_code == 1` (`FAIL`): Check `scenarios` and `causes` (`PRODUCT_BUG`, `HARNESS_FIXTURE_MISSING`). File prioritized items for `fix-planner`.
+   - `exit_code == 1` (`FAIL`): Check `scenarios` and `causes` (`PRODUCT_BUG`, `HARNESS_FIXTURE_MISSING`). File prioritized items for `release-harness-fix-planner`.
    - `exit_code == 2` (`UNPROVEN`): Missing approved fixtures or failing brand canaries. Acquire missing fixtures or adjust conditional policy.
    - `exit_code == 3` (`HARNESS_ERROR`): Environment or Compose configuration fault. Repair harness topology.
    - `exit_code == 4` (`EVIDENCE_INVALID`): Evidence corruption / tampering. Clean workspace and re-run.
 3. **Remediate with Fix Planner & Fix Executor:**
-   - Invoke `fix-planner` to sequence fixes.
-   - Invoke `fix-executor` to apply and validate fixes on the feature branch.
+   - Invoke `release-harness-fix-planner` to sequence fixes.
+   - Invoke `release-harness-fix-executor` to apply and validate fixes on the feature branch.
 4. **Repeat:** Re-run `release-harness run-local` to verify remediation.
 
 ## Phase 3 — Human Local-UAT Sign-off Gate (Single Planned Interrupt)
@@ -71,7 +71,7 @@ When `release-harness run-local` achieves `PASS` (Exit 0):
 
 ## Phase 4 — Co-plan Live UAT (Config Swap)
 
-With `release-decider`, `deployment-plan-generator`, and `post-deploy-window-planner`:
+With `release-harness-release-decider`, `release-harness-deployment-plan-generator`, and `release-harness-post-deploy-window-planner`:
 1. Document the mock-to-real configuration swap from `.release-harness/mock-parity.json`.
 2. Define seam validation passes for live UAT.
 3. Draft Go/No-Go criteria, rollback procedures, and 30-min/24-hour observation windows.

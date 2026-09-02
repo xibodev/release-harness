@@ -1,5 +1,5 @@
 ---
-name: change-safety
+name: release-harness-change-safety
 description: Pre-commit/pre-push gate that inspects diffs for secret leaks, destructive deletions, and verifies clean git tree before release evaluation.
 allowed-tools: [Read, Grep, Glob, Bash]
 ---

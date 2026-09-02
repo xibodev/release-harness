@@ -1,5 +1,5 @@
 ---
-name: test-coverage-audit
+name: release-harness-test-coverage-audit
 description: Maps code changes to existing test coverage, identifies untested new code paths, and cross-references with E2E test results from e2e-playwright-test if available. Produces a gap analysis showing which user journeys are uncovered by recent changes, with fix-plan entries recommending specific tests to write. Use when asked to "check coverage", "what's untested", "coverage gaps", or "test audit".
 compatibility: Works with any Node.js project. Enhanced with Jest/Vitest coverage reports if available.
 allowed-tools:
@@ -11,7 +11,7 @@ allowed-tools:
 
 ## Purpose
 
-Use this skill after `code-change-review` or alongside it. The goal is to measure confidence in changed code, not to report a generic repository-wide coverage percentage.
+Use this skill after `release-harness-code-change-review` or alongside it. The goal is to measure confidence in changed code, not to report a generic repository-wide coverage percentage.
 
 ## Coverage Discovery
 
@@ -29,7 +29,7 @@ Use this skill after `code-change-review` or alongside it. The goal is to measur
 
 ## Required Inputs
 
-Use the changed-file inventory from `code-change-review` when available. If it does not exist yet, derive the changed source files from the same git baseline.
+Use the changed-file inventory from `release-harness-code-change-review` when available. If it does not exist yet, derive the changed source files from the same git baseline.
 
 ## Change-to-Test Mapping
 
@@ -178,7 +178,7 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 
 ### Hard rules
 
-- When `results/<ts>/release/changes.json` exists (from `code-change-review`), reuse it instead of re-deriving the changed-file list.
+- When `results/<ts>/release/changes.json` exists (from `release-harness-code-change-review`), reuse it instead of re-deriving the changed-file list.
 - When `results/<ts>/e2e/headless/headless-report.json` or `results/<ts>/e2e/headed/headed-uat-report.json` exists in the SAME current run, MUST cross-reference E2E coverage against changed routes and pages.
 - Record the audit method (executed coverage / static mapping / hybrid) explicitly in the report.
 

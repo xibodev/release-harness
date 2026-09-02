@@ -1,5 +1,5 @@
 ---
-name: project-cartographer
+name: release-harness-project-cartographer
 description: Scans the project repository to discover Docker Compose services, web/API routes, and health probes, populating .release-harness/topology.json and origins.json.
 allowed-tools: [Read, Grep, Glob, Write]
 ---

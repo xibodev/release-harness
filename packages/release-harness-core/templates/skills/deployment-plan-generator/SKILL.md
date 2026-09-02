@@ -1,7 +1,7 @@
 ---
-name: deployment-plan-generator
+name: release-harness-deployment-plan-generator
 description: Generates a release-ready Deployment Plan, Rollback Procedure, and Post-Deployment Verification document, populated with project-specific signals (services, migrations, env vars, feature flags, owners). Inspired by the Production Ready Checklist's Deployment + Templates sections. Output is human-editable Markdown that a release manager can use as-is. Use when asked to "generate deployment plan", "draft rollback procedure", "write post-deploy verification", or as part of release-readiness.
-compatibility: Works with any source repo. Reads code-change-review, database-readiness-audit, and monitoring-audit outputs if present.
+compatibility: Works with any source repo. Reads release-harness-code-change-review, release-harness-database-readiness-audit, and release-harness-monitoring-audit outputs if present.
 allowed-tools:
   - Read
   - Grep
@@ -15,7 +15,7 @@ Most releases fail in execution, not in code. This skill produces the operationa
 
 ## Required inputs
 
-- `./.quality-run/results/<ts>/release/changes.json` from `code-change-review` (preferred). If absent, derive a minimal change list from the git baseline.
+- `./.quality-run/results/<ts>/release/changes.json` from `release-harness-code-change-review` (preferred). If absent, derive a minimal change list from the git baseline.
 - Optional: `./.quality-run/results/<ts>/database/database-report.md` for migration hooks.
 - Optional: `./.quality-run/results/<ts>/monitoring/monitoring-report.md` for verification steps.
 
@@ -62,7 +62,7 @@ Generate `./.quality-run/results/<ts>/release/deployment-plan.md` using the stru
 ## Communication
 - **Channel:** <slack/teams channel from repo docs, else placeholder>
 - **Status Cadence:** every 15 minutes for the first hour, then hourly.
-- **Escalation Contact:** <on-call entry from monitoring-audit if present>
+- **Escalation Contact:** <on-call entry from release-harness-monitoring-audit if present>
 ```
 
 ### 2. Rollback Procedure
@@ -89,7 +89,7 @@ Generate `./.quality-run/results/<ts>/release/rollback-procedure.md`:
 - **Blue-green:** flip traffic back to the previous environment via `<load balancer / DNS / pipeline command>`.
 - **Canary:** abort the canary rollout via `<pipeline command>`; traffic shifts back automatically.
 - **Rolling:** redeploy the previous image tag `<previous-tag>` via `<pipeline command>`.
-- **Database:** if the release included a destructive migration flagged in database-readiness-audit, follow the documented down-migration; otherwise leave the schema forward-compatible.
+- **Database:** if the release included a destructive migration flagged in release-harness-database-readiness-audit, follow the documented down-migration; otherwise leave the schema forward-compatible.
 
 ## Post-Rollback Verification
 - [ ] Application starts cleanly on previous version.
@@ -154,12 +154,12 @@ Generate `./.quality-run/results/<ts>/release/post-deploy-verification.md`:
 
 - Always emit all three documents, even when sections must be marked `TODO` because the source repo did not provide signals. An empty checkbox is more useful than a missing document.
 - Never silently invent SLA thresholds. If no SLA is documented, mark the threshold as a default with a note.
-- Cross-reference outputs from `monitoring-audit`, `database-readiness-audit`, `code-change-review`, and `journey-mapping` when present. Do not duplicate findings — link them.
+- Cross-reference outputs from `release-harness-monitoring-audit`, `release-harness-database-readiness-audit`, `release-harness-code-change-review`, and `journey-mapping` when present. Do not duplicate findings — link them.
 - Never include real secrets, env values, or credentials in the generated documents. Use placeholders.
 
 ## Gates
 
-- Stop and report if `code-change-review` results are absent AND no git baseline can be inferred. Do not produce a deployment plan from nothing.
+- Stop and report if `release-harness-code-change-review` results are absent AND no git baseline can be inferred. Do not produce a deployment plan from nothing.
 - If the project has no rollback strategy detectable from infra files (no blue-green, no canary, no previous-image deploy command), still emit rollback-procedure.md but flag it as `requires-owner-input` and add a fix-plan item.
 
 ## Output (machine-readable companion)
@@ -183,9 +183,9 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 - Always emit all three documents — `TODO` placeholders are better than missing files.
 - Never invent SLA thresholds; mark defaults explicitly.
 - Never include real secrets / env values / credentials in generated documents. Use placeholders.
-- Cross-reference (not duplicate) findings from `monitoring-audit`, `database-readiness-audit`, `code-change-review`, and `journey-mapping`.
+- Cross-reference (not duplicate) findings from `release-harness-monitoring-audit`, `release-harness-database-readiness-audit`, `release-harness-code-change-review`, and `journey-mapping`.
 
 ### Gates
 
-- Stop if `code-change-review` results AND a git baseline are both unavailable.
+- Stop if `release-harness-code-change-review` results AND a git baseline are both unavailable.
 - If no rollback strategy is detectable, emit `rollback-procedure.md` marked `requires-owner-input` and add a fix-plan item.

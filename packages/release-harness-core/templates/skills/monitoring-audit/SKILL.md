@@ -1,5 +1,5 @@
 ---
-name: monitoring-audit
+name: release-harness-monitoring-audit
 description: Validates that the application is observable in projection — error tracking, performance APM, health endpoints, structured logging, alerting, and on-call paths. Inspired by the Production Ready Checklist's Monitoring & Logging section. Produces a fix-plan compatible with the suite's consolidator. Use when asked to "audit monitoring", "check observability", "validate alerting", "is this app observable", or before a release.
 compatibility: Works with any source repo. No runtime required; scans config and code.
 allowed-tools:
@@ -55,7 +55,7 @@ Verify:
 - Confirm logs are JSON-formatted in projection paths.
 - Confirm log level is configurable via env and defaults to `info` (not `debug`) in prod.
 - Confirm correlation IDs / request IDs are attached to every log entry on the request path.
-- Confirm sensitive fields are redacted (cross-check with security-audit findings).
+- Confirm sensitive fields are redacted (cross-check with release-harness-security-audit findings).
 
 ### 5. Centralized log shipping
 

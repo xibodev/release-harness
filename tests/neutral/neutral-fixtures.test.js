@@ -13,7 +13,7 @@ import { enumerateSource, FALLBACK_IGNORED_NAMES, LIKELY_NEEDED_IGNORED } from '
 import { validateTopology, validateOrigins, validateScenario, validateHarnessConfig, ValidationError } from '../../packages/release-harness-core/src/validator.js';
 
 console.log('======================================================================');
-console.log('       Release-Harness: 31 Neutral Acceptance Fixtures Suite         ');
+console.log('       Release-Harness: 33 Neutral Acceptance Fixtures Suite         ');
 console.log('======================================================================\n');
 
 const testResults = [];
@@ -1215,6 +1215,252 @@ function recordPass(num, name) {
   recordPass(31, 'Cleanliness Fails Closed When Git Status Cannot Be Resolved');
 }
 
+// F-32: Multi-Repo Graph Materializes And Digests Every Declared Repository
+{
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'f32-multi-'));
+  const mkRepo = (name, contents) => {
+    const dir = path.join(base, name);
+    fs.mkdirSync(dir, { recursive: true });
+    execSync('git init -b main', { cwd: dir, stdio: 'ignore' });
+    execSync('git config user.email "t@t.t"', { cwd: dir, stdio: 'ignore' });
+    execSync('git config user.name "t"', { cwd: dir, stdio: 'ignore' });
+    for (const [rel, body] of Object.entries(contents)) {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), body);
+    }
+    execSync('git add -A', { cwd: dir, stdio: 'ignore' });
+    execSync('git commit -m init', { cwd: dir, stdio: 'ignore' });
+    return dir;
+  };
+  mkRepo('api', { 'main.py': 'def api(): pass\n', 'pkg/deep/handler.py': 'x = 1\n' });
+  mkRepo('web', { 'index.html': '<h1>App</h1>\n' });
+
+  const mkTop = (repoIds) => ({
+    schema_version: '1.0.0',
+    product_slug: 'multi-product',
+    topology_type: 'multi_repo',
+    repositories: repoIds.map((id) => ({
+      repo_id: id,
+      source: { type: 'local_path', local_path: id, revision_policy: 'current_head' },
+    })),
+  });
+
+  // CONTRACT: a graph declaring a repository that is ABSENT must not digest
+  // identically to a graph that never declared it. The missing case previously
+  // `continue`d before contributing to the hash, so `[api, web, ghost]` and
+  // `[api, web]` produced the same graph digest - the digest recorded what
+  // happened to be present rather than what was declared.
+  const gDigest = fs.mkdtempSync(path.join(os.tmpdir(), 'f32-dig-'));
+  const matDigest = new SourceMaterializer(gDigest);
+  const g2 = matDigest.resolveMultiRepoGraph(mkTop(['api', 'web']), base);
+  const g3 = matDigest.resolveMultiRepoGraph(mkTop(['api', 'web', 'ghost']), base);
+
+  assert.strictEqual(g2.ok, true, 'A graph whose repositories all exist resolves');
+  assert.strictEqual(g3.ok, false, 'A graph naming an absent repository must not resolve');
+  assert.notStrictEqual(
+    g2.graph_digest,
+    g3.graph_digest,
+    'A graph declaring a missing repository must not digest identically to one that never declared it'
+  );
+  // The digest must be a function of what was DECLARED, so it is stable across
+  // calls on an unchanged set - otherwise the inequality above could hold for
+  // reasons unrelated to the missing repository.
+  assert.strictEqual(
+    matDigest.resolveMultiRepoGraph(mkTop(['api', 'web']), base).graph_digest,
+    g2.graph_digest,
+    'The graph digest must be stable across calls on an unchanged graph'
+  );
+  assert.strictEqual(g3.nodes.length, 3, 'Every declared repository must appear as a node, present or not');
+  assert.strictEqual(g3.nodes[2].missing, true, 'The absent repository must be reported missing');
+  assert.strictEqual(g3.nodes[2].status_resolved, false, 'A missing repository resolves no git status');
+
+  // CONTRACT: materializeGraph copies EVERY declared repository into its own
+  // subdirectory. Level 2 previously materialized one repo regardless of
+  // topology_type, so a multi_repo product was certified against a tree that
+  // was never fully inspected.
+  const wsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'f32-ws-'));
+  const mat = new SourceMaterializer(wsRoot);
+  const res = mat.materializeGraph(mkTop(['api', 'web']), base);
+
+  assert.strictEqual(res.ok, true, 'A resolvable graph materializes');
+  assert.strictEqual(res.workspaces.length, 2, 'One workspace per declared repository');
+  assert.deepStrictEqual(
+    res.workspaces.map((w) => w.repo_id),
+    ['api', 'web'],
+    'Workspaces must be ordered and named by declared repo_id'
+  );
+  assert.strictEqual(res.graphDigest, g2.graph_digest, 'materializeGraph must report the resolved graph digest');
+
+  const apiWs = res.workspaces[0];
+  const webWs = res.workspaces[1];
+  assert.ok(
+    fs.existsSync(path.join(apiWs.targetDir, 'pkg', 'deep', 'handler.py')),
+    'Nested content of the first repository must be materialized'
+  );
+  assert.ok(fs.existsSync(path.join(webWs.targetDir, 'index.html')), 'The second repository must be materialized too');
+  assert.strictEqual(apiWs.targetDir, path.join(wsRoot, 'sources', 'api'), 'Each repo gets its own subdirectory');
+  assert.strictEqual(webWs.targetDir, path.join(wsRoot, 'sources', 'web'), 'Each repo gets its own subdirectory');
+  assert.notStrictEqual(
+    apiWs.sourceInfo.commitSha,
+    webWs.sourceInfo.commitSha,
+    'Each repository must carry its OWN commit SHA, not one shared reading'
+  );
+  assert.notStrictEqual(
+    apiWs.sourceInfo.treeDigest,
+    webWs.sourceInfo.treeDigest,
+    'Each repository must carry its own tree digest'
+  );
+  assert.strictEqual(apiWs.stats.fileCount, 2, 'The api repository holds exactly two tracked files');
+  assert.strictEqual(webWs.stats.fileCount, 1, 'The web repository holds exactly one tracked file');
+  for (const w of res.workspaces) {
+    assert.strictEqual(w.sourceInfo.statusResolved, true, 'Each materialized repository must resolve its git status');
+    assert.strictEqual(w.sourceInfo.isClean, true, 'A freshly committed repository is clean');
+  }
+
+  // Cleanup must reclaim EVERY repository workspace plus the run root, not just
+  // the last one materialized - a single-slot record would leave sources/api
+  // behind after materializing sources/web.
+  mat.cleanup();
+  assert.ok(!fs.existsSync(wsRoot), 'Cleanup must reclaim the whole per-run workspace root for a multi-repo graph');
+
+  // CONTRACT: an unresolvable graph materializes NOTHING. A partial copy would
+  // look like a product and not be one.
+  const wsBad = fs.mkdtempSync(path.join(os.tmpdir(), 'f32-bad-'));
+  const matBad = new SourceMaterializer(wsBad);
+  const bad = matBad.materializeGraph(mkTop(['api', 'ghost']), base);
+  assert.strictEqual(bad.ok, false, 'A graph naming an absent repository must not resolve');
+  assert.strictEqual(bad.workspaces.length, 0, 'An unresolvable graph must materialize no repository at all');
+  assert.ok(bad.errors.length > 0, 'An unresolvable graph must name why');
+  assert.ok(
+    !fs.existsSync(path.join(wsBad, 'sources')),
+    'Nothing may be written for an unresolvable graph, not even the repositories that do exist'
+  );
+  matBad.cleanup();
+
+  fs.rmSync(base, { recursive: true, force: true });
+  fs.rmSync(gDigest, { recursive: true, force: true });
+  fs.rmSync(wsBad, { recursive: true, force: true });
+  recordPass(32, 'Multi-Repo Graph Materializes And Digests Every Declared Repository');
+}
+
+// F-33: Untracked-Only Directories Are Excluded LOUDLY, Not Silently
+{
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), 'f33-src-'));
+  execSync('git init -b main', { cwd: src, stdio: 'ignore' });
+  execSync('git config user.email "t@t.t"', { cwd: src, stdio: 'ignore' });
+  execSync('git config user.name "t"', { cwd: src, stdio: 'ignore' });
+  fs.writeFileSync(path.join(src, '.gitignore'), 'ignoredonly/\n');
+  fs.writeFileSync(path.join(src, 'app.js'), 'console.log(1)\n');
+  execSync('git add -A', { cwd: src, stdio: 'ignore' });
+  execSync('git commit -m init', { cwd: src, stdio: 'ignore' });
+
+  // The case this closes: a directory whose ONLY content is an untracked,
+  // NOT-ignored file. A certification run copies no untracked file, so the
+  // directory contributes nothing and is absent from the workspace - which is
+  // CORRECT (git has no record of it, so a fresh clone would not have it), but
+  // was previously indistinguishable from a bug. Recreating it instead would
+  // make the workspace's structure a function of the last local build, which is
+  // the same leakage excluding untracked files exists to prevent. The fix is to
+  // say so, not to build it.
+  fs.mkdirSync(path.join(src, 'uploads'), { recursive: true });
+  fs.writeFileSync(path.join(src, 'uploads', 'scratch.tmp'), 'untracked\n');
+  // Nested, to prove the judgement propagates through a parent rather than
+  // applying only one level deep.
+  fs.mkdirSync(path.join(src, 'var', 'run'), { recursive: true });
+  fs.writeFileSync(path.join(src, 'var', 'run', 'pid'), 'untracked\n');
+  // A directory of only-ignored files was already handled; assert it still is,
+  // so this change cannot fix its own case by breaking its neighbour.
+  fs.mkdirSync(path.join(src, 'ignoredonly'), { recursive: true });
+  fs.writeFileSync(path.join(src, 'ignoredonly', 'junk.bin'), 'ignored\n');
+  // A genuinely empty directory must STILL be recreated - the new classification
+  // must not collapse 'empty' into 'untrackedOnly'.
+  fs.mkdirSync(path.join(src, 'genuinelyempty'), { recursive: true });
+  // A directory holding a TRACKED file is not empty and must not be recreated
+  // as one - it must be materialized with its content.
+  fs.mkdirSync(path.join(src, 'real'), { recursive: true });
+  fs.writeFileSync(path.join(src, 'real', 'kept.js'), 'kept\n');
+  execSync('git add real/kept.js', { cwd: src, stdio: 'ignore' });
+  execSync('git commit -m real', { cwd: src, stdio: 'ignore' });
+
+  const wsCert = fs.mkdtempSync(path.join(os.tmpdir(), 'f33-cert-'));
+  const matCert = new SourceMaterializer(wsCert);
+  const cert = matCert.materializeRepo(src, 'source', { includeUntracked: false });
+
+  assert.strictEqual(cert.stats.strategy, 'git', 'Fixture premise: the tree must be enumerated by git');
+  assert.ok(
+    !fs.existsSync(path.join(cert.targetDir, 'uploads', 'scratch.tmp')),
+    'A certification run must not copy an untracked file'
+  );
+  assert.ok(
+    !fs.existsSync(path.join(cert.targetDir, 'uploads')),
+    'A directory holding only untracked files must NOT be recreated - git has no record of it'
+  );
+  assert.ok(
+    fs.existsSync(path.join(cert.targetDir, 'genuinelyempty')),
+    'A genuinely empty directory must still be recreated - it is tracked structure, not build output'
+  );
+  assert.ok(
+    !fs.existsSync(path.join(cert.targetDir, 'ignoredonly')),
+    'A git-ignored directory must still be excluded entirely - this must not reintroduce build-store leakage'
+  );
+  assert.ok(
+    fs.existsSync(path.join(cert.targetDir, 'real', 'kept.js')),
+    'A directory holding a tracked file must be materialized with its content'
+  );
+  assert.deepStrictEqual(
+    fs.readdirSync(cert.targetDir).sort(),
+    ['.gitignore', 'app.js', 'genuinelyempty', 'real'],
+    'The certification workspace must hold exactly the tracked files plus genuinely empty directories'
+  );
+  assert.strictEqual(cert.stats.emptyDirCount, 1, 'Exactly genuinelyempty/ is recreated');
+
+  // THE POINT OF THIS FIXTURE: the exclusion must be reported. Silence here is
+  // the defect - the adopter otherwise infers the cause from a downstream "no
+  // such directory" in a build that works locally.
+  const untrackedWarning = cert.stats.warnings.find((w) => w.includes('only contents are untracked files'));
+  assert.ok(untrackedWarning, 'Excluding an untracked-only directory must be reported, not applied silently');
+  assert.ok(untrackedWarning.includes('"uploads"'), 'The warning must name the excluded directory');
+  assert.ok(untrackedWarning.includes('"var"'), 'The warning must name each excluded subtree');
+  assert.ok(
+    !untrackedWarning.includes('var/run'),
+    'Only the shallowest directory of a subtree is named - "var" and "var/run" are the same fact twice'
+  );
+  assert.ok(
+    untrackedWarning.includes('.gitkeep'),
+    'The warning must state the remedy, not merely the fact'
+  );
+  matCert.cleanup();
+
+  // The --allow-dirty counterpart: untracked files ARE copied, so the same
+  // directory arrives with its content and there is nothing to warn about. The
+  // two modes must not disagree about the same tree.
+  const wsDev = fs.mkdtempSync(path.join(os.tmpdir(), 'f33-dev-'));
+  const matDev = new SourceMaterializer(wsDev);
+  const dev = matDev.materializeRepo(src, 'source', { includeUntracked: true });
+  assert.ok(
+    fs.existsSync(path.join(dev.targetDir, 'uploads', 'scratch.tmp')),
+    'An --allow-dirty run must materialize untracked files'
+  );
+  assert.ok(
+    fs.existsSync(path.join(dev.targetDir, 'var', 'run', 'pid')),
+    'An --allow-dirty run must materialize nested untracked files too'
+  );
+  assert.ok(
+    !fs.existsSync(path.join(dev.targetDir, 'ignoredonly')),
+    'An ignored directory stays excluded even on an --allow-dirty run'
+  );
+  assert.ok(
+    !dev.stats.warnings.some((w) => w.includes('only contents are untracked files')),
+    'Nothing is excluded on an --allow-dirty run, so there is nothing to warn about'
+  );
+  matDev.cleanup();
+
+  fs.rmSync(src, { recursive: true, force: true });
+  fs.rmSync(wsCert, { recursive: true, force: true });
+  fs.rmSync(wsDev, { recursive: true, force: true });
+  recordPass(33, 'Untracked-Only Directories Are Excluded LOUDLY, Not Silently');
+}
+
 console.log('\n======================================================================');
-console.log(`  ALL 31 / 31 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
+console.log(`  ALL 33 / 33 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
 console.log('======================================================================\n');

@@ -1,5 +1,5 @@
 ---
-name: scenario-compiler
+name: release-harness-scenario-compiler
 description: Translates user personas, authentication flows, and user stories into declarative Playwright scenarios (.release-harness/scenarios/*.json).
 allowed-tools: [Read, Grep, Glob, Write]
 ---

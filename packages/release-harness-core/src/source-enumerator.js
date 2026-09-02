@@ -516,7 +516,13 @@ function resolveGitIgnoreSets(absPath, failure = {}) {
       // Exit 1 = "none of the batch is ignored", which arrives as a thrown
       // error with empty stdout. Anything that produced no stdout at all and
       // did not exit 1 is a real failure: fall back rather than assert.
-      if (err && err.status === 1 && err.stdout !== undefined) {
+      //
+      // `!= null` rather than `!== undefined`: a null stdout satisfies the
+      // looser check and reaches `gitOutputToPaths(null)`, which throws
+      // TypeError out of a function this module documents as never throwing.
+      // That is load-bearing - the whole warn-not-fail policy rests on this
+      // returning null instead of propagating an exception to the caller.
+      if (err && err.status === 1 && err.stdout != null) {
         stdout = err.stdout;
       } else {
         failure.error = err;
@@ -527,6 +533,49 @@ function resolveGitIgnoreSets(absPath, failure = {}) {
   }
 
   return { ignoredDirs, ignoredFiles };
+}
+
+/**
+ * The set of paths git considers UNTRACKED-but-not-ignored, in one subprocess.
+ *
+ * Needed only when `includeUntracked` is false. In that mode no untracked file
+ * is copied, so a directory holding nothing else contributes nothing to the
+ * workspace - and must be reported as excluded rather than silently absent.
+ *
+ * Returns `null` on any git failure so the caller can name the degradation
+ * rather than silently treating every path as tracked.
+ *
+ * WITHOUT `--directory`, git lists untracked paths individually; the only
+ * directory-shaped row it emits is an untracked NESTED REPOSITORY, which it
+ * cannot descend. Such a row therefore means "this entire subtree is untracked"
+ * unambiguously - unlike the `--ignored --directory` listing, which collapses
+ * two different conditions into one spelling and needs a second subprocess to
+ * disambiguate.
+ */
+function resolveUntrackedSets(absPath, failure = {}) {
+  let listed;
+  try {
+    listed = gitOutputToPaths(
+      execSync('git ls-files -z --others --exclude-standard', {
+        cwd: absPath,
+        encoding: 'buffer',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 30000,
+        maxBuffer: 64 * 1024 * 1024,
+      })
+    );
+  } catch (err) {
+    failure.error = err;
+    return null;
+  }
+
+  const untrackedFiles = new Set();
+  const untrackedRoots = [];
+  for (const entry of listed) {
+    if (entry.endsWith('/')) untrackedRoots.push(entry.replace(/\/+$/, ''));
+    else untrackedFiles.add(entry);
+  }
+  return { untrackedFiles, untrackedRoots };
 }
 
 /**
@@ -555,14 +604,24 @@ function resolveGitIgnoreSets(absPath, failure = {}) {
  * lstat, so a symlink to a directory is not `isDirectory()` and is never
  * descended into, matching both enumeration strategies.
  *
- * Cost is bounded at two git subprocesses for the whole tree, plus the same
+ * Cost is bounded at three git subprocesses for the whole tree (two for the
+ * ignore rules, one more only when untracked files are excluded), plus the same
  * single directory walk as before — never a subprocess per directory.
+ *
+ * `options.includeUntracked` must MATCH the value given to `enumerateSource`
+ * for the same tree. When it is false, no untracked file is copied, so a
+ * directory holding only untracked files contributes nothing to the workspace.
+ * Such a directory is NOT recreated — git has no record of it, so a fresh clone
+ * would not have it either, and building it would make the workspace structure
+ * a function of the last local build. It is reported instead, so the exclusion
+ * is visible rather than inferred from a downstream failure.
  *
  * Never throws: an unreadable directory is reported as a warning and skipped,
  * as is a git repository whose ignore rules could not be obtained — that fallback
  * is the difference between excluding build trees and recreating them.
  */
-export function enumerateEmptyDirectories(sourcePath, warnings = []) {
+export function enumerateEmptyDirectories(sourcePath, warnings = [], options = {}) {
+  const { includeUntracked = true } = options;
   const absPath = path.resolve(sourcePath);
   const empty = [];
 
@@ -606,6 +665,22 @@ export function enumerateEmptyDirectories(sourcePath, warnings = []) {
     );
   }
 
+  // A certification run copies no untracked file, so a directory holding only
+  // untracked files contributes nothing to the workspace. Only consulted when
+  // git is the authority AND untracked files are excluded; on every other path
+  // there is nothing to ask or nothing to answer.
+  let untrackedSets = null;
+  const untrackedFailure = {};
+  if (isOwnRepo && ignoreSets !== null && !includeUntracked) {
+    untrackedSets = resolveUntrackedSets(absPath, untrackedFailure);
+    if (untrackedSets === null) {
+      warnings.push(
+        `Source IS a git repository, but its untracked-file list could not be obtained for the empty-directory scan (${gitFailureReason(untrackedFailure.error)}); ` +
+          'a directory holding only untracked files is treated as holding content, so its exclusion from the workspace will not be reported.'
+      );
+    }
+  }
+
   /**
    * True when this path must not appear in the workspace at all. On the git
    * path `.git` is excluded explicitly — git does not report its own directory
@@ -623,10 +698,34 @@ export function enumerateEmptyDirectories(sourcePath, warnings = []) {
   };
 
   /**
-   * Returns true when `relBase` contributes no file to the workspace, having
-   * already recorded it as an empty directory. A parent is judged by the same
-   * rule, so an `onlyempty/nested-empty` chain is recreated in full and a
-   * directory holding only ignored files counts as empty.
+   * True when this file exists on disk but will not be copied because the run
+   * excludes untracked files. An untracked NESTED REPOSITORY arrives from git as
+   * a directory-shaped row covering its whole subtree, so containment is tested
+   * as well as equality.
+   */
+  const isUntracked = (rel) => {
+    if (untrackedSets === null) return false;
+    if (untrackedSets.untrackedFiles.has(rel)) return true;
+    return untrackedSets.untrackedRoots.some((root) => rel === root || rel.startsWith(`${root}/`));
+  };
+
+  // Directories holding nothing but untracked files. NOT recreated: git has no
+  // record of them, so a fresh clone would not have them either, and
+  // materializing them would reintroduce exactly the build-state leakage that
+  // excluding untracked files exists to prevent. They must not vanish in
+  // silence either, so they are reported below.
+  const untrackedOnlyDirs = [];
+
+  /**
+   * Classifies `relBase` by what it contributes to the workspace:
+   *   'content'       - at least one file will be copied from it or below it
+   *   'untrackedOnly' - nothing will be copied, but files exist on disk that
+   *                     this run excludes because they are untracked
+   *   'empty'         - nothing will be copied and there is nothing to exclude
+   *
+   * A parent inherits the strongest classification of its children, so an
+   * `onlyempty/nested-empty` chain is still recreated in full while a `var/run/`
+   * holding one untracked file leaves both `var/` and `var/run/` unbuilt.
    */
   const walk = (dir, relBase) => {
     let entries;
@@ -637,28 +736,51 @@ export function enumerateEmptyDirectories(sourcePath, warnings = []) {
         `Skipped unreadable directory "${relBase || '.'}" while scanning for empty directories (${err && err.code ? err.code : err.message}).`
       );
       // Unknown contents: do not claim it is empty.
-      return false;
+      return 'content';
     }
 
     let contributesContent = false;
+    let holdsUntracked = false;
     for (const entry of entries) {
       const rel = relBase ? `${relBase}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         if (isExcludedDir(rel, entry.name)) continue;
-        if (!walk(path.join(dir, entry.name), rel)) contributesContent = true;
+        const kind = walk(path.join(dir, entry.name), rel);
+        if (kind === 'content') contributesContent = true;
+        else if (kind === 'untrackedOnly') holdsUntracked = true;
       } else {
         // A symlink is not isDirectory(); it is a workspace-visible entry
         // unless ignored, and it keeps its parent from counting as empty.
         if (isExcludedFile(rel, entry.name)) continue;
-        contributesContent = true;
+        if (isUntracked(rel)) holdsUntracked = true;
+        else contributesContent = true;
       }
     }
 
-    if (!contributesContent && relBase) empty.push(relBase);
-    return !contributesContent;
+    if (contributesContent) return 'content';
+    if (holdsUntracked) {
+      if (relBase) untrackedOnlyDirs.push(relBase);
+      return 'untrackedOnly';
+    }
+    if (relBase) empty.push(relBase);
+    return 'empty';
   };
 
   walk(absPath, '');
+
+  // Report only the shallowest directory of each untracked-only subtree: naming
+  // `var/` and `var/run/` separately is the same fact twice.
+  const untrackedRoots = untrackedOnlyDirs
+    .filter((d) => !untrackedOnlyDirs.some((other) => other !== d && d.startsWith(`${other}/`)))
+    .sort();
+  if (untrackedRoots.length > 0) {
+    warnings.push(
+      `Excluded ${untrackedRoots.length} directory(ies) whose only contents are untracked files: ${summarizePaths(untrackedRoots)}. ` +
+        'They are absent from the workspace because git has no record of them, so a fresh clone would not have them either. ' +
+        'Commit a placeholder such as .gitkeep if the build needs the directory to exist.'
+    );
+  }
+
   empty.sort();
   return empty;
 }
