@@ -1,3 +1,4 @@
+import Ajv from 'ajv';
 import { Schemas } from '../../release-harness-schemas/index.js';
 
 /**
@@ -9,6 +10,38 @@ export class ValidationError extends Error {
     super(message);
     this.name = 'ValidationError';
     this.errors = errors;
+  }
+}
+
+const ajv = new Ajv({ allErrors: true, strict: false });
+const compiledSchemas = new Map();
+
+/**
+ * Validate a document against its published JSON schema.
+ *
+ * The hand-rolled checks above cover only a subset of each contract, so without
+ * this the published schema is documentation: an unsupported service or
+ * probe_type would be accepted here and surface much later as a confusing
+ * engine failure. Compiled validators are cached per schema object.
+ *
+ * @throws {ValidationError} when the document does not satisfy the schema.
+ */
+export function validateAgainstSchema(schema, data, label) {
+  if (!schema) {
+    throw new ValidationError(`${label} cannot be validated: its published schema is unavailable`, [
+      'Missing schema',
+    ]);
+  }
+  let validate = compiledSchemas.get(schema);
+  if (!validate) {
+    validate = ajv.compile(schema);
+    compiledSchemas.set(schema, validate);
+  }
+  if (!validate(data)) {
+    const errors = (validate.errors || []).map(
+      (e) => `${e.instancePath || '/'} ${e.message}${e.params && e.params.allowedValues ? ` (allowed: ${e.params.allowedValues.join('|')})` : ''}`
+    );
+    throw new ValidationError(`${label} failed schema validation: ${errors.join('; ')}`, errors);
   }
 }
 
@@ -35,6 +68,7 @@ export function validateHarnessConfig(config) {
   if (errors.length > 0) {
     throw new ValidationError(`Harness config validation failed with ${errors.length} error(s)`, errors);
   }
+  validateAgainstSchema(Schemas.HarnessConfigV1, config, 'Harness config');
   return true;
 }
 
@@ -101,6 +135,7 @@ export function validateScenario(scenario) {
   if (errors.length > 0) {
     throw new ValidationError(`Scenario ${scenario.id || 'unknown'} validation failed`, errors);
   }
+  validateAgainstSchema(Schemas.ScenarioV1, scenario, `Scenario "${scenario.id}"`);
   return true;
 }
 

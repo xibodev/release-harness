@@ -346,6 +346,10 @@ function recordPass(num, name) {
   const harnessConfig = {
     schema_version: '1.0.0',
     product_slug: 'test',
+    // harness_version and port_block are required by harness-config-v1; the fixture
+    // omitted both, so it was asserting against a contract the tool does not publish.
+    harness_version: '1.1.0',
+    port_block: { start: 34000, range: 50 },
     network_policy: {
       mode: 'sealed',
       allowed_egress: [{ host: 'cdn.jsdelivr.net', port: 443, purpose: 'Static assets' }],
