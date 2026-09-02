@@ -714,6 +714,13 @@ async function handleCheckPr(args) {
 }
 
 async function handleRunLocal(args) {
+  /**
+   * Report what materialization actually did. Every diagnostic the enumerator
+   * and the copier produce reached no operator before this: `.stats` was
+   * discarded at the call site, so an enumeration that silently fell back to the
+   * basename denylist, or a file skipped mid-copy, looked exactly like a clean
+   * run. A degradation nobody can see is not a warning.
+   */
   function reportMaterialization(label, res) {
     const s = res.stats;
     console.log(
@@ -758,7 +765,44 @@ async function handleRunLocal(args) {
     return 3;
   }
 
-  const topology = JSON.parse(fs.readFileSync(topologyFile, 'utf8'));
+  // Both contracts are validated before anything is materialized, because both
+  // steer the run: `topology_type` decides whether the product is certified as a
+  // graph or as a single repo, and `harness.config.json` is hashed into the
+  // provenance record. Validating only at Level 1 left Level 2 — the gate that
+  // actually certifies — trusting fields no schema had checked, so a typo'd
+  // `topology_type` silently took the single-repo branch and a contract error
+  // surfaced as a product failure (exit 1) rather than a configuration one.
+  const configFile = path.join(harnessDir, 'harness.config.json');
+  let topology;
+  try {
+    topology = JSON.parse(fs.readFileSync(topologyFile, 'utf8'));
+    validateTopology(topology);
+  } catch (topologyErr) {
+    console.error(`Invalid topology.json: ${topologyErr.message}`);
+    if (topologyErr instanceof ValidationError) {
+      for (const detail of topologyErr.errors || []) {
+        console.error(`      - ${detail}`);
+      }
+    }
+    console.error('\nLevel 2 Gate: FAILED (Harness configuration error)');
+    return 3;
+  }
+
+  if (fs.existsSync(configFile)) {
+    try {
+      validateHarnessConfig(JSON.parse(fs.readFileSync(configFile, 'utf8')));
+    } catch (configErr) {
+      console.error(`Invalid harness.config.json: ${configErr.message}`);
+      if (configErr instanceof ValidationError) {
+        for (const detail of configErr.errors || []) {
+          console.error(`      - ${detail}`);
+        }
+      }
+      console.error('\nLevel 2 Gate: FAILED (Harness configuration error)');
+      return 3;
+    }
+  }
+
   const productSlug = topology.product_slug || 'project';
   const evidenceRoot = resolveEvidenceRoot(flags, productSlug);
   const runDir = path.join(evidenceRoot, 'runs', runId);
@@ -928,18 +972,11 @@ async function handleRunLocal(args) {
 
     // Write execution logs into evidence directory (Redacted prior to sealing)
     const logContent = redactor.redactText(`Run ${runId} completed scenario sweep at ${runStartedAt}\n`);
-  /**
-   * Report what materialization actually did. Every diagnostic the enumerator
-   * and the copier produce reached no operator before this: `.stats` was
-   * discarded at the call site, so an enumeration that silently fell back to the
-   * basename denylist, or a file skipped mid-copy, looked exactly like a clean
-   * run. A degradation nobody can see is not a warning.
-   */
-    fs.writeFileSync(path.join(runEvidenceDir, 'execution.log'), logContent, 'utf8');
+    sealer.writeEvidence('execution.log', logContent);
 
     // Persist complete raw results into evidence directory before sealing
     const rawResultsBytes = JSON.stringify(redactor.redactObject(rawResults), null, 2) + '\n';
-    fs.writeFileSync(path.join(runEvidenceDir, 'raw-results.json'), rawResultsBytes, 'utf8');
+    sealer.writeEvidence('raw-results.json', rawResultsBytes);
 
     // 6. Seal Evidence with Policy Snapshot for deterministic replay
     console.log('6. Sealing evidence directory...');

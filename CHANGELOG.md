@@ -18,7 +18,8 @@ wrong, so **a run that was green on 1.1.0 may legitimately fail on 1.2.0.**
   **Git-ignored files no longer reach the workspace.** A build that depends on
   an untracked file — a local `.env`, an uncommitted fixture — will now fail.
   Materialization names the excluded file so the cause is visible. Commit the
-  file, or supply the value through `.release-harness/harness.config.json`.
+  file, or provide the value through your compose file's environment, so the
+  build does not depend on an uncommitted file.
 
 - **`sql_query` probes fail closed.** The Postgres probe never executed SQL and
   never evaluated `expected_rows_count` or `forbidden_values`, yet reported

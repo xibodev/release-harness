@@ -812,7 +812,7 @@ function collectExclusionWarnings(absPath) {
     if (dirSegments.some((segment) => WARNING_SCAN_SKIPPED_DIRS.has(segment))) continue;
     if (LIKELY_NEEDED_IGNORED.some((re) => re.test(rel))) {
       warnings.push(
-        `Excluded git-ignored file "${rel}" — it is not in the repository, so the workspace build cannot use it. Commit it or supply the value through .release-harness/harness.config.json.`
+        `Excluded git-ignored file "${rel}" — it is not in the repository, so the workspace build cannot use it. Commit it, or provide the value through your compose file's environment, so the build does not depend on an uncommitted file.`
       );
     }
   }
