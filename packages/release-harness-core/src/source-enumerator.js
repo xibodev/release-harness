@@ -39,6 +39,106 @@ export const LIKELY_NEEDED_IGNORED = [
   /\.key$/,
 ];
 
+/**
+ * Path segments whose contents belong to dependencies or tooling rather than to
+ * the adopter's own source. The exclusion-warning scan skips anything beneath
+ * them: a dependency that ships a test certificate is not something the adopter
+ * can "commit", so warning about it is noise that buries the real signal.
+ */
+export const WARNING_SCAN_SKIPPED_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'bower_components',
+  'jspm_packages',
+  'vendor',
+  '.pnpm-store',
+  '.yarn',
+  '.venv',
+  'venv',
+  'site-packages',
+  '__pycache__',
+  '.pytest_cache',
+  '.ruff_cache',
+  '.mypy_cache',
+  '.tox',
+  '.gradle',
+  '.m2',
+  'target',
+  '.cache',
+  '.next',
+  '.nuxt',
+  '.svelte-kit',
+  '.turbo',
+  'dist',
+  'build',
+  'coverage',
+  'test-results',
+  'playwright-report',
+  '.brains',
+  '.quality-run',
+]);
+
+const IS_WINDOWS = process.platform === 'win32';
+
+/**
+ * Reduce a path to a comparable canonical form. Beyond `path.resolve`, this
+ * resolves symlinks and short names (macOS reports /var, git reports
+ * /private/var; Windows may report 8.3 names) and folds case on Windows, where
+ * `git rev-parse --show-toplevel` uppercases the drive letter regardless of the
+ * case the caller used. Without this, a genuine git repository silently reverts
+ * to the basename denylist.
+ */
+function canonicalizePath(p) {
+  let out = path.resolve(p);
+  try {
+    out = typeof fs.realpathSync.native === 'function' ? fs.realpathSync.native(out) : fs.realpathSync(out);
+  } catch {
+    // Unresolvable (missing/permission) — fall back to the resolved form.
+  }
+  out = out.replace(/\\/g, '/').replace(/\/+$/, '');
+  return IS_WINDOWS ? out.toLowerCase() : out;
+}
+
+function samePath(a, b) {
+  return canonicalizePath(a) === canonicalizePath(b);
+}
+
+/**
+ * True when git could not be executed or was cut short, as opposed to git
+ * running fine and reporting "this is not a repository". The two must not share
+ * a diagnosis: one is an ordinary non-git tree, the other is a real repository
+ * whose enumeration failed.
+ */
+function isGitExecutionFailure(err) {
+  if (!err) return false;
+  if (err.code === 'ENOENT' || err.code === 'ENOTDIR' || err.code === 'EACCES') return true;
+  if (err.code === 'ENOBUFS') return true;
+  if (err.killed === true || err.signal) return true;
+  return false;
+}
+
+function gitFailureReason(err) {
+  if (!err) return 'unknown error';
+  if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return 'the git executable could not be run';
+  if (err.code === 'EACCES') return 'the git executable could not be run (permission denied)';
+  if (err.code === 'ENOBUFS') return 'git produced more output than the read buffer allows';
+  if (err.killed === true || err.signal) return `the git command was terminated (${err.signal || 'timeout'})`;
+  if (typeof err.status === 'number') return `git exited with status ${err.status}`;
+  return err.message || 'unknown error';
+}
+
+const DENYLIST_FALLBACK_CONSEQUENCE =
+  'falling back to the conservative basename denylist, which excludes directories such as coverage/ and .cache/ by name. ' +
+  'Any product source under those names will be absent from both the workspace copy and the tree digest.';
+
+function gitOutputToPaths(stdout) {
+  return stdout
+    .toString('utf8')
+    .split('\0')
+    .filter(Boolean)
+    .map((p) => p.replace(/\\/g, '/'));
+}
+
 function gitEnumerate(absPath) {
   const stdout = execSync('git ls-files -z --cached --others --exclude-standard', {
     cwd: absPath,
@@ -47,27 +147,141 @@ function gitEnumerate(absPath) {
     timeout: 30000,
     maxBuffer: 64 * 1024 * 1024,
   });
-  return stdout
-    .toString('utf8')
-    .split('\0')
-    .filter(Boolean)
-    .map((p) => p.replace(/\\/g, '/'));
+  return gitOutputToPaths(stdout);
 }
 
-function fsEnumerate(absPath) {
+/**
+ * Classify one candidate path by what is actually on disk. Symlinks are
+ * resolved so that both enumeration strategies agree on what a "file" is: a
+ * symlink to a regular file counts as a file, a symlink to a directory or a
+ * dangling symlink does not.
+ */
+function classifyEntry(abs) {
+  let linkStat;
+  try {
+    linkStat = fs.lstatSync(abs);
+  } catch (err) {
+    if (err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) return 'missing';
+    return 'unreadable';
+  }
+
+  if (linkStat.isSymbolicLink()) {
+    let targetStat;
+    try {
+      targetStat = fs.statSync(abs);
+    } catch {
+      return 'dangling';
+    }
+    if (targetStat.isFile()) return 'file';
+    if (targetStat.isDirectory()) return 'linkedDirectory';
+    return 'special';
+  }
+
+  if (linkStat.isFile()) return 'file';
+  if (linkStat.isDirectory()) return 'directory';
+  return 'special';
+}
+
+function summarizePaths(list, limit = 5) {
+  const shown = list.slice(0, limit).map((p) => `"${p}"`).join(', ');
+  return list.length > limit ? `${shown} and ${list.length - limit} more` : shown;
+}
+
+/**
+ * Turn a raw candidate list into the enumeration contract: relative POSIX paths
+ * naming regular files that exist on disk, deduplicated and sorted.
+ *
+ * Every drop here is a case the raw candidate list gets wrong and a downstream
+ * consumer would crash on. `git ls-files --cached` reports the index, so it
+ * lists a nested repository or submodule as a bare directory (EISDIR on read),
+ * a file deleted without staging the deletion (ENOENT on read), and one row per
+ * index stage for a file in an unresolved merge conflict (the same content
+ * hashed three times, yielding a digest that no longer matches the identical
+ * tree once the conflict is resolved).
+ */
+function refineEntries(absPath, candidates, warnings) {
+  const seen = new Set();
+  const files = [];
+  const dropped = {
+    directory: [],
+    missing: [],
+    dangling: [],
+    linkedDirectory: [],
+    unreadable: [],
+    special: [],
+  };
+
+  for (const rel of candidates) {
+    if (!rel || seen.has(rel)) continue;
+    seen.add(rel);
+    const kind = classifyEntry(path.join(absPath, rel));
+    if (kind === 'file') files.push(rel);
+    else dropped[kind].push(rel);
+  }
+
+  if (dropped.directory.length > 0) {
+    warnings.push(
+      `Excluded ${dropped.directory.length} enumerated path(s) that are directories rather than regular files: ${summarizePaths(dropped.directory)}. ` +
+        'A nested git repository or submodule is reported by git as a single directory entry; its contents are not part of this source tree.'
+    );
+  }
+  if (dropped.missing.length > 0) {
+    warnings.push(
+      `Excluded ${dropped.missing.length} path(s) present in the git index but absent from the working tree: ${summarizePaths(dropped.missing)}. ` +
+        'These were deleted without staging the deletion; the workspace mirrors the working tree, so they will not be present.'
+    );
+  }
+  if (dropped.dangling.length > 0) {
+    warnings.push(
+      `Excluded ${dropped.dangling.length} dangling symlink(s) whose target does not exist: ${summarizePaths(dropped.dangling)}.`
+    );
+  }
+  if (dropped.linkedDirectory.length > 0) {
+    warnings.push(
+      `Excluded ${dropped.linkedDirectory.length} symlink(s) that resolve to a directory rather than a file: ${summarizePaths(dropped.linkedDirectory)}.`
+    );
+  }
+  if (dropped.unreadable.length > 0) {
+    warnings.push(
+      `Excluded ${dropped.unreadable.length} path(s) that could not be inspected: ${summarizePaths(dropped.unreadable)}.`
+    );
+  }
+  if (dropped.special.length > 0) {
+    warnings.push(
+      `Excluded ${dropped.special.length} path(s) that are neither regular files nor directories (socket, FIFO or device): ${summarizePaths(dropped.special)}.`
+    );
+  }
+
+  files.sort();
+  return files;
+}
+
+/**
+ * Conservative filesystem walk for non-git and nested sub-repo trees.
+ * A directory that cannot be read is skipped with a warning rather than
+ * aborting the whole enumeration: one unreadable subdirectory must not fail a
+ * release run.
+ */
+function fsEnumerate(absPath, warnings) {
   const out = [];
   const walk = (dir, relBase) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (err) {
+      warnings.push(
+        `Skipped unreadable directory "${relBase || '.'}" during filesystem enumeration (${err && err.code ? err.code : err.message}).`
+      );
+      return;
+    }
+    for (const entry of entries) {
       if (FALLBACK_IGNORED_NAMES.has(entry.name) || entry.name.endsWith('.pyc')) continue;
       const abs = path.join(dir, entry.name);
       const rel = relBase ? `${relBase}/${entry.name}` : entry.name;
-      if (entry.isSymbolicLink()) {
-        out.push(rel);
-      } else if (entry.isDirectory()) {
-        walk(abs, rel);
-      } else if (entry.isFile()) {
-        out.push(rel);
-      }
+      // Dirent reflects lstat, so a symlink to a directory is not isDirectory()
+      // and is never descended into — it is classified in refineEntries instead.
+      if (entry.isDirectory()) walk(abs, rel);
+      else out.push(rel);
     }
   };
   walk(absPath, '');
@@ -76,7 +290,10 @@ function fsEnumerate(absPath) {
 
 /**
  * Scan for git-ignored files present on disk that a build plausibly needs, so
- * their exclusion can be reported rather than silently inferred.
+ * their exclusion can be reported rather than silently inferred. Dependency and
+ * tooling directories are skipped: their contents are not the adopter's to
+ * commit, and in a typical repo they are the overwhelming majority of ignored
+ * paths.
  */
 function collectExclusionWarnings(absPath) {
   const warnings = [];
@@ -89,11 +306,13 @@ function collectExclusionWarnings(absPath) {
       timeout: 30000,
       maxBuffer: 64 * 1024 * 1024,
     });
-    ignored = stdout.toString('utf8').split('\0').filter(Boolean).map((p) => p.replace(/\\/g, '/'));
+    ignored = gitOutputToPaths(stdout);
   } catch {
     return warnings;
   }
   for (const rel of ignored) {
+    const dirSegments = rel.split('/').slice(0, -1);
+    if (dirSegments.some((segment) => WARNING_SCAN_SKIPPED_DIRS.has(segment))) continue;
     if (LIKELY_NEEDED_IGNORED.some((re) => re.test(rel))) {
       warnings.push(
         `Excluded git-ignored file "${rel}" — it is not in the repository, so the workspace build cannot use it. Commit it or supply the value through .release-harness/harness.config.json.`
@@ -106,40 +325,79 @@ function collectExclusionWarnings(absPath) {
 /**
  * Single enumeration feeding BOTH the workspace copy and the tree digest.
  * One list means copy set and digest set cannot diverge.
+ *
+ * Returns `{ files, strategy, warnings }` where `files` is a sorted,
+ * deduplicated list of relative POSIX paths, each naming a regular file that
+ * exists on disk. It never throws: every failure mode degrades to a narrower
+ * list plus a warning that names the cause.
  */
 export function enumerateSource(sourcePath) {
   const absPath = path.resolve(sourcePath);
-  if (!fs.existsSync(absPath)) {
-    return { files: [], strategy: 'filesystem', warnings: [`Source path does not exist: ${absPath}`] };
+  const warnings = [];
+
+  let rootStat;
+  try {
+    rootStat = fs.statSync(absPath);
+  } catch (err) {
+    const reason = err && err.code === 'EACCES' ? 'is not readable' : 'does not exist';
+    return { files: [], strategy: 'filesystem', warnings: [`Source path ${reason}: ${absPath}`] };
+  }
+  if (!rootStat.isDirectory()) {
+    return {
+      files: [],
+      strategy: 'filesystem',
+      warnings: [`Source path is not a directory, so it cannot be enumerated as a source tree: ${absPath}`],
+    };
   }
 
   let files = null;
   let strategy = 'filesystem';
-  const warnings = [];
 
+  let topLevel = null;
+  let probeError = null;
   try {
-    const topLevel = execSync('git rev-parse --show-toplevel', {
+    topLevel = execSync('git rev-parse --show-toplevel', {
       cwd: absPath,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000,
     }).trim();
-
-    if (path.resolve(topLevel) === absPath) {
-      files = gitEnumerate(absPath);
-      strategy = 'git';
-      warnings.push(...collectExclusionWarnings(absPath));
-    } else {
-      warnings.push(
-        `Source is nested inside git repository at ${topLevel}; using filesystem enumeration with a conservative exclusion list.`
-      );
-    }
-  } catch {
-    warnings.push('Source is not an independent git repository; using filesystem enumeration with a conservative exclusion list.');
+  } catch (err) {
+    probeError = err;
   }
 
-  if (files === null) files = fsEnumerate(absPath);
+  if (probeError) {
+    if (isGitExecutionFailure(probeError)) {
+      warnings.push(
+        `Git could not determine whether the source is a repository (${gitFailureReason(probeError)}); ${DENYLIST_FALLBACK_CONSEQUENCE}`
+      );
+    } else {
+      warnings.push(
+        'Source is not an independent git repository; using filesystem enumeration with a conservative exclusion list.'
+      );
+    }
+  } else if (!topLevel) {
+    warnings.push(
+      'Source is not an independent git repository; using filesystem enumeration with a conservative exclusion list.'
+    );
+  } else if (samePath(topLevel, absPath)) {
+    try {
+      files = gitEnumerate(absPath);
+      strategy = 'git';
+    } catch (err) {
+      files = null;
+      warnings.push(
+        `Source IS a git repository, but git enumeration failed (${gitFailureReason(err)}); ${DENYLIST_FALLBACK_CONSEQUENCE}`
+      );
+    }
+    if (files !== null) warnings.push(...collectExclusionWarnings(absPath));
+  } else {
+    warnings.push(
+      `Source is nested inside git repository at ${topLevel}; using filesystem enumeration with a conservative exclusion list.`
+    );
+  }
 
-  files.sort();
-  return { files, strategy, warnings };
+  if (files === null) files = fsEnumerate(absPath, warnings);
+
+  return { files: refineEntries(absPath, files, warnings), strategy, warnings };
 }

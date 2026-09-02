@@ -9,7 +9,7 @@ import { EvidenceSealer } from '../../packages/release-harness-core/src/sealer.j
 import { PlaywrightSuiteAdapter } from '../../packages/release-harness-core/src/playwright-adapter.js';
 import { verifySideEffect, probeS3, probePostgres, probeRedis, probeMailpit } from '../../packages/release-harness-core/src/probes.js';
 import { SourceMaterializer } from '../../packages/release-harness-core/src/materializer.js';
-import { enumerateSource } from '../../packages/release-harness-core/src/source-enumerator.js';
+import { enumerateSource, FALLBACK_IGNORED_NAMES, LIKELY_NEEDED_IGNORED } from '../../packages/release-harness-core/src/source-enumerator.js';
 import { validateTopology, validateOrigins, validateScenario, validateHarnessConfig, ValidationError } from '../../packages/release-harness-core/src/validator.js';
 
 console.log('======================================================================');
@@ -414,13 +414,31 @@ function recordPass(num, name) {
   fs.writeFileSync(path.join(tmp, 'uploads', 'keep.txt'), 'tracked\n');
 
   // Generated store that must NOT be copied
-  fs.writeFileSync(path.join(tmp, '.gitignore'), '.pnpm-store/\n.env\n');
+  fs.writeFileSync(path.join(tmp, '.gitignore'), '.pnpm-store/\n.env\nnode_modules/\n');
   fs.mkdirSync(path.join(tmp, '.pnpm-store'), { recursive: true });
   fs.writeFileSync(path.join(tmp, '.pnpm-store', 'blob.bin'), 'x'.repeat(1024));
   fs.writeFileSync(path.join(tmp, '.env'), 'DATABASE_URL=postgres://secret\n');
 
+  // A dependency shipping a test cert must NOT produce an adopter-facing warning
+  fs.mkdirSync(path.join(tmp, 'node_modules', 'some-dep'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'node_modules', 'some-dep', 'test.pem'), 'not mine\n');
+
+  // A file deleted from the worktree without staging the deletion
+  fs.writeFileSync(path.join(tmp, 'deleted-later.txt'), 'gone soon\n');
+
   execSync('git add -A', { cwd: tmp, stdio: 'ignore' });
   execSync('git commit -m init', { cwd: tmp, stdio: 'ignore' });
+  fs.rmSync(path.join(tmp, 'deleted-later.txt'));
+
+  // A nested independent git repository — git reports it as one bare directory entry
+  const inner = path.join(tmp, 'vendor-app');
+  fs.mkdirSync(inner, { recursive: true });
+  execSync('git init -b main', { cwd: inner, stdio: 'ignore' });
+  execSync('git config user.email "t@t.t"', { cwd: inner, stdio: 'ignore' });
+  execSync('git config user.name "t"', { cwd: inner, stdio: 'ignore' });
+  fs.writeFileSync(path.join(inner, 'inner.txt'), 'inner\n');
+  execSync('git add -A', { cwd: inner, stdio: 'ignore' });
+  execSync('git commit -m inner', { cwd: inner, stdio: 'ignore' });
 
   const res = enumerateSource(tmp);
 
@@ -435,9 +453,76 @@ function recordPass(num, name) {
     'Excluded but likely-needed file must produce a warning'
   );
 
+  // CONTRACT: every entry is a regular file that exists on disk (no directories,
+  // no index-only ghosts). Both the copier and the digester read these paths.
+  for (const rel of res.files) {
+    const st = fs.statSync(path.join(tmp, rel));
+    assert.ok(st.isFile(), `Enumerated entry must be an existing regular file: ${rel}`);
+  }
+
+  // CONTRACT: a nested git repo is a bare directory entry in git's output and
+  // must not reach a consumer that would readFileSync it (EISDIR).
+  assert.ok(!res.files.includes('vendor-app'), 'Nested sub-repo directory must not be an entry');
+  assert.ok(
+    !res.files.some((f) => f.startsWith('vendor-app/.git/')),
+    'Nested sub-repo .git content must never leak into enumeration'
+  );
+
+  // CONTRACT: a file deleted but not staged is in the index, not on disk (ENOENT).
+  assert.ok(
+    !res.files.includes('deleted-later.txt'),
+    'File deleted from the worktree without staging must not be enumerated'
+  );
+
+  // CONTRACT: no duplicates, and sorted ascending independent of git's ordering.
+  assert.strictEqual(new Set(res.files).size, res.files.length, 'Enumeration must contain no duplicates');
+  const shuffledSorted = [...res.files].reverse().sort();
+  assert.deepStrictEqual(res.files, shuffledSorted, 'Enumeration must be lexicographically sorted');
+
+  // Dependency-shipped credentials must not be reported as the adopter's problem.
+  assert.ok(
+    !res.warnings.some((w) => w.includes('node_modules/')),
+    'Exclusion warnings must not fire for files inside dependency directories'
+  );
+
   // Determinism
   assert.deepStrictEqual(enumerateSource(tmp).files, res.files, 'Enumeration must be deterministic');
 
+  // A non-git directory must fall back cleanly rather than throw.
+  const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'f29-plain-'));
+  fs.mkdirSync(path.join(plain, 'coverage'), { recursive: true });
+  fs.writeFileSync(path.join(plain, 'coverage', 'lcov.info'), 'generated\n');
+  fs.writeFileSync(path.join(plain, 'app.js'), 'export default 1;\n');
+  const plainRes = enumerateSource(plain);
+  assert.strictEqual(plainRes.strategy, 'filesystem', 'Non-git tree must use filesystem enumeration');
+  assert.ok(plainRes.files.includes('app.js'), 'Filesystem fallback must enumerate ordinary files');
+  assert.ok(
+    FALLBACK_IGNORED_NAMES.has('coverage') && FALLBACK_IGNORED_NAMES.has('node_modules'),
+    'FALLBACK_IGNORED_NAMES must name the denylisted generated directories'
+  );
+  assert.ok(
+    !plainRes.files.some((f) => f.startsWith('coverage/')),
+    'Filesystem fallback must apply FALLBACK_IGNORED_NAMES'
+  );
+  for (const rel of plainRes.files) {
+    assert.ok(fs.statSync(path.join(plain, rel)).isFile(), `Fallback entry must be a regular file: ${rel}`);
+  }
+
+  // A regular file passed as the source must degrade, not throw ENOTDIR.
+  const fileRes = enumerateSource(path.join(plain, 'app.js'));
+  assert.deepStrictEqual(fileRes.files, [], 'A regular file as source must enumerate to nothing');
+  assert.ok(
+    fileRes.warnings.some((w) => w.includes('not a directory')),
+    'A regular file as source must warn rather than throw'
+  );
+
+  // LIKELY_NEEDED_IGNORED is the rule set behind the .env warning above.
+  assert.ok(
+    LIKELY_NEEDED_IGNORED.some((re) => re.test('.env')) && LIKELY_NEEDED_IGNORED.some((re) => re.test('certs/a.pem')),
+    'LIKELY_NEEDED_IGNORED must match the build-critical ignored files it warns about'
+  );
+
+  fs.rmSync(plain, { recursive: true, force: true });
   fs.rmSync(tmp, { recursive: true, force: true });
   recordPass(29, 'Git-Aware Source Enumeration Preserves Nested Product Directories');
 }
