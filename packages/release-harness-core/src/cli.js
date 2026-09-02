@@ -717,11 +717,23 @@ async function handleRunLocal(args) {
     for (const warn of s.warnings) console.warn(`   ! ${warn}`);
   }
 
-  const flags = parseFlags(args);
+  const { flags, unknown } = parseFlags(args, KNOWN_FLAGS['run-local']);
+  if (unknown.length > 0) {
+    reportUnknownFlags(unknown);
+    return 3;
+  }
   const cwd = process.cwd();
   const runStartedAt = new Date().toISOString();
   const runId = flags['run-id'] || `run-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+  // A bare `--port-offset` parses to `true`, and any non-numeric value to NaN.
+  // Either would reach the compose environment as the string "NaN" and shift
+  // every health-check and probe port to NaN, so refuse it here rather than
+  // running against ports that cannot exist.
   const portOffset = parseInt(flags['port-offset'] || '0', 10);
+  if (!Number.isFinite(portOffset)) {
+    console.error(`Error: --port-offset requires an integer value (got ${JSON.stringify(flags['port-offset'])}).`);
+    return 3;
+  }
   const harnessDir = path.join(cwd, '.release-harness');
   const topologyFile = path.join(harnessDir, 'topology.json');
   const originsFile = path.join(harnessDir, 'origins.json');
@@ -874,11 +886,27 @@ async function handleRunLocal(args) {
       networkPolicy: topology.network_policy || null,
       evidenceDir: runEvidenceDir,
       workspaceDir: workSourceDir,
+      portOffset,
     });
 
     for (const sc of scenarios) {
       const res = await scenarioRunner.runScenario(sc);
       rawResults.push(res);
+
+      // A probe that reported a harness fault escalates the whole run to
+      // HARNESS_ERROR (exit 3) rather than failing the product. Nothing wrote
+      // to `harnessErrors` before this, so exit 3 was unreachable from the CLI
+      // and a harness gap was reported as the adopter's bug.
+      for (const obs of res.side_effect_observations || []) {
+        if (obs.is_harness_error) {
+          harnessErrors.push({
+            cause: obs.cause || 'HARNESS_CONFIGURATION',
+            message: `[${sc.id}] ${obs.observed_result}`,
+            scenario_id: sc.id,
+          });
+        }
+      }
+
       const mark = res.failed ? '✗' : '✓';
       console.log(`   ${mark} [${sc.id}] ${sc.name} → ${res.target_base_url} (${res.duration_ms}ms)`);
     }
@@ -941,7 +969,14 @@ async function handleRunLocal(args) {
       verdict.certification_status = 'UNPROVEN';
       verdict.certification_eligible = false;
       verdict.execution_mode = 'DEVELOPMENT';
-      verdict.exit_code = 2;
+      // A dirty tree makes a run non-certifiable; it does not make a harness
+      // fault or tampered evidence disappear. Downgrading those to 2 here would
+      // hide the very exit 3 the harness-error routing exists to produce, so an
+      // integrity failure keeps its own exit code and only a would-be
+      // pass/fail becomes UNPROVEN.
+      if (verdict.run_integrity === 'COMPLETE') {
+        verdict.exit_code = 2;
+      }
       if (!verdict.causes.includes('HARNESS_CONFIGURATION')) {
         verdict.causes.push('HARNESS_CONFIGURATION');
       }
