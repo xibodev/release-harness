@@ -62,6 +62,7 @@ export class SourceMaterializer {
         exists: false,
         commitSha: 'MISSING',
         isClean: false,
+        statusResolved: false,
         dirtyFiles: ['DIRECTORY_DOES_NOT_EXIST'],
         isIndependentRepo: false,
         treeDigest: '0000000000000000000000000000000000000000000000000000000000000000',
@@ -69,7 +70,13 @@ export class SourceMaterializer {
     }
 
     let commitSha = '0000000000000000000000000000000000000000';
-    let isClean = true;
+    // Fails closed: a tree is clean only when `git status` was actually run and
+    // actually came back empty. Defaulting to `true` with a swallowed catch
+    // certified every tree whose status could not be established - a missing git
+    // executable, a timeout, a permission error - as clean, which is the one
+    // answer the certification gate must never be given for free.
+    let isClean = false;
+    let statusResolved = false;
     let isIndependentRepo = false;
     let gitTopLevel = null;
     const dirtyFiles = [];
@@ -97,22 +104,32 @@ export class SourceMaterializer {
       // Not a git repo or git not available
     }
 
+    // `-uno` is deliberately ABSENT. Untracked-but-not-ignored files ARE
+    // materialized and digested by the enumerator on an --allow-dirty run, so
+    // suppressing them here would let the digest cover files the cleanliness
+    // gate never looked at. Ignored files remain excluded by git's own default,
+    // which matches what the enumerator excludes.
     try {
-      const status = execSync('git status --porcelain --no-ahead-behind -uno', {
+      const status = execSync('git status --porcelain --no-ahead-behind', {
         cwd: absPath,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
         timeout: 5000,
       }).trim();
 
-      if (status.length > 0) {
-        isClean = false;
+      statusResolved = true;
+      if (status.length === 0) {
+        isClean = true;
+      } else {
         for (const line of status.split('\n')) {
           if (line.trim()) dirtyFiles.push(line.trim());
         }
       }
     } catch {
-      // Git status failed
+      // Status unresolvable - `isClean` stays false. The sentinel is recorded in
+      // `dirtyFiles` so a run manifest names the reason rather than showing a
+      // tree that is dirty with nothing listed against it.
+      dirtyFiles.push('GIT_STATUS_UNRESOLVED');
     }
 
     const treeDigest = this.computeTreeDigest(absPath, enumeration ? enumeration.files : null);
@@ -121,6 +138,7 @@ export class SourceMaterializer {
       exists: true,
       commitSha,
       isClean,
+      statusResolved,
       dirtyFiles,
       isIndependentRepo,
       gitTopLevel,

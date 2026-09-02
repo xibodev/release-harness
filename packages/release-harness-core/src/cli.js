@@ -13,7 +13,7 @@ import { detectToolchain } from './toolchain.js';
 import { DockerComposeRunner } from './runner.js';
 import { ScenarioRunner } from './scenario-runner.js';
 import { parseScenarioFile } from './scenario-parser.js';
-import { validateTopology, validateOrigins } from './validator.js';
+import { validateTopology, validateOrigins, validateHarnessConfig, ValidationError } from './validator.js';
 
 const HARNESS_VERSION = '1.1.0';
 
@@ -550,10 +550,29 @@ async function handleCheckPr(args) {
       }
     }
 
-    // 4. Execute explicitly configured PR Gate commands (e.g. lint, typecheck, unit tests)
+    // 4. Load and validate the harness config, then execute its configured PR Gate
+    //    commands (e.g. lint, typecheck, unit tests). An unreadable or contract-
+    //    violating config is a harness configuration error (exit 3), not a silent
+    //    skip: pr_gate.commands are the checks this gate exists to run, so warning
+    //    and continuing would report PASS for a gate that never executed.
     if (fs.existsSync(configFile)) {
+      let config;
       try {
-        const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+        config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+        validateHarnessConfig(config);
+      } catch (configErr) {
+        console.error(`  ✗ Invalid harness.config.json: ${configErr.message}`);
+        if (configErr instanceof ValidationError) {
+          for (const detail of configErr.errors || []) {
+            console.error(`      - ${detail}`);
+          }
+        }
+        console.error('\nLevel 1 Gate: FAILED (Harness configuration error)');
+        return 3;
+      }
+      console.log(`✓ Harness config valid (${config.product_slug})`);
+
+      {
         const prCommands = config.pr_gate?.commands || [];
 
         if (prCommands.length > 0) {
@@ -585,8 +604,6 @@ async function handleCheckPr(args) {
             }
           }
         }
-      } catch (configErr) {
-        console.warn(`  ! Note: Could not parse harness.config.json for pr_gate: ${configErr.message}`);
       }
     }
 

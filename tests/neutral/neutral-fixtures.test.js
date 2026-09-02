@@ -13,7 +13,7 @@ import { enumerateSource, FALLBACK_IGNORED_NAMES, LIKELY_NEEDED_IGNORED } from '
 import { validateTopology, validateOrigins, validateScenario, validateHarnessConfig, ValidationError } from '../../packages/release-harness-core/src/validator.js';
 
 console.log('======================================================================');
-console.log('       Release-Harness: 30 Neutral Acceptance Fixtures Suite         ');
+console.log('       Release-Harness: 31 Neutral Acceptance Fixtures Suite         ');
 console.log('======================================================================\n');
 
 const testResults = [];
@@ -1128,6 +1128,89 @@ function recordPass(num, name) {
   recordPass(28, 'Component & Contract Mismatch Multi-Repo Graph Resolution Failure');
 }
 
+// F-31: Cleanliness Fails Closed When Git Status Cannot Be Resolved
+{
+  // A tree with no git repository above it: `git status` cannot answer, and the
+  // gate must therefore refuse to call it clean. The previous default certified
+  // exactly this case as clean without ever having checked.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'f31-clean-'));
+  fs.writeFileSync(path.join(tmp, 'file.txt'), 'no git repo here\n');
+
+  const wsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'f31-ws-'));
+  const mat = new SourceMaterializer(wsRoot);
+
+  // `os.tmpdir()` is not inside a repository on any supported platform, but a
+  // developer machine can surprise us. Assert the premise rather than silently
+  // testing the wrong branch.
+  let underRepo = true;
+  try {
+    execSync('git rev-parse --show-toplevel', { cwd: tmp, stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 });
+  } catch {
+    underRepo = false;
+  }
+  assert.strictEqual(underRepo, false, 'Fixture premise: the temp tree must not sit inside a git repository');
+
+  const info = mat.getSourceInfo(tmp);
+  assert.strictEqual(info.statusResolved, false, 'Non-git tree must report status unresolved');
+  assert.strictEqual(info.isClean, false, 'Unresolvable status must fail closed, never assume clean');
+  assert.ok(
+    info.dirtyFiles.includes('GIT_STATUS_UNRESOLVED'),
+    'An unresolvable status must name itself, not present as a dirty tree with nothing listed'
+  );
+
+  // The missing-directory sentinel must carry the same field, or a consumer
+  // reading `status_resolved` sees `undefined` for the one case that is most
+  // certainly unresolved.
+  const missing = mat.getSourceInfo(path.join(tmp, 'does', 'not', 'exist'));
+  assert.strictEqual(missing.exists, false, 'Fixture premise: the sentinel path must not exist');
+  assert.strictEqual(missing.statusResolved, false, 'The missing-directory sentinel must report status unresolved');
+  assert.strictEqual(missing.isClean, false, 'A missing directory is never clean');
+
+  // A real repository resolves status, and an untracked-but-not-ignored file
+  // makes it dirty. `-uno` would hide exactly this file while the enumerator
+  // still materializes and digests it, so the digest would cover content the
+  // cleanliness gate never inspected.
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'f31-repo-'));
+  execSync('git init -b main', { cwd: repo, stdio: 'ignore' });
+  execSync('git config user.email "t@t.t"', { cwd: repo, stdio: 'ignore' });
+  execSync('git config user.name "t"', { cwd: repo, stdio: 'ignore' });
+  fs.writeFileSync(path.join(repo, '.gitignore'), 'ignored.txt\n');
+  fs.writeFileSync(path.join(repo, 'tracked.txt'), 'committed\n');
+  execSync('git add -A', { cwd: repo, stdio: 'ignore' });
+  execSync('git commit -m init', { cwd: repo, stdio: 'ignore' });
+
+  const cleanInfo = mat.getSourceInfo(repo);
+  assert.strictEqual(cleanInfo.statusResolved, true, 'A real repository must resolve its status');
+  assert.strictEqual(cleanInfo.isClean, true, 'A committed tree with nothing else on disk is clean');
+  assert.deepStrictEqual(cleanInfo.dirtyFiles, [], 'A clean tree lists no dirty files');
+
+  // An IGNORED file must leave the tree clean: git excludes it by default and
+  // the enumerator excludes it too, so the two agree.
+  fs.writeFileSync(path.join(repo, 'ignored.txt'), 'build junk\n');
+  const stillClean = mat.getSourceInfo(repo);
+  assert.strictEqual(stillClean.isClean, true, 'A git-ignored file must not make the tree dirty');
+
+  // An UNTRACKED-but-not-ignored file must make it dirty. This is the assertion
+  // that fails if `-uno` is restored.
+  fs.writeFileSync(path.join(repo, 'untracked.txt'), 'not committed\n');
+  const dirtyInfo = mat.getSourceInfo(repo);
+  assert.strictEqual(dirtyInfo.statusResolved, true, 'Status is still resolvable on a dirty tree');
+  assert.strictEqual(
+    dirtyInfo.isClean,
+    false,
+    'An untracked-but-not-ignored file is materialized and digested, so it must count toward dirtiness'
+  );
+  assert.ok(
+    dirtyInfo.dirtyFiles.some((line) => line.includes('untracked.txt')),
+    'The untracked file must be named among the dirty files'
+  );
+
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.rmSync(repo, { recursive: true, force: true });
+  fs.rmSync(wsRoot, { recursive: true, force: true });
+  recordPass(31, 'Cleanliness Fails Closed When Git Status Cannot Be Resolved');
+}
+
 console.log('\n======================================================================');
-console.log(`  ALL 30 / 30 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
+console.log(`  ALL 31 / 31 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
 console.log('======================================================================\n');
