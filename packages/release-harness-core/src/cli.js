@@ -502,6 +502,18 @@ npx release-harness run-local
       writeFileSafe(path.join(cwd, '.cursorrules'), fs.readFileSync(path.join(tmplAgentsDir, '.cursorrules'), 'utf8'), '.cursorrules');
     }
 
+    // The adoption guide for the agent doing the integration. It states the
+    // beats that are invisible from the outside -- chiefly that this bundle
+    // ships with init rather than npm install, so an agent that looked for the
+    // skills first and found nothing does not conclude they do not exist.
+    if (fs.existsSync(path.join(templatesDir, 'AI-ADOPTION.md'))) {
+      writeFileSafe(
+        path.join(cwd, 'AI-ADOPTION.md'),
+        fs.readFileSync(path.join(templatesDir, 'AI-ADOPTION.md'), 'utf8'),
+        'AI-ADOPTION.md'
+      );
+    }
+
     // Claude Code: .claude/agents & .claude/skills
     const claudeAgentsDir = path.join(cwd, '.claude', 'agents');
     const claudeSkillsDir = path.join(cwd, '.claude', 'skills');

@@ -20,9 +20,9 @@ Consumable by human developers and autonomous AI coding agents as a standard npm
 - **Detached Source Materialization**: Guaranteed zero repository / `.git` pollution during local test runs.
 - **Real Playwright Browser Automation**: Declarative scenarios compiled directly to Playwright Chromium with deep network egress interception, direct-IP blocking, and negative control verification.
 - **Existing Playwright Suite Adapter**: Native runner that executes existing product-owned Playwright suites (`playwright test --reporter=json`) and normalizes test IDs, traces, and attachments without rewriting code.
-- **Fail-Closed Side-Effect Probing**: Verifies out-of-band state changes (MinIO/S3 object creation, bounded read-only PostgreSQL queries, Redis keys, Mailpit messages) with `/tmp` local path bypass detection.
-- **Autonomous AI Agent Integration**: Scaffolds 17 cognitive skills and multi-runtime agent personas (`release-conductor`) for Claude Code, GitHub Copilot, opencode, Cursor, and Codex.
-- **28 Neutral Acceptance Fixtures**: Hardened against false certification with strict coverage floors, gate-relative skip policies, and deterministic replay.
+- **Fail-Closed Side-Effect Probing**: Verifies out-of-band state changes (MinIO/S3 objects, Redis keys, Mailpit messages) with `/tmp` local path bypass detection, plus project-owned **custom probes** for products whose deliverable is a file.
+- **Autonomous AI Agent Integration**: `init --with-agents` scaffolds 18 cognitive skills and multi-runtime agent personas (`release-conductor`) for Claude Code, GitHub Copilot, opencode, Cursor, and Codex.
+- **38 Neutral Acceptance Fixtures**: Hardened against false certification with strict coverage floors, gate-relative skip policies, and deterministic replay.
 
 ---
 
@@ -45,15 +45,15 @@ npx release-harness doctor
 
 ### 2. Initialize project contracts & AI agents
 ```bash
-npx release-harness init
+npx release-harness init --with-agents
 ```
 This scaffolds:
 - `.release-harness/` (contract specifications: `topology.json`, `origins.json`, `harness.config.json`, `scenarios/smoke.json`)
-- `AGENTS.md` & `.cursorrules` in project root
+- `AGENTS.md`, `AI-ADOPTION.md` & `.cursorrules` in project root
 - Multi-runtime agent instructions (`.claude/`, `.github/`, `.opencode/`, `.copilot/`)
-- 17 specialized AI skill playbooks for discovery, pre-release audits, and bug fixing.
+- 18 specialized AI skill playbooks for discovery, pre-release audits, and bug fixing, scaffolded under `release-harness-*` names so they cannot shadow skills you already have.
 
-*(To scaffold contracts only without agent instructions, run `npx release-harness init --contracts-only`).*
+*(A bare `npx release-harness init` writes contracts only; `--contracts-only` states that explicitly. The two scaffolding flags are mutually exclusive. **The skill bundle ships with `init --with-agents`, not with `npm install`** — it lives inside the package until init copies it out.)*
 
 ### 3. Run Level 1 PR Integration Gate
 ```bash
@@ -77,7 +77,7 @@ npx release-harness clean
 Tell your AI agent (Claude Code, GitHub Copilot, opencode, Cursor):
 
 ```text
-Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating.
+Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating. Run `npx release-harness init --with-agents` first — the skill bundle ships with init, not with npm install — then read AI-ADOPTION.md and use project-cartographer to derive the contracts rather than reading the repository by hand.
 ```
 
 Or delegate directly using the shipped `release-conductor` persona:

@@ -84,6 +84,7 @@ assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'topology
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'origins.json')), 'origins.json must be created');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'scenarios', 'smoke.json')), 'smoke.json must be created');
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'A bare init must not scaffold AGENTS.md');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, 'AI-ADOPTION.md')), 'A bare init must not scaffold AI-ADOPTION.md');
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.claude')), 'A bare init must not scaffold agents implicitly');
 assert.ok(bareInitOut.includes('--with-agents'), 'A bare init must name the flag that scaffolds the agent bundle');
 console.log('  ✓ Bare init wrote contracts only and pointed at --with-agents');
@@ -109,6 +110,21 @@ assert.ok(fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'AGENTS.md mus
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md')), 'Claude agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.github', 'agents', 'release-conductor.agent.md')), 'GitHub Copilot agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md')), 'opencode agent must be scaffolded');
+
+// The adoption guide reaches the project the same way the skills do -- through
+// init. It has to state that, or an agent that looked for the bundle before
+// running init concludes the bundle does not exist.
+const adoptionPath = path.join(consumerRepoDir, 'AI-ADOPTION.md');
+assert.ok(fs.existsSync(adoptionPath), 'AI-ADOPTION.md must be scaffolded with --with-agents');
+const adoption = fs.readFileSync(adoptionPath, 'utf8');
+assert.ok(/init --with-agents/.test(adoption), 'AI-ADOPTION.md must name the command that scaffolds the bundle');
+assert.ok(/not with `npm install`|not with npm install/.test(adoption), 'AI-ADOPTION.md must say the bundle does not arrive with npm install');
+assert.ok(adoption.includes('project-cartographer'), 'AI-ADOPTION.md must point at project-cartographer');
+for (const code of ['| 0 |', '| 1 |', '| 2 |', '| 3 |', '| 4 |']) {
+  assert.ok(adoption.includes(code), `AI-ADOPTION.md exit-code table must cover ${code}`);
+}
+assert.ok(/[Ee]xit 3 means the harness could not do its job/.test(adoption), 'AI-ADOPTION.md must explain that exit 3 is not a product failure');
+console.log('  ✓ AI-ADOPTION.md scaffolded with the adoption order and exit-code table');
 
 // Skills scaffold under the release-harness- namespace so they cannot shadow a
 // same-named skill the consumer already has installed globally.

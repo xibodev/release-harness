@@ -48,7 +48,7 @@
       <ul class="nav-links">
         <li><a href="#ai-agent-onboarding" class="nav-link">AI Onboarding Prompt</a></li>
         <li><a href="#release-conductor-agent" class="nav-link">release-conductor Agent</a></li>
-        <li><a href="#skill-catalog" class="nav-link">17 Bundled Cognitive Skills</a></li>
+        <li><a href="#skill-catalog" class="nav-link">18 Bundled Cognitive Skills</a></li>
         <li><a href="#ai-prompts" class="nav-link">Role-Based Delegation Recipes</a></li>
         <li><a href="#deterministic-boundary" class="nav-link">Deterministic Core Rule</a></li>
       </ul>
@@ -173,7 +173,7 @@
     <section id="architecture-pipeline">
       <h2 id="architecture-pipeline">Dual-Core Architecture: Intelligence + Determinism</h2>
       <p>
-        Release-Harness pairs an <strong>AI Intelligence Layer</strong> (17 cognitive skills for mapping, audits, and bug fixing) with a <strong>Deterministic Core Engine</strong> (pure Node.js/Playwright/Docker with zero prompts and zero hallucinations).
+        Release-Harness pairs an <strong>AI Intelligence Layer</strong> (18 cognitive skills for mapping, audits, and bug fixing) with a <strong>Deterministic Core Engine</strong> (pure Node.js/Playwright/Docker with zero prompts and zero hallucinations).
       </p>
 
       <div class="diagram-container">
@@ -419,15 +419,16 @@ npx release-harness init</code></pre>
         <span>AI ONBOARDING PROMPT</span>
         <button class="copy-btn">COPY</button>
       </div>
-      <pre><code>Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating.</code></pre>
+      <pre><code>Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating. Run `npx release-harness init --with-agents` first &mdash; the skill bundle ships with init, not with npm install &mdash; then read AI-ADOPTION.md and use project-cartographer to derive the contracts rather than reading the repository by hand.</code></pre>
 
       <p><strong>What the AI agent does automatically:</strong></p>
       <ul>
         <li>Installs <code>@xibodev/release-harness</code> as a project dev dependency.</li>
         <li>Executes <code>npx release-harness doctor</code> to verify the environment.</li>
-        <li>Runs <code>npx release-harness init</code> to scaffold <code>.release-harness/</code>, <code>AGENTS.md</code>, and multi-runtime skill libraries.</li>
-        <li>Inspects your <code>package.json</code>, Docker configs, and application routes to configure <code>topology.json</code> and <code>origins.json</code> with your actual service ports and health endpoints.</li>
-        <li>Authors initial smoke scenarios under <code>.release-harness/scenarios/</code> and runs <code>npx release-harness run-local</code> to verify a certified green baseline.</li>
+        <li>Runs <code>npx release-harness init --with-agents</code> to scaffold <code>.release-harness/</code>, <code>AGENTS.md</code>, <code>AI-ADOPTION.md</code>, and the multi-runtime skill libraries. The bundle ships inside the package and only reaches the project through <code>init</code>, so an agent looking for <code>project-cartographer</code> before this step will not find it.</li>
+        <li>Reads <code>AI-ADOPTION.md</code> for the adoption order and the exit-code table.</li>
+        <li>Uses <code>project-cartographer</code> to derive <code>topology.json</code> and <code>origins.json</code> from your real ports, health endpoints, and service definitions &mdash; rather than hand-enumerating routes and Docker files.</li>
+        <li>Uses <code>scenario-compiler</code> to author scenarios under <code>.release-harness/scenarios/</code>, including the side-effect probes that assert what the product produced, then runs <code>npx release-harness run-local</code> to verify a certified green baseline.</li>
       </ul>
 
       <!-- The Shipped release-conductor Persona -->
@@ -443,10 +444,10 @@ npx release-harness init</code></pre>
         <li><strong>Canonical Definition:</strong> <code>agents/release-conductor.md</code></li>
       </ul>
 
-      <!-- The 17 Bundled Skills -->
-      <h3 id="skill-catalog">The 17 Bundled Cognitive Skills</h3>
+      <!-- The 18 Bundled Skills -->
+      <h3 id="skill-catalog">The 18 Bundled Cognitive Skills</h3>
       <p>
-        Running <code>npx release-harness init</code> automatically populates your project's local AI skill library (under <code>.claude/skills/</code> and <code>.opencode/skills/</code>) with 17 specialized release playbooks:
+        Running <code>npx release-harness init --with-agents</code> populates your project's local AI skill library (under <code>.claude/skills/</code> and <code>.opencode/skills/</code>) with 18 specialized release playbooks, each scaffolded under a <code>release-harness-</code> prefixed name so it cannot shadow a same-named skill you already have. A bare <code>init</code> writes contracts only:
       </p>
 
       <div class="skill-item">
