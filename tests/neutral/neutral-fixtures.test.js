@@ -2,19 +2,20 @@ import assert from 'node:assert';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
+import net from 'node:net';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { evaluateRun } from '../../packages/release-harness-core/src/evaluator.js';
 import { EvidenceSealer } from '../../packages/release-harness-core/src/sealer.js';
 import { PlaywrightSuiteAdapter } from '../../packages/release-harness-core/src/playwright-adapter.js';
-import { verifySideEffect, probeS3, probePostgres, probeRedis, probeMailpit } from '../../packages/release-harness-core/src/probes.js';
+import { verifySideEffect, probeS3, probePostgres, probeRedis, probeMailpit, probeCustom } from '../../packages/release-harness-core/src/probes.js';
 import { SourceMaterializer } from '../../packages/release-harness-core/src/materializer.js';
 import { enumerateSource, FALLBACK_IGNORED_NAMES, LIKELY_NEEDED_IGNORED } from '../../packages/release-harness-core/src/source-enumerator.js';
 import { validateTopology, validateOrigins, validateScenario, validateHarnessConfig, ValidationError } from '../../packages/release-harness-core/src/validator.js';
 import { ScenarioRunner } from '../../packages/release-harness-core/src/scenario-runner.js';
 
 console.log('======================================================================');
-console.log('       Release-Harness: 35 Neutral Acceptance Fixtures Suite         ');
+console.log('       Release-Harness: 38 Neutral Acceptance Fixtures Suite         ');
 console.log('======================================================================\n');
 
 const testResults = [];
@@ -1639,6 +1640,261 @@ function recordPass(num, name) {
   recordPass(35, 'Port Offset Reaches Side-Effect Probes');
 }
 
+// F-36: sql_query Fails Closed Rather Than Returning An Unverified Green
+{
+  // probePostgres never connected to Postgres or executed SQL. It opened a TCP
+  // socket, dropped expected_rows_count and forbidden_values into an empty
+  // block, and returned ok:true claiming the read-only assertion was
+  // "satisfied" whenever the port answered. A silent false pass in a tool whose
+  // whole product is a trustworthy verdict.
+  const res = await probePostgres({
+    host: '127.0.0.1',
+    port: 5432,
+    probe_type: 'sql_query',
+    query: 'SELECT count(*) FROM users',
+    expected_rows_count: 1,
+  });
+
+  assert.strictEqual(res.ok, false, 'sql_query must never report success without executing SQL');
+  assert.strictEqual(res.cause, 'HARNESS_CONFIGURATION', 'An unimplemented probe is the harness at fault, not the product');
+  assert.strictEqual(res.isHarnessError, true, 'The fault must be flagged so the CLI escalates it to exit 3');
+  assert.ok(/not implemented/i.test(res.message), 'The message must say the probe is unimplemented');
+  assert.ok(/custom/i.test(res.message), 'The message must point the author at the custom probe');
+  assert.ok(
+    /expected_rows_count/.test(res.message) && /forbidden_values/.test(res.message),
+    'The message must name the assertions it cannot evaluate, so the author knows what was silently ignored'
+  );
+
+  // An open port is not an executed query. Even pointed at a socket that IS
+  // listening, the probe must refuse rather than infer a passing assertion --
+  // this is the exact false-green path the old code took.
+  const listener = net.createServer(() => {});
+  await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));
+  const livePort = listener.address().port;
+  try {
+    const live = await probePostgres({ host: '127.0.0.1', port: livePort, probe_type: 'sql_query', query: 'SELECT 1' });
+    assert.strictEqual(live.ok, false, 'A listening port must not be mistaken for a satisfied SQL assertion');
+    assert.strictEqual(live.cause, 'HARNESS_CONFIGURATION');
+  } finally {
+    listener.close();
+  }
+
+  // The probe names the target it was pointed at, which is how an operator
+  // locates the offending side-effect and how a port-shifted run is provable.
+  assert.ok(res.message.includes('127.0.0.1:5432'), 'The message must name the declared target');
+
+  // The read-only guard still rejects mutating SQL FIRST, with its own more
+  // specific message. Reordering the two would tell a DROP TABLE author to go
+  // build a custom probe that would happily run it.
+  const mutating = await probePostgres({ probe_type: 'sql_query', query: 'DROP TABLE users' });
+  assert.strictEqual(mutating.ok, false);
+  assert.strictEqual(mutating.cause, 'HARNESS_CONFIGURATION');
+  assert.ok(/mutating/i.test(mutating.message), 'Mutating SQL keeps its own specific rejection');
+  assert.ok(!/not implemented/i.test(mutating.message), 'The mutating rejection must win over the unimplemented notice');
+
+  recordPass(36, 'sql_query Fails Closed Rather Than Returning An Unverified Green');
+}
+
+// F-37: Custom Probe Executes A Committed Command And Attributes Failure Correctly
+{
+  // Every other shipped probe is web-service-shaped. A product whose deliverable
+  // is a FILE -- a rendered video, a compiled binary, a generated PDF -- could
+  // not assert on its own output, so the gate could certify green while saying
+  // nothing about whether the artifact was valid.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'f37-custom-'));
+  try {
+    const evidenceDir = path.join(tmp, 'evidence');
+    fs.mkdirSync(evidenceDir, { recursive: true });
+
+    // process.execPath keeps this deterministic -- no external binary required.
+    const okScript = path.join(tmp, 'ok.mjs');
+    fs.writeFileSync(okScript, 'console.log("artifact valid"); process.exit(0);\n');
+    const failScript = path.join(tmp, 'fail.mjs');
+    fs.writeFileSync(failScript, 'console.error("artifact corrupt: moov atom missing"); process.exit(2);\n');
+
+    // 1. A matching exit code passes, and it routes through verifySideEffect --
+    //    removing the `service === 'custom'` dispatch branch fires this.
+    const pass = await verifySideEffect({
+      service: 'custom',
+      probe_type: 'custom',
+      params: { command: process.execPath, args: [okScript], expect_exit_code: 0, cwd: tmp, evidenceDir, probeId: 'artifact-ok' },
+    });
+    assert.strictEqual(pass.ok, true, 'An exit code matching expect_exit_code must pass');
+    assert.ok(!pass.isHarnessError, 'A passing probe is not a harness error');
+
+    // 2. A mismatched exit code is the PRODUCT's failure, not the harness's.
+    //    Attribution is the whole point: mislabelling this would tell an adopter
+    //    their harness is broken when their artifact is.
+    const fail = await verifySideEffect({
+      service: 'custom',
+      probe_type: 'custom',
+      params: { command: process.execPath, args: [failScript], expect_exit_code: 0, cwd: tmp, evidenceDir, probeId: 'artifact-bad' },
+    });
+    assert.strictEqual(fail.ok, false, 'A non-matching exit code must fail');
+    assert.strictEqual(fail.cause, 'PRODUCT_BUG', 'A failed project assertion is a product failure');
+    assert.ok(!fail.isHarnessError, 'A failed assertion must NOT be flagged as a harness error');
+    assert.ok(fail.message.includes('exited 2'), 'The message must report the actual exit code');
+    assert.ok(fail.message.includes('expected 0'), 'The message must report the expected exit code');
+    assert.ok(fail.message.includes('moov atom missing'), 'A stderr excerpt must reach the operator');
+
+    // 3. A non-zero expectation is honoured, so a probe can assert that a
+    //    command correctly REFUSES something.
+    const expectsTwo = await probeCustom({
+      command: process.execPath, args: [failScript], expect_exit_code: 2, cwd: tmp,
+    });
+    assert.strictEqual(expectsTwo.ok, true, 'expect_exit_code must be compared, not assumed to be zero');
+
+    // 4. A missing or malformed command is a CONTRACT error, never a product bug.
+    const noCmd = await verifySideEffect({ service: 'custom', probe_type: 'custom', params: {} });
+    assert.strictEqual(noCmd.ok, false);
+    assert.strictEqual(noCmd.cause, 'HARNESS_CONFIGURATION');
+    assert.strictEqual(noCmd.isHarnessError, true);
+    assert.ok(/command/i.test(noCmd.message), 'The message must name the missing parameter');
+
+    const blankCmd = await probeCustom({ command: '   ' });
+    assert.strictEqual(blankCmd.cause, 'HARNESS_CONFIGURATION', 'A whitespace-only command is not a command');
+
+    const badArgs = await probeCustom({ command: process.execPath, args: '--not-an-array' });
+    assert.strictEqual(badArgs.ok, false);
+    assert.strictEqual(badArgs.cause, 'HARNESS_CONFIGURATION', 'Non-array args is a contract error');
+    assert.strictEqual(badArgs.isHarnessError, true);
+
+    // execFile throws a synchronous RangeError on a non-integer timeout. Without
+    // this guard the rejection escapes into the runner's catch, which files
+    // anything unrecognised as PRODUCT_BUG -- blaming the adopter's product for
+    // their own contract typo.
+    const badTimeout = await probeCustom({ command: process.execPath, args: [okScript], timeoutMs: 'soon' });
+    assert.strictEqual(badTimeout.ok, false);
+    assert.strictEqual(badTimeout.cause, 'HARNESS_CONFIGURATION', 'A malformed timeout is a contract error, not a product bug');
+    assert.strictEqual(badTimeout.isHarnessError, true);
+
+    // 5. A command that cannot spawn at all is a contract error, not a product bug.
+    const spawnFail = await probeCustom({
+      command: path.join(tmp, 'no-such-binary-anywhere'), args: [], cwd: tmp,
+    });
+    assert.strictEqual(spawnFail.ok, false);
+    assert.strictEqual(spawnFail.cause, 'HARNESS_CONFIGURATION', 'An unspawnable command is a contract error');
+    assert.strictEqual(spawnFail.isHarnessError, true);
+    assert.ok(/could not execute/i.test(spawnFail.message), 'The message must say the command never ran');
+
+    // 6. A hung command is killed and reported as an ENVIRONMENT fault -- the
+    //    harness cannot tell whether the product would eventually have answered.
+    const hangScript = path.join(tmp, 'hang.mjs');
+    fs.writeFileSync(hangScript, 'setTimeout(() => {}, 30000);\n');
+    const timedOut = await probeCustom({
+      command: process.execPath, args: [hangScript], timeoutMs: 900, cwd: tmp,
+    });
+    assert.strictEqual(timedOut.ok, false, 'A command exceeding its timeout must fail');
+    assert.strictEqual(timedOut.cause, 'HARNESS_ENVIRONMENT', 'A timeout is an environment fault');
+    assert.strictEqual(timedOut.isHarnessError, true);
+    assert.ok(/timeout/i.test(timedOut.message), 'The message must name the timeout');
+
+    // 7. shell:false -- a contract value cannot smuggle in a second command.
+    //    If the shell ran, the metacharacters would execute instead of arriving
+    //    as one inert argv entry.
+    const inert = await probeCustom({
+      command: process.execPath,
+      args: ['-e', 'if (process.argv[1] !== "; echo PWNED") process.exit(9)', '; echo PWNED'],
+      cwd: tmp,
+    });
+    assert.strictEqual(inert.ok, true, 'Shell metacharacters must arrive as one literal argument, never be interpreted');
+
+    recordPass(37, 'Custom Probe Executes A Committed Command And Attributes Failure Correctly');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+}
+
+// F-38: Custom Probe Output Is Sealed As Probe Evidence
+{
+  // A verdict is only as good as what it can show. The probe's outcome must
+  // land under probes/ so the sealer categorizes it, hashes it into
+  // evidence.manifest.json, and integrity verification covers it.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'f38-seal-'));
+  try {
+    const evidenceDir = path.join(tmp, 'evidence');
+    fs.mkdirSync(evidenceDir, { recursive: true });
+    const okScript = path.join(tmp, 'ok.mjs');
+    fs.writeFileSync(okScript, 'console.log("rendered 240 frames"); console.error("warn: dropped 1"); process.exit(0);\n');
+
+    // probeId is assembled from scenario and service ids and may contain path
+    // separators. It must be collapsed to a safe basename so the write cannot
+    // escape probes/.
+    const res = await probeCustom({
+      command: process.execPath,
+      args: [okScript],
+      cwd: tmp,
+      evidenceDir,
+      probeId: 'S-RENDER/custom:custom',
+    });
+
+    assert.strictEqual(res.ok, true);
+    assert.ok(res.evidencePath, 'A probe given an evidenceDir must return where it sealed its output');
+    assert.ok(fs.existsSync(res.evidencePath), 'The sealed evidence file must exist on disk');
+
+    const rel = path.relative(evidenceDir, res.evidencePath).replace(/\\/g, '/');
+    assert.ok(rel.startsWith('probes/'), `Evidence must land under probes/ for sealer categorization (got "${rel}")`);
+    assert.ok(!rel.includes('..'), 'A probeId must not be able to escape the probes directory');
+    assert.strictEqual(rel, 'probes/S-RENDER_custom_custom.json', 'The probeId must be sanitized into a safe filename');
+
+    const sealed = JSON.parse(fs.readFileSync(res.evidencePath, 'utf8'));
+    assert.strictEqual(sealed.exit_code, 0, 'The actual exit code must be recorded');
+    assert.strictEqual(sealed.expect_exit_code, 0, 'The expectation must be recorded alongside the outcome');
+    assert.strictEqual(sealed.timed_out, false);
+    assert.strictEqual(sealed.command, process.execPath, 'The command executed must be recorded');
+    assert.deepStrictEqual(sealed.args, [okScript], 'The arguments must be recorded');
+    assert.ok(sealed.stdout.includes('rendered 240 frames'), 'stdout must be captured');
+    assert.ok(sealed.stderr.includes('warn: dropped 1'), 'stderr must be captured');
+    assert.strictEqual(typeof sealed.elapsed_ms, 'number', 'Timing must be recorded');
+
+    // A FAILING probe must leave the same evidence a passing one does.
+    // Evidence only of successes is not evidence.
+    const failScript = path.join(tmp, 'fail.mjs');
+    fs.writeFileSync(failScript, 'console.error("corrupt"); process.exit(3);\n');
+    const failed = await probeCustom({
+      command: process.execPath, args: [failScript], cwd: tmp, evidenceDir, probeId: 'render-failed',
+    });
+    assert.strictEqual(failed.ok, false);
+    assert.ok(failed.evidencePath && fs.existsSync(failed.evidencePath), 'A failing probe must still seal its evidence');
+    assert.strictEqual(JSON.parse(fs.readFileSync(failed.evidencePath, 'utf8')).exit_code, 3);
+
+    // The sealer already routes probes/ to the 'probe' category and the manifest
+    // schema already permits it, so this seals with no sealer change. Verified,
+    // not assumed.
+    const sealer = new EvidenceSealer(evidenceDir, 'f38-run');
+    const { manifest } = sealer.sealEvidence();
+    const entry = manifest.files.find((f) => f.path === 'probes/S-RENDER_custom_custom.json');
+    assert.ok(entry, 'The probe output must appear in the sealed evidence manifest');
+    assert.strictEqual(entry.category, 'probe', 'Probe output must be categorized as probe evidence');
+    assert.ok(/^[a-f0-9]{64}$/.test(entry.sha256), 'The sealed probe evidence must be hashed');
+    assert.ok(manifest.files.some((f) => f.path === 'probes/render-failed.json'), 'The failing probe evidence must be sealed too');
+    assert.strictEqual(sealer.verifyIntegrity().ok, true, 'Sealed probe evidence must pass integrity verification');
+
+    // An unwritable evidence directory must fail LOUDLY. A swallowed write
+    // error would leave the verdict claiming sealed evidence for a file that is
+    // not there, surfacing later as an unexplained manifest mismatch.
+    const notADir = path.join(tmp, 'not-a-directory');
+    fs.writeFileSync(notADir, 'x');
+    const unsealable = await probeCustom({
+      command: process.execPath, args: [okScript], cwd: tmp, evidenceDir: notADir, probeId: 'nowhere',
+    });
+    assert.strictEqual(unsealable.ok, false, 'A probe whose evidence cannot be sealed must not report success');
+    assert.strictEqual(unsealable.cause, 'HARNESS_ENVIRONMENT');
+    assert.strictEqual(unsealable.isHarnessError, true);
+    assert.ok(/evidence could not be sealed/i.test(unsealable.message), 'The message must name the sealing failure');
+
+    // With no evidenceDir the probe still adjudicates; it just seals nothing.
+    const noEvidence = await probeCustom({ command: process.execPath, args: [okScript], cwd: tmp });
+    assert.strictEqual(noEvidence.ok, true);
+    assert.strictEqual(noEvidence.evidencePath, null, 'Without an evidenceDir there is no evidence path to report');
+
+    recordPass(38, 'Custom Probe Output Is Sealed As Probe Evidence');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+}
+
+
 console.log('\n======================================================================');
-console.log(`  ALL 35 / 35 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
+console.log(`  ALL 38 / 38 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
 console.log('======================================================================\n');
