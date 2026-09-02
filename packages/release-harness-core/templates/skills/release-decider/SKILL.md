@@ -1,7 +1,7 @@
 ---
-name: release-decider
-description: Aggregates code-change-review and test-coverage-audit results into a release readiness assessment. Computes a risk matrix across all change areas, generates a release notes draft (user-facing changelog), produces a pre-prod checklist (migrations, env vars, rollback plan), and delivers a Go/No-Go recommendation with supporting evidence. Use when asked to "release readiness", "go/no-go", "can we release", "pre-prod check", or "generate changelog".
-compatibility: Requires code-change-review and test-coverage-audit outputs. Python 3.8+ for risk scoring.
+name: release-harness-release-decider
+description: Aggregates release-harness-code-change-review and release-harness-test-coverage-audit results into a release readiness assessment. Computes a risk matrix across all change areas, generates a release notes draft (user-facing changelog), produces a pre-prod checklist (migrations, env vars, rollback plan), and delivers a Go/No-Go recommendation with supporting evidence. Use when asked to "release readiness", "go/no-go", "can we release", "pre-prod check", or "generate changelog".
+compatibility: Requires release-harness-code-change-review and release-harness-test-coverage-audit outputs. Python 3.8+ for risk scoring.
 allowed-tools:
   - Read
   - Grep
@@ -17,8 +17,8 @@ Use this skill to turn review evidence into a release decision. It should not re
 
 Load available artifacts from:
 
-- `code-change-review`: change inventory and risk annotations
-- `test-coverage-audit`: gap analysis and coverage percentages
+- `release-harness-code-change-review`: change inventory and risk annotations
+- `release-harness-test-coverage-audit`: gap analysis and coverage percentages
 - `e2e-playwright-test` results, if available: pass rates, failing journeys, flaky tests
 - `ux-design-review` results, if available: release-facing UX issues
 
@@ -157,7 +157,7 @@ Recommended entry shape:
     "category": "release-readiness",
     "severity": "high",
     "summary": "Document and set new env vars in staging before pre-prod deployment",
-    "source": ["code-change-review", "release-readiness"],
+    "source": ["release-harness-code-change-review", "release-readiness"],
     "blocking": true
   }
 ]
@@ -176,8 +176,8 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 
 ### Required inputs
 
-- `results/<ts>/release/changes.json` from `code-change-review`.
-- `results/<ts>/release/coverage.json` from `test-coverage-audit`.
+- `results/<ts>/release/changes.json` from `release-harness-code-change-review`.
+- `results/<ts>/release/coverage.json` from `release-harness-test-coverage-audit`.
 - When available: `results/<ts>/e2e/headless/headless-report.json`, `results/<ts>/e2e/headed/headed-uat-report.json`, `results/<ts>/ux/fix-plan.json`.
 
 ### Outputs this skill produces

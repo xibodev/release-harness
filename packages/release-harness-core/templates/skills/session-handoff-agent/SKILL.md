@@ -1,5 +1,5 @@
 ---
-name: session-handoff-agent
+name: release-harness-session-handoff-agent
 description: >-
   Captures a session handoff at every pause — brain checkpoint
   when reachable, ALWAYS a markdown note in

@@ -1,7 +1,7 @@
 ---
-name: post-deploy-window-planner
-description: Plans the post-deployment observation window — what to watch in the first 30 minutes, first 24 hours, and the criteria that should trigger a retrospective. Inspired by the Production Ready Checklist's Post-Deployment section. Produces a structured plan that the on-call engineer can follow without guessing. Use when asked to "plan post-deploy window", "what should I watch after release", "set up 24-hour monitoring", or after deployment-plan-generator.
-compatibility: Works with any source repo. Reads monitoring-audit output when present.
+name: release-harness-post-deploy-window-planner
+description: Plans the post-deployment observation window — what to watch in the first 30 minutes, first 24 hours, and the criteria that should trigger a retrospective. Inspired by the Production Ready Checklist's Post-Deployment section. Produces a structured plan that the on-call engineer can follow without guessing. Use when asked to "plan post-deploy window", "what should I watch after release", "set up 24-hour monitoring", or after release-harness-deployment-plan-generator.
+compatibility: Works with any source repo. Reads release-harness-monitoring-audit output when present.
 allowed-tools:
   - Read
   - Grep
@@ -27,13 +27,13 @@ Generate `./.quality-run/results/<ts>/release/post-deploy-window.md` with this s
 
 ## Window 1: First 30 minutes (active watch)
 
-**Owner:** <on-call engineer from monitoring-audit, else placeholder>
+**Owner:** <on-call engineer from release-harness-monitoring-audit, else placeholder>
 **Cadence:** continuous attention. No context-switching to unrelated work.
 
 ### What to watch
 - Error rate dashboard: <link or placeholder>
 - p95 latency dashboard: <link or placeholder>
-- Health endpoint(s): <list from monitoring-audit>
+- Health endpoint(s): <list from release-harness-monitoring-audit>
 - Critical journey synthetic checks: <list from journey-mapping>
 - Recent log stream filtered to `level >= warn`.
 
@@ -107,14 +107,14 @@ If a retrospective is scheduled, fill in:
 
 ## Hard rules
 
-- Never recommend "monitor everything" — choose the dashboards that the monitoring-audit found OR explicitly mark the gap.
+- Never recommend "monitor everything" — choose the dashboards that the release-harness-monitoring-audit found OR explicitly mark the gap.
 - Tripwire thresholds default to: 1% error rate, 50% p95 regression. Override only when the project has documented SLOs (search `docs/` for `SLO`, `error_budget`, `latency_objective`).
-- Owners must be real people or rotations. If monitoring-audit shows no on-call wiring, mark `<unassigned>` and emit a fix-plan item.
+- Owners must be real people or rotations. If release-harness-monitoring-audit shows no on-call wiring, mark `<unassigned>` and emit a fix-plan item.
 - Never silently lengthen Window 1 beyond 30 minutes — that's the active-watch contract.
 
 ## Gates
 
-- If monitoring-audit reports `critical` (no error tracking, no health endpoint, no on-call path), refuse to mark the deployment plan as "ready to execute" and add a release-blocking fix-plan item.
+- If release-harness-monitoring-audit reports `critical` (no error tracking, no health endpoint, no on-call path), refuse to mark the deployment plan as "ready to execute" and add a release-blocking fix-plan item.
 
 ## Output
 
@@ -132,11 +132,11 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 
 ### Hard rules
 
-- Never recommend "monitor everything" — list only what `monitoring-audit` found, or explicitly mark the gap.
+- Never recommend "monitor everything" — list only what `release-harness-monitoring-audit` found, or explicitly mark the gap.
 - Tripwire defaults: 1% error rate, 50% p95 regression. Override only when documented SLOs exist.
-- Owners must be real people or rotations. If `monitoring-audit` shows no on-call wiring, mark `<unassigned>` and add a fix-plan item.
+- Owners must be real people or rotations. If `release-harness-monitoring-audit` shows no on-call wiring, mark `<unassigned>` and add a fix-plan item.
 - Window 1 is 30 minutes. Do not silently extend it.
 
 ### Gates
 
-- If `monitoring-audit` reports `critical` (no error tracking, no health endpoint, no on-call path), refuse to mark the deployment plan as "ready to execute" and add a release-blocking fix-plan item.
+- If `release-harness-monitoring-audit` reports `critical` (no error tracking, no health endpoint, no on-call path), refuse to mark the deployment plan as "ready to execute" and add a release-blocking fix-plan item.

@@ -4,6 +4,20 @@ import { EvidenceSealer } from './sealer.js';
 import { validateVerdict } from './validator.js';
 
 /**
+ * The cause to record for a failure that carries its own attribution.
+ *
+ * A probe reports `cause: 'NONE'` alongside `ok: true`, so a raw `||` would
+ * survive an inverted `passed` flag and file a FAIL under "no cause" — which
+ * `discoveredCauses` skips, producing a failed run whose causes list is empty.
+ * Absent, empty and 'NONE' all mean "the probe did not attribute this", and the
+ * default for an unattributed failure is the product.
+ */
+function failureCause(reported) {
+  if (!reported || reported === 'NONE') return 'PRODUCT_BUG';
+  return reported;
+}
+
+/**
  * Pure-function deterministic release adjudication engine.
  */
 export function evaluateRun({
@@ -235,7 +249,7 @@ export function evaluateRun({
       } else if (raw.failed) {
         status = 'FAIL';
         disposition = 'EXECUTED';
-        cause = raw.cause || 'PRODUCT_BUG';
+        cause = failureCause(raw.cause);
         errorMessage = raw.error_message || 'Assertion failed';
       } else if (raw.unproven) {
         status = 'UNPROVEN';
@@ -285,14 +299,17 @@ export function evaluateRun({
             if (!probeObs.passed) {
               status = 'FAIL';
               disposition = 'EXECUTED';
-              cause = 'PRODUCT_BUG';
+              // The probe recorded why it failed. A harness gap attributed to
+              // the product teaches an adopter something false about their own
+              // code, so the observation's own cause wins.
+              cause = failureCause(probeObs.cause);
               errorMessage = `Side-effect verification failed: ${probeObs.observed_result}`;
             }
           }
         } else if (raw.side_effects_failed) {
           status = 'FAIL';
           disposition = 'EXECUTED';
-          cause = 'PRODUCT_BUG';
+          cause = failureCause(raw.cause);
           errorMessage = `Side-effect verification failed: ${raw.side_effect_error || 'Probe assertion failed'}`;
         }
       }

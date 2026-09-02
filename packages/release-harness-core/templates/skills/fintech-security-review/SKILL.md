@@ -1,6 +1,6 @@
 ---
-name: fintech-security-review
-description: Deep security review for high-risk apps (fintech, payments, PII, healthcare), from threat modeling to compliance — beyond security-audit's OWASP quick scan. Emits a fix-plan. Use for "fintech security audit", "review for PCI-DSS", "audit payment flow", or "PII handling review".
+name: release-harness-fintech-security-review
+description: Deep security review for high-risk apps (fintech, payments, PII, healthcare), from threat modeling to compliance — beyond release-harness-security-audit's OWASP quick scan. Emits a fix-plan. Use for "fintech security audit", "review for PCI-DSS", "audit payment flow", or "PII handling review".
 compatibility: Works with any source repo. Optional integrations `osv-scanner`, `gitleaks`, `trufflehog`, `semgrep`, `bandit`, `eslint-plugin-security` if installed.
 allowed-tools:
   - Read
@@ -11,11 +11,11 @@ allowed-tools:
 
 ## Purpose
 
-Run an architecture-aware, threat-model-driven security review that produces actionable, prioritized fix-plan items — not a vague "looks risky" verdict. This skill complements `security-audit` (which is the fast OWASP top-10 + secrets + dependency pass); use them together for high-risk apps.
+Run an architecture-aware, threat-model-driven security review that produces actionable, prioritized fix-plan items — not a vague "looks risky" verdict. This skill complements `release-harness-security-audit` (which is the fast OWASP top-10 + secrets + dependency pass); use them together for high-risk apps.
 
 **Use this skill when:** the project handles money, PII, payments, health data, identity, or any regulated information; or before a major release of such a system; or when a new third-party integration is added that touches sensitive flows.
 
-**Use `security-audit` instead when:** you just want the OWASP quick gate before every release.
+**Use `release-harness-security-audit` instead when:** you just want the OWASP quick gate before every release.
 
 ## Required inputs
 
@@ -23,9 +23,9 @@ Run an architecture-aware, threat-model-driven security review that produces act
 - Optional but recommended: `artefacts/threat-model.md` (the agent `security-sentinel` interactively produces this — see its handoff). If absent, this skill will still run but will mark architecture-level findings as `evidence.confidence: low` and recommend the agent regenerate.
 - Optional: previous `results/<ts>/security/security-report.md` for delta scoping.
 
-## Relationship to `security-audit`
+## Relationship to `release-harness-security-audit`
 
-| Concern | `security-audit` (fast) | `fintech-security-review` (deep) |
+| Concern | `release-harness-security-audit` (fast) | `release-harness-fintech-security-review` (deep) |
 |---|---|---|
 | Hardcoded secrets, leaked credentials | Yes (grep patterns) | Confirms + extends to key rotation, vault adoption |
 | OWASP Top-10 spot checks | Yes | Extends to root-cause architectural pattern |
@@ -389,7 +389,7 @@ Each dimension's fix-plan items are framed against these four questions in `evid
 ### Fix-plan item conventions
 
 - `category`: always `security`.
-- `source`: `fintech-security-review`.
+- `source`: `release-harness-fintech-security-review`.
 - `evidence.dimension`: 1–13 (matches sections above).
 - `evidence.attacker_question`: one of `bypass-auth`, `escalate-privilege`, `access-forbidden-data`, `exploit-consistency`.
 - `evidence.confidence`: `high` (signal directly observed), `medium` (signal implied), `low` (no threat model to anchor against).
@@ -402,7 +402,7 @@ When a check requires the public internet (live CVE DB, external SSL/TLS probe, 
 
 ## Hard rules (do not violate)
 
-- Read-only scanning. Never mutate the working tree. Fixes are produced as recommendations and applied by `fix-executor` only after explicit user approval.
+- Read-only scanning. Never mutate the working tree. Fixes are produced as recommendations and applied by `release-harness-fix-executor` only after explicit user approval.
 - Never include actual secret values in any output file. Reference by file + line + pattern name.
 - If a tool is unavailable, record the gap explicitly rather than skipping silently.
 - Treat false positives explicitly. When a pattern matches but context proves it safe (test fixture, example, mock), mark `severity: informational` and exclude from the fix-plan.
@@ -427,11 +427,11 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 - Never include actual secret values in any output file.
 - Never mutate the working tree. Read-only scanning only.
 - If a scanner is missing on PATH, record the gap; do not skip silently.
-- Coordinate with `security-audit` — when the same finding is produced by both skills, the consolidator dedupes by `affected_files + title`. This skill should produce DEEPER framing (architectural root-cause, compliance overlay) so the merged entry is richer.
-- **Sealed UAT — no internet.** Same rule as `security-audit`. Vuln-DB and external probe steps require offline DBs (`osv-scanner --offline-vulnerabilities <dir>`, cached `npm audit`, `pip-audit --no-deps`). If no cached DB is present under `artefacts/security-db/`, emit one `deferred-test` fix-plan item per missing DB. Do not call out to any public service.
+- Coordinate with `release-harness-security-audit` — when the same finding is produced by both skills, the consolidator dedupes by `affected_files + title`. This skill should produce DEEPER framing (architectural root-cause, compliance overlay) so the merged entry is richer.
+- **Sealed UAT — no internet.** Same rule as `release-harness-security-audit`. Vuln-DB and external probe steps require offline DBs (`osv-scanner --offline-vulnerabilities <dir>`, cached `npm audit`, `pip-audit --no-deps`). If no cached DB is present under `artefacts/security-db/`, emit one `deferred-test` fix-plan item per missing DB. Do not call out to any public service.
 - **Worktree-only.** No `git fetch`, no `git pull`, no remote refs. If the review wants a delta against a baseline, require the local ref (the agent provides it from `release/baseline.json`).
 
 ### Gates
 
 - Stop and surface every `critical` finding before the consolidator runs.
-- If the compliance overlay (section 12) detects PCI-DSS signals AND finds a `critical` item in section 4 (data protection), mark the release as blocked in the fix-plan via a top-level `evidence.release_blocking: true` flag for `release-decider` to honor.
+- If the compliance overlay (section 12) detects PCI-DSS signals AND finds a `critical` item in section 4 (data protection), mark the release as blocked in the fix-plan via a top-level `evidence.release_blocking: true` flag for `release-harness-release-decider` to honor.

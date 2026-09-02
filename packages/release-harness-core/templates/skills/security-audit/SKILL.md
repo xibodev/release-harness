@@ -1,5 +1,5 @@
 ---
-name: security-audit
+name: release-harness-security-audit
 description: Production-grade security audit covering secrets management, authentication/authorization, data protection, API security, and HTTP security headers. Inspired by the OWASP Top 10 and the Production Ready Checklist's Security section. Produces a fix-plan that integrates with the suite's consolidator. Use when asked to "run security audit", "check for secrets", "scan for OWASP issues", "validate security headers", or before a release.
 compatibility: Works with any source repo. Optional integrations `npm audit`, `pip-audit`, `gitleaks`, `trufflehog`, `osv-scanner` if installed.
 allowed-tools:
@@ -16,7 +16,7 @@ Run a focused, evidence-based security audit covering the issues that most often
 ## Required inputs
 
 - Working tree of the repo.
-- Optional: `code-change-review` output for delta scoping.
+- Optional: `release-harness-code-change-review` output for delta scoping.
 
 ## Audit areas
 

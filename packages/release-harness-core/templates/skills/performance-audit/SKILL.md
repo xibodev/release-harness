@@ -1,5 +1,5 @@
 ---
-name: performance-audit
+name: release-harness-performance-audit
 description: Server-side performance audit covering database query patterns (N+1, missing indexes), caching strategy, API response time SLAs, code hotspots, and load-test readiness. Complements ux-design-review (which handles client-side Core Web Vitals). Inspired by the Production Ready Checklist's Performance section. Produces a fix-plan compatible with the suite's consolidator. Use when asked to "performance audit", "find N+1 queries", "check caching", "validate response SLAs", or before a release.
 compatibility: Works with any source repo. Optional load probes `autocannon`, `k6`, `wrk`; ORM-specific log inspection if the app is running.
 allowed-tools:

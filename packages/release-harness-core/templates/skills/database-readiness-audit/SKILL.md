@@ -1,5 +1,5 @@
 ---
-name: database-readiness-audit
+name: release-harness-database-readiness-audit
 description: Audits database projection-readiness — schema integrity, migration safety, backup posture, replication/failover awareness, and RTO/RPO documentation. Inspired by the Production Ready Checklist's Database section. Produces a fix-plan compatible with the suite's consolidator. Use when asked to "audit database", "check migrations", "validate backups", "is the DB projection-ready", or before a release.
 compatibility: Works with any source repo that contains migration files or database client config.
 allowed-tools:
@@ -11,7 +11,7 @@ allowed-tools:
 
 ## Purpose
 
-Database readiness is one of the most common silent release blockers. This skill makes those gaps explicit and produces a fix-plan that the release-decider can weight.
+Database readiness is one of the most common silent release blockers. This skill makes those gaps explicit and produces a fix-plan that the release-harness-release-decider can weight.
 
 ## Audit areas
 
@@ -59,8 +59,8 @@ Database readiness is one of the most common silent release blockers. This skill
 
 - Detect slow-query log enablement (`log_min_duration_statement` for Postgres, MySQL slow log).
 - Detect connection pool monitoring exports.
-- Detect disk-space alerts (cross-reference with monitoring-audit).
-- Verify projection credentials are NOT in source (cross-reference with security-audit).
+- Detect disk-space alerts (cross-reference with release-harness-monitoring-audit).
+- Verify projection credentials are NOT in source (cross-reference with release-harness-security-audit).
 
 ## Output
 
@@ -70,7 +70,7 @@ Database readiness is one of the most common silent release blockers. This skill
 
 ### Fix-plan conventions
 
-- `category`: prefer `coverage-gap` for missing backups/replication/RTO docs; `performance` for missing indexes flagged here; `security` for credential leaks (and link to security-audit).
+- `category`: prefer `coverage-gap` for missing backups/replication/RTO docs; `performance` for missing indexes flagged here; `security` for credential leaks (and link to release-harness-security-audit).
 - `severity`:
   - `critical`: destructive migration with no rollback path; no backup config detected; cascading deletes on financial data.
   - `high`: missing RTO/RPO docs; backup not encrypted; no transaction wrapping multi-step writes.

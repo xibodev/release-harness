@@ -1,5 +1,5 @@
 ---
-name: deep-screenshot-analysis
+name: release-harness-deep-screenshot-analysis
 description: >-
   Vision-driven critique of every UAT screenshot. Reads each PNG with the
   multimodal model and scores it against a structured checklist (visual integrity,
@@ -191,7 +191,7 @@ For each screenshot in the manifest:
     "expected_assertion": "primary CTA: 'View order' visible"
   },
   "related_items": [],
-  "sources": ["deep-screenshot-analysis"]
+  "sources": ["release-harness-deep-screenshot-analysis"]
 }
 ```
 

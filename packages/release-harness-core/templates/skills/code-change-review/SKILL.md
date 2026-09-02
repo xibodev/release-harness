@@ -1,5 +1,5 @@
 ---
-name: code-change-review
+name: release-harness-code-change-review
 description: Reviews all code changes since the last release tag or specified baseline. Analyzes backend changes (API modifications, DB migrations, new dependencies), frontend changes (component updates, route changes, bundle impact), and performs a security quick-scan (new deps, hardcoded values, auth flow changes). Produces a structured change inventory with risk annotations and fix-plan entries. Use when asked to "review changes", "what changed since last release", "pre-release code review", or "diff analysis".
 compatibility: Requires git repository with tags or release branches.
 allowed-tools:
@@ -240,7 +240,7 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 ### Hard rules
 
 - Baseline = newest meaningful release tag. If no tag exists, ASK the operator for an explicit baseline (tag, branch, SHA, or date window). Do not guess.
-- Record the chosen baseline in the report so `test-coverage-audit` and `release-readiness` can reuse it.
+- Record the chosen baseline in the report so `release-harness-test-coverage-audit` and `release-readiness` can reuse it.
 - Categorize every changed file into exactly one primary bucket (backend / frontend / config / tests / docs).
 - **Worktree-only (no fetch, no remote).** Forbidden commands: `git fetch`, `git pull`, `git remote update`, any network-touching git operation. Forbidden references: any ref under `origin/`, `upstream/`, or any other remote namespace. The baseline MUST resolve to a LOCAL ref (sha, local tag, or local branch). If the requested baseline does not exist locally, STOP and ask the operator — do not fetch. Default baseline when none is specified: `git merge-base HEAD $(git config init.defaultBranch || echo main)` against the LOCAL branch only.
 - Write `results/<ts>/release/baseline.json` recording `{ "ref": "<sha>", "resolved_via": "local-tag|local-branch|sha|HEAD~N", "remote_used": false }`. If `remote_used` would be `true`, halt.

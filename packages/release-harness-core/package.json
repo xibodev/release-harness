@@ -1,6 +1,6 @@
 {
   "name": "@xibodev/release-harness-core",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Deterministic release-harness core engine and adjudication CLI",
   "type": "module",
   "bin": {
@@ -30,7 +30,8 @@
     "test": "node test/index.js"
   },
   "dependencies": {
-    "@xibodev/release-harness-schemas": "1.1.0",
+    "@xibodev/release-harness-schemas": "1.2.0",
+    "ajv": "^8.17.1",
     "playwright": "^1.50.0",
     "yaml": "^2.7.0"
   },

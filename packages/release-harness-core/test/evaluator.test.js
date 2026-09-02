@@ -514,99 +514,95 @@ console.log('Running Evaluator Golden Tests...');
 
 // 18. Fail-Closed on Unknown / Unsupported Probe Combinations
 {
-  import('../src/probes.js').then(async ({ verifySideEffect }) => {
-    const res = await verifySideEffect({
-      service: 'unsupported_db',
-      probe_type: 'magic_check',
-      params: {},
-    });
-
-    assert.strictEqual(res.ok, false);
-    assert.strictEqual(res.cause, 'HARNESS_CONFIGURATION');
-    assert.ok(res.message.includes('Unsupported side-effect probe combination'));
-    console.log('✓ Unsupported probe combinations fail closed with HARNESS_CONFIGURATION');
+  const { verifySideEffect } = await import('../src/probes.js');
+  const res = await verifySideEffect({
+    service: 'unsupported_db',
+    probe_type: 'magic_check',
+    params: {},
   });
+
+  assert.strictEqual(res.ok, false);
+  assert.strictEqual(res.cause, 'HARNESS_CONFIGURATION');
+  assert.ok(res.message.includes('Unsupported side-effect probe combination'));
+  console.log('✓ Unsupported probe combinations fail closed with HARNESS_CONFIGURATION');
 }
 
 // 19. Neutral Storage Bypass Regression Test (/tmp local path bypass)
 {
-  import('../src/probes.js').then(async ({ verifySideEffect }) => {
-    const res = await verifySideEffect({
-      service: 'minio',
-      probe_type: 's3_object_exists',
-      params: {
-        bucket: 'kyc-documents',
-        key: 'id-doc.webp',
-        forbidden_paths: ['/tmp/*', 'C:/Temp/*'],
-        observed_storage_path: '/tmp/uploaded-file.webp',
-      },
-    });
-
-    assert.strictEqual(res.ok, false);
-    assert.strictEqual(res.cause, 'PRODUCT_BUG');
-    assert.ok(res.message.includes('Storage bypass violation'));
-    console.log('✓ Storage bypass defect (/tmp local path) detected and failed as PRODUCT_BUG');
+  const { verifySideEffect } = await import('../src/probes.js');
+  const res = await verifySideEffect({
+    service: 'minio',
+    probe_type: 's3_object_exists',
+    params: {
+      bucket: 'kyc-documents',
+      key: 'id-doc.webp',
+      forbidden_paths: ['/tmp/*', 'C:/Temp/*'],
+      observed_storage_path: '/tmp/uploaded-file.webp',
+    },
   });
+
+  assert.strictEqual(res.ok, false);
+  assert.strictEqual(res.cause, 'PRODUCT_BUG');
+  assert.ok(res.message.includes('Storage bypass violation'));
+  console.log('✓ Storage bypass defect (/tmp local path) detected and failed as PRODUCT_BUG');
 }
 
 // 20. PostgreSQL Mutating SQL Rejection
 {
-  import('../src/probes.js').then(async ({ verifySideEffect }) => {
-    const res = await verifySideEffect({
-      service: 'postgres',
-      probe_type: 'sql_query',
-      params: {
-        query: 'DROP TABLE users;',
-      },
-    });
-
-    assert.strictEqual(res.ok, false);
-    assert.strictEqual(res.cause, 'HARNESS_CONFIGURATION');
-    assert.ok(res.message.includes('mutating SQL queries are strictly forbidden'));
-    console.log('✓ PostgreSQL mutating SQL queries rejected as HARNESS_CONFIGURATION');
+  const { verifySideEffect } = await import('../src/probes.js');
+  const res = await verifySideEffect({
+    service: 'postgres',
+    probe_type: 'sql_query',
+    params: {
+      query: 'DROP TABLE users;',
+    },
   });
+
+  assert.strictEqual(res.ok, false);
+  assert.strictEqual(res.cause, 'HARNESS_CONFIGURATION');
+  assert.ok(res.message.includes('mutating SQL queries are strictly forbidden'));
+  console.log('✓ PostgreSQL mutating SQL queries rejected as HARNESS_CONFIGURATION');
 }
 
 // 21. Playwright Suite Adapter: Normalization & Expected Inventory Detection
 {
-  import('../src/playwright-adapter.js').then(({ PlaywrightSuiteAdapter }) => {
-    const adapter = new PlaywrightSuiteAdapter({
-      workingDir: os.tmpdir(),
-      expectedTestIds: ['spec1-should_login', 'spec2-missing_test'],
-    });
-
-    const mockJsonStdout = JSON.stringify({
-      config: { projects: [{ name: 'chromium' }] },
-      suites: [
-        {
-          file: 'tests/auth.spec.ts',
-          specs: [
-            {
-              id: 'spec1-should_login',
-              title: 'should login with valid credentials',
-              tests: [
-                {
-                  results: [
-                    { status: 'passed', duration: 180, attachments: [{ path: 'screenshots/login.png' }] },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    });
-
-    const parsed = adapter.parseAndNormalize(mockJsonStdout, '', 0, 300);
-    assert.strictEqual(parsed.discovered_count, 1);
-    assert.strictEqual(parsed.passed_count, 1);
-    assert.strictEqual(parsed.failed_count, 0);
-    assert.strictEqual(parsed.missing_expected_ids.length, 1);
-    assert.strictEqual(parsed.missing_expected_ids[0], 'spec2-missing_test');
-    assert.strictEqual(parsed.ok, false, 'Missing expected test ID must fail suite normalization');
-    assert.ok(parsed.causes.includes('HARNESS_FIXTURE_MISSING'));
-    console.log('✓ Playwright Suite Adapter correctly normalized JSON reporter output and caught missing expected test ID');
+  const { PlaywrightSuiteAdapter } = await import('../src/playwright-adapter.js');
+  const adapter = new PlaywrightSuiteAdapter({
+    workingDir: os.tmpdir(),
+    expectedTestIds: ['spec1-should_login', 'spec2-missing_test'],
   });
+
+  const mockJsonStdout = JSON.stringify({
+    config: { projects: [{ name: 'chromium' }] },
+    suites: [
+      {
+        file: 'tests/auth.spec.ts',
+        specs: [
+          {
+            id: 'spec1-should_login',
+            title: 'should login with valid credentials',
+            tests: [
+              {
+                results: [
+                  { status: 'passed', duration: 180, attachments: [{ path: 'screenshots/login.png' }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const parsed = adapter.parseAndNormalize(mockJsonStdout, '', 0, 300);
+  assert.strictEqual(parsed.discovered_count, 1);
+  assert.strictEqual(parsed.passed_count, 1);
+  assert.strictEqual(parsed.failed_count, 0);
+  assert.strictEqual(parsed.missing_expected_ids.length, 1);
+  assert.strictEqual(parsed.missing_expected_ids[0], 'spec2-missing_test');
+  assert.strictEqual(parsed.ok, false, 'Missing expected test ID must fail suite normalization');
+  assert.ok(parsed.causes.includes('HARNESS_FIXTURE_MISSING'));
+  console.log('✓ Playwright Suite Adapter correctly normalized JSON reporter output and caught missing expected test ID');
 }
 
 console.log('\nAll Evaluator, Sealer, and Observation Regression Tests PASSED successfully!');
