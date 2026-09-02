@@ -124,10 +124,30 @@ export async function probeS3({ host = '127.0.0.1', port = 9000, scheme = 'http'
 }
 
 /**
- * Bounded Read-Only PostgreSQL Probe.
+ * PostgreSQL Probe -- unimplemented, and says so.
+ *
+ * The harness ships no SQL client. This probe previously opened a TCP socket,
+ * dropped `expected_rows_count` and `forbidden_values` into an empty block, and
+ * returned `ok: true` claiming "read-only query assertion satisfied" whenever
+ * the port answered. An open port is not an executed query, so every green it
+ * produced was unearned.
+ *
+ * An advertised-and-stubbed probe returning green is worse than one that
+ * refuses: it launders an unverified claim into a signed verdict. It now fails
+ * closed as a harness configuration fault and names the custom probe as the
+ * supported way to assert database state.
+ *
+ * `host` and `port` are kept because the message names the target the scenario
+ * declared -- that is how an operator locates the offending side-effect, and how
+ * a port-shifted run can prove the offset reached the probe.
+ * `expected_rows_count`, `forbidden_values` and `timeoutMs` are gone from the
+ * signature: accepting a parameter you discard is the defect being fixed.
  */
-export async function probePostgres({ host = '127.0.0.1', port = 5432, query, expected_rows_count, forbidden_values, timeoutMs = 4000 }) {
-  // Enforce read-only query policy (reject any mutating DDL/DML statements)
+export async function probePostgres({ host = '127.0.0.1', port = 5432, query, probe_type = 'sql_query' }) {
+  // The read-only policy rejection stays FIRST. A mutating query is a distinct
+  // and more specific misconfiguration than an unimplemented probe, and an
+  // author who wrote DROP TABLE needs to be told exactly that -- not pointed at
+  // a custom probe that would happily run it.
   if (typeof query === 'string') {
     const dangerousKeywords = ['insert', 'update', 'delete', 'drop', 'alter', 'truncate', 'grant', 'revoke', 'create'];
     const normalizedQuery = query.toLowerCase().trim();
@@ -141,18 +161,16 @@ export async function probePostgres({ host = '127.0.0.1', port = 5432, query, ex
     }
   }
 
-  // Probe TCP connectivity first
-  const tcpRes = await probeTcp({ host, port, timeoutMs });
-  if (!tcpRes.ok) {
-    return { ok: false, message: `PostgreSQL database unreachable at ${host}:${port} (${tcpRes.message})`, cause: 'HARNESS_ENVIRONMENT', isHarnessError: true };
-  }
-
-  // Check forbidden values in query result simulation / bound inspection
-  if (Array.isArray(forbidden_values) && forbidden_values.length > 0) {
-    // Verified no forbidden values detected
-  }
-
-  return { ok: true, message: `PostgreSQL connection to ${host}:${port} ok and read-only query assertion satisfied (${tcpRes.elapsedMs}ms)` };
+  return {
+    ok: false,
+    message:
+      `PostgreSQL probe "${probe_type}" against ${host}:${port} is not implemented: the harness ships no ` +
+      'SQL client, so it cannot execute the query or evaluate expected_rows_count / forbidden_values. ' +
+      'Assert database state with a custom probe that runs your own query tool ' +
+      '(service: "custom", probe_type: "custom", params.command).',
+    cause: 'HARNESS_CONFIGURATION',
+    isHarnessError: true,
+  };
 }
 
 /**
