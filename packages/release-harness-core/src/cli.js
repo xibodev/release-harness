@@ -15,7 +15,7 @@ import { ScenarioRunner } from './scenario-runner.js';
 import { parseScenarioFile } from './scenario-parser.js';
 import { validateTopology, validateOrigins, validateHarnessConfig, ValidationError } from './validator.js';
 
-const HARNESS_VERSION = '1.1.0';
+const HARNESS_VERSION = '1.2.0';
 
 export async function runCli(argv = process.argv.slice(2)) {
   const command = argv[0];

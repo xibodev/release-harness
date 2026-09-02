@@ -1,6 +1,6 @@
 {
   "name": "@xibodev/release-harness",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Portable, versioned release-harness assistant and quality gate runner for software projects",
   "type": "module",
   "main": "./index.js",
@@ -16,8 +16,8 @@
     "index.js"
   ],
   "dependencies": {
-    "@xibodev/release-harness-core": "1.1.0",
-    "@xibodev/release-harness-schemas": "1.1.0"
+    "@xibodev/release-harness-core": "1.2.0",
+    "@xibodev/release-harness-schemas": "1.2.0"
   },
   "peerDependencies": {
     "playwright": ">=1.40.0"

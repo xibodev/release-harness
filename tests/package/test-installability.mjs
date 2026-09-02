@@ -58,9 +58,13 @@ const isWin = process.platform === 'win32';
 const npxCmd = isWin ? 'npx.cmd' : 'npx';
 
 // 4a. Version test
+const corePkgVersion = JSON.parse(fs.readFileSync(path.join(corePkgDir, 'package.json'), 'utf8')).version;
 const versionOut = execSync(`${npxCmd} release-harness --version`, { cwd: consumerRepoDir, encoding: 'utf8' }).trim();
 console.log(`  • Version: ${versionOut}`);
-assert.ok(versionOut.includes('1.1.0'), 'Version must report 1.1.0');
+// Asserted against the published package version, not a literal: the defect this
+// catches is a bumped package.json with a stale HARNESS_VERSION, which would seal
+// the wrong engine version into every run manifest.
+assert.ok(versionOut.includes(corePkgVersion), `Version must report the published core version ${corePkgVersion} (got "${versionOut}")`);
 
 // 4b. Help test
 const helpOut = execSync(`${npxCmd} release-harness --help`, { cwd: consumerRepoDir, encoding: 'utf8' });
@@ -251,7 +255,7 @@ try {
   assert.strictEqual(verdict.certification_status, 'PASS', 'Certification status must be PASS');
   assert.strictEqual(verdict.run_integrity, 'COMPLETE', 'Run integrity must be COMPLETE');
   assert.strictEqual(verdict.exit_code, 0, 'Exit code must be 0');
-  assert.strictEqual(runManifest.harness_core_version, '1.1.0', 'Recorded harness core version must be 1.1.0');
+  assert.strictEqual(runManifest.harness_core_version, corePkgVersion, 'Recorded harness core version must match the published core package version');
   assert.strictEqual(runManifest.sources[0].commit_sha, consumerSha, 'Recorded commit SHA must match consumer repository SHA');
   assert.strictEqual(runManifest.sources[0].is_clean, true, 'Consumer repo must be recorded clean');
 
