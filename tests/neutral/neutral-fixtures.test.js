@@ -11,9 +11,10 @@ import { verifySideEffect, probeS3, probePostgres, probeRedis, probeMailpit } fr
 import { SourceMaterializer } from '../../packages/release-harness-core/src/materializer.js';
 import { enumerateSource, FALLBACK_IGNORED_NAMES, LIKELY_NEEDED_IGNORED } from '../../packages/release-harness-core/src/source-enumerator.js';
 import { validateTopology, validateOrigins, validateScenario, validateHarnessConfig, ValidationError } from '../../packages/release-harness-core/src/validator.js';
+import { ScenarioRunner } from '../../packages/release-harness-core/src/scenario-runner.js';
 
 console.log('======================================================================');
-console.log('       Release-Harness: 33 Neutral Acceptance Fixtures Suite         ');
+console.log('       Release-Harness: 35 Neutral Acceptance Fixtures Suite         ');
 console.log('======================================================================\n');
 
 const testResults = [];
@@ -1461,6 +1462,183 @@ function recordPass(num, name) {
   recordPass(33, 'Untracked-Only Directories Are Excluded LOUDLY, Not Silently');
 }
 
+// F-34: A Harness-Caused Probe Failure Is Attributed To The Harness, Not The Product
+{
+  // The probe layer already reports an accurate cause for a combination it
+  // does not implement. Issue #5 was misfiled because everything downstream
+  // discarded it and blamed the adopter's product instead.
+  const probeRes = await verifySideEffect({
+    service: 'unsupported_db',
+    probe_type: 'magic_check',
+    params: {},
+  });
+
+  assert.strictEqual(probeRes.ok, false);
+  assert.strictEqual(probeRes.cause, 'HARNESS_CONFIGURATION');
+  assert.strictEqual(probeRes.isHarnessError, true);
+
+  // Two evaluator paths reach a failed side effect, and both hardcoded
+  // PRODUCT_BUG. `failed: true` is what ScenarioRunner produces (it throws on a
+  // failing probe); `failed: false` with a failing observation is what a raw
+  // result assembled from sealed evidence looks like. Each is asserted below.
+  const runWith = ({ observation, failed, rawCause, harnessErrors = [] }) => evaluateRun({
+    runId: 'f34-run',
+    scenarios: [{ id: 'S1', name: 'probe scenario', origin_id: 'O1', tier: 'smoke', policy: 'required', steps: [{ action: 'navigate', target: '/' }] }],
+    rawResults: [{
+      id: 'S1',
+      scenario_id: 'S1',
+      failed,
+      error_message: failed ? `Side effect verification failed: ${observation.observed_result}` : undefined,
+      cause: rawCause,
+      target_base_url: 'http://127.0.0.1:1',
+      duration_ms: 5,
+      steps_executed: [{ index: 1, action: 'navigate' }],
+      side_effects_failed: true,
+      side_effect_error: observation.observed_result,
+      side_effect_observations: [observation],
+      network_violations: [],
+    }],
+    origins: [{ origin_id: 'O1', type: 'browser_app', auth: 'none', url_source: 'http://127.0.0.1:1', route_families: ['/'], safe_for_live: true, evidence: ['app.tsx'] }],
+    networkViolations: [],
+    harnessErrors,
+    skipIntegrityVerification: true,
+  });
+
+  const harnessObs = {
+    service: 'unsupported_db',
+    probe_type: 'magic_check',
+    expected_condition: 'magic_check on unsupported_db',
+    observed_result: probeRes.message,
+    passed: false,
+    cause: probeRes.cause,
+    is_harness_error: true,
+  };
+
+  // Path A -- the live ScenarioRunner shape. Asserts `cause =
+  // failureCause(raw.cause)` in evaluator.js's `else if (raw.failed)` branch;
+  // restoring `cause = 'PRODUCT_BUG'` there fires the second assertion.
+  const viaRawFailed = runWith({
+    observation: harnessObs,
+    failed: true,
+    rawCause: 'HARNESS_CONFIGURATION',
+    harnessErrors: [{ cause: 'HARNESS_CONFIGURATION', message: `[S1] ${probeRes.message}`, scenario_id: 'S1' }],
+  });
+
+  assert.strictEqual(viaRawFailed.scenarios[0].cause, 'HARNESS_CONFIGURATION', 'A failed scenario keeps the cause the runner recorded');
+  assert.ok(viaRawFailed.causes.includes('HARNESS_CONFIGURATION'), 'A probe that reported HARNESS_CONFIGURATION must surface that cause');
+  assert.ok(
+    !viaRawFailed.causes.includes('PRODUCT_BUG'),
+    'The harness must not blame the product for a probe combination it never implemented'
+  );
+  assert.strictEqual(viaRawFailed.run_integrity, 'HARNESS_ERROR');
+  assert.strictEqual(viaRawFailed.exit_code, 3, 'Harness faults exit 3, never 1');
+
+  // Path B -- the sealed-observation shape. Asserts `cause =
+  // failureCause(probeObs.cause)` in the side-effect observation loop;
+  // restoring `cause = 'PRODUCT_BUG'` there fires the second assertion.
+  const viaObservation = runWith({ observation: harnessObs, failed: false, rawCause: 'NONE' });
+
+  assert.strictEqual(viaObservation.scenarios[0].cause, 'HARNESS_CONFIGURATION', 'A failing observation keeps the cause the probe reported');
+  assert.ok(viaObservation.causes.includes('HARNESS_CONFIGURATION'));
+  assert.ok(
+    !viaObservation.causes.includes('PRODUCT_BUG'),
+    'A sealed harness-caused observation must not be re-attributed to the product'
+  );
+  assert.strictEqual(viaObservation.summary.failed, 1, 'The scenario still fails; only its attribution changed');
+
+  // The neighbouring case must not regress: a probe that genuinely observed a
+  // product defect still attributes to the product and still exits 1.
+  const productObs = {
+    service: 'minio',
+    probe_type: 's3_object_exists',
+    expected_condition: 's3_object_exists on minio',
+    observed_result: 'Storage bypass violation: observed storage path "/tmp/x.jpg" matches forbidden local pattern "/tmp/*"',
+    passed: false,
+    cause: 'PRODUCT_BUG',
+    is_harness_error: false,
+  };
+
+  for (const failed of [true, false]) {
+    const v = runWith({ observation: productObs, failed, rawCause: failed ? 'PRODUCT_BUG' : 'NONE' });
+    assert.strictEqual(v.scenarios[0].cause, 'PRODUCT_BUG', `A real product defect is still the product (failed=${failed})`);
+    assert.ok(v.causes.includes('PRODUCT_BUG'));
+    assert.ok(!v.causes.includes('HARNESS_CONFIGURATION'));
+    assert.strictEqual(v.run_integrity, 'COMPLETE');
+    assert.strictEqual(v.exit_code, 1);
+  }
+
+  // A failure carrying no attribution, and one carrying the probe layer's
+  // success sentinel 'NONE', both default to the product on BOTH paths. A bare
+  // `cause || 'PRODUCT_BUG'` passes the absent case and fails the 'NONE' one:
+  // 'NONE' is truthy, so the scenario would fail under cause 'NONE', which
+  // `discoveredCauses` skips -- a failed run with an empty causes list. Both
+  // call sites are asserted, since each had its own hardcoded default.
+  for (const [label, reported] of [['absent', undefined], ['NONE', 'NONE'], ['empty', '']]) {
+    const unattributedObs = {
+      service: 'redis',
+      probe_type: 'redis_key_exists',
+      expected_condition: 'redis_key_exists on redis',
+      observed_result: 'Redis key "session" absent',
+      passed: false,
+      cause: reported,
+      is_harness_error: false,
+    };
+
+    const viaRaw = runWith({ observation: unattributedObs, failed: true, rawCause: reported });
+    assert.strictEqual(viaRaw.scenarios[0].cause, 'PRODUCT_BUG', `An unattributed (${label}) failed scenario defaults to the product`);
+    assert.ok(viaRaw.causes.includes('PRODUCT_BUG'), `An unattributed (${label}) failed scenario must still record a cause`);
+    assert.strictEqual(viaRaw.exit_code, 1);
+
+    const viaObs = runWith({ observation: unattributedObs, failed: false, rawCause: 'NONE' });
+    assert.strictEqual(viaObs.scenarios[0].cause, 'PRODUCT_BUG', `An unattributed (${label}) observation defaults to the product`);
+    assert.ok(viaObs.causes.includes('PRODUCT_BUG'), `An unattributed (${label}) observation must still record a cause`);
+    assert.strictEqual(viaObs.exit_code, 1);
+  }
+
+  recordPass(34, 'A Harness-Caused Probe Failure Is Attributed To The Harness, Not The Product');
+}
+
+// F-35: Port Offset Reaches Side-Effect Probes
+{
+  // Health checks honoured --port-offset and probes did not, so two concurrent
+  // runs health-checked the shifted port and then probed the unshifted one --
+  // verifying each other's containers, or nothing at all.
+  const runner = new ScenarioRunner({
+    origins: [],
+    topology: null,
+    evidenceDir: os.tmpdir(),
+    workspaceDir: os.tmpdir(),
+    portOffset: 100,
+  });
+
+  assert.strictEqual(runner.portOffset, 100, 'The runner must accept a port offset');
+
+  const shifted = runner.applyPortOffset({ host: '127.0.0.1', port: 6379 });
+  assert.strictEqual(shifted.port, 6479, 'A probe port shifts by the run offset');
+  assert.strictEqual(shifted.host, '127.0.0.1', 'Shifting a port preserves every other parameter');
+
+  const absolute = runner.applyPortOffset({ host: '127.0.0.1', port: 6379, absolute_port: true });
+  assert.strictEqual(absolute.port, 6379, 'absolute_port opts a fixed external target out of shifting');
+
+  const noPort = runner.applyPortOffset({ host: '127.0.0.1' });
+  assert.strictEqual(noPort.port, undefined, 'An absent port stays absent so the probe default applies');
+
+  // Mutating the caller's params would shift the same object once per
+  // scenario, compounding the offset across a run.
+  const original = { host: '127.0.0.1', port: 5432 };
+  runner.applyPortOffset(original);
+  runner.applyPortOffset(original);
+  assert.strictEqual(original.port, 5432, 'Shifting must not mutate the declared side-effect params');
+
+  const zeroRunner = new ScenarioRunner({ origins: [], evidenceDir: os.tmpdir(), portOffset: 0 });
+  assert.strictEqual(zeroRunner.applyPortOffset({ port: 5432 }).port, 5432, 'A zero offset leaves ports untouched');
+
+  const defaultRunner = new ScenarioRunner({ origins: [], evidenceDir: os.tmpdir() });
+  assert.strictEqual(defaultRunner.portOffset, 0, 'The offset defaults to zero when unset');
+
+  recordPass(35, 'Port Offset Reaches Side-Effect Probes');
+}
+
 console.log('\n======================================================================');
-console.log(`  ALL 33 / 33 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
+console.log(`  ALL 35 / 35 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
 console.log('======================================================================\n');

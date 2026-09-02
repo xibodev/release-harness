@@ -290,6 +290,114 @@ function startMockHttpServer(port, handler) {
   assert.strictEqual(verdict.certification_status, 'FAIL');
   assert.strictEqual(verdict.exit_code, 1);
   assert.ok(verdict.causes.includes('PRODUCT_BUG'));
+
+  // ---- Issue #5: a harness gap must not be reported as the adopter's bug ----
+  // `custom` is schema-valid but unimplemented. The probe layer says so
+  // correctly; everything downstream used to discard that and report
+  // PRODUCT_BUG. This drives the real runner end to end.
+  const customProbeScenario = {
+    id: 'S-CUSTOM-UNIMPLEMENTED',
+    name: 'Scenario declaring an unimplemented custom probe',
+    origin_id: 'upload-web',
+    tier: 'core',
+    policy: 'required',
+    steps: [{ action: 'navigate', target: '/', timeout: 5000 }],
+    expected_side_effects: [
+      { service: 'custom', probe_type: 'custom', params: { command: 'echo hi' } },
+    ],
+  };
+
+  const customPort = 34572;
+  const srvCustom = await startMockHttpServer(customPort, (req, res) => {
+    const body = '<h1>OK</h1>';
+    res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Length': Buffer.byteLength(body) });
+    res.end(body);
+  });
+
+  const customEvidenceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-ac06-evidence-'));
+  const customWorkspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-ac06-workspace-'));
+  let customResult;
+  try {
+    const customRunner = new ScenarioRunner({
+      origins: [{ origin_id: 'upload-web', type: 'browser_app', auth: 'none', url_source: `http://127.0.0.1:${customPort}`, route_families: ['/'], safe_for_live: true, evidence: ['test'] }],
+      evidenceDir: customEvidenceDir,
+      workspaceDir: customWorkspaceDir,
+    });
+    customResult = await customRunner.runScenario(customProbeScenario);
+  } finally {
+    srvCustom.close();
+  }
+
+  // The observation must carry the probe's own attribution. Dropping `cause`
+  // and `is_harness_error` from the pushed record fires these two.
+  const customObs = customResult.side_effect_observations[0];
+  assert.ok(customObs, 'An attempted probe must leave an observation behind');
+  assert.strictEqual(customObs.passed, false);
+  assert.strictEqual(customObs.cause, 'HARNESS_CONFIGURATION', 'The observation must carry the probe reported cause');
+  assert.strictEqual(customObs.is_harness_error, true, 'The observation must carry the probe harness-error flag');
+
+  // The catch must not overwrite it. Restoring the unconditional
+  // `rawResult.cause = 'PRODUCT_BUG'` fires this one.
+  assert.strictEqual(customResult.failed, true);
+  assert.strictEqual(
+    customResult.cause,
+    'HARNESS_CONFIGURATION',
+    'A probe the harness never implemented is a harness fault, not a product bug'
+  );
+  assert.strictEqual(customResult.is_harness_error, true);
+
+  // And the CLI's harnessErrors feed turns that into exit 3, not exit 1.
+  const harnessErrorsFromRun = [];
+  for (const obs of customResult.side_effect_observations || []) {
+    if (obs.is_harness_error) {
+      harnessErrorsFromRun.push({
+        cause: obs.cause || 'HARNESS_CONFIGURATION',
+        message: `[${customProbeScenario.id}] ${obs.observed_result}`,
+        scenario_id: customProbeScenario.id,
+      });
+    }
+  }
+  assert.strictEqual(harnessErrorsFromRun.length, 1, 'A harness-flagged observation must reach harnessErrors');
+
+  const customVerdict = evaluateRun({
+    runId: 'ac06-custom-probe',
+    scenarios: [customProbeScenario],
+    rawResults: [customResult],
+    origins: [{ origin_id: 'upload-web', type: 'browser_app', auth: 'none', url_source: `http://127.0.0.1:${customPort}`, route_families: ['/'], safe_for_live: true, evidence: ['test'] }],
+    harnessErrors: harnessErrorsFromRun,
+    skipIntegrityVerification: true,
+  });
+
+  assert.strictEqual(customVerdict.run_integrity, 'HARNESS_ERROR');
+  assert.strictEqual(customVerdict.exit_code, 3, 'An unimplemented probe exits 3 (harness), never 1 (product)');
+  assert.ok(customVerdict.causes.includes('HARNESS_CONFIGURATION'));
+  assert.ok(
+    !customVerdict.causes.includes('PRODUCT_BUG'),
+    'Issue #5: the harness must not blame the adopter product for its own missing feature'
+  );
+
+  // The params B3's custom probe will consume must actually arrive.
+  const builtParams = new ScenarioRunner({
+    origins: [],
+    evidenceDir: customEvidenceDir,
+    workspaceDir: customWorkspaceDir,
+    portOffset: 100,
+  }).buildProbeParams(customProbeScenario, { service: 'custom', probe_type: 'custom', params: { port: 5432 } });
+
+  assert.strictEqual(builtParams.evidenceDir, customEvidenceDir, 'A probe receives the run evidence directory');
+  assert.strictEqual(builtParams.cwd, customWorkspaceDir, 'A probe runs against the materialized workspace, not the developer cwd');
+  assert.strictEqual(builtParams.probeId, 'S-CUSTOM-UNIMPLEMENTED-custom-custom', 'A probe receives a stable id for its sealed output');
+  assert.strictEqual(builtParams.port, 5532, 'Probe params are port-shifted before the probe sees them');
+
+  const explicitParams = new ScenarioRunner({ origins: [], evidenceDir: customEvidenceDir, workspaceDir: customWorkspaceDir })
+    .buildProbeParams(customProbeScenario, { service: 'custom', probe_type: 'custom', params: { cwd: '/explicit', evidenceDir: '/ev', probeId: 'mine' } });
+  assert.strictEqual(explicitParams.cwd, '/explicit', 'An explicit cwd is not overridden by the default');
+  assert.strictEqual(explicitParams.evidenceDir, '/ev');
+  assert.strictEqual(explicitParams.probeId, 'mine');
+
+  fs.rmSync(customEvidenceDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  fs.rmSync(customWorkspaceDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+
   recordPass('AC-06', 'Independent Side-Effect Verification & /tmp Bypass Detection', 'COMPONENT');
 }
 
@@ -827,12 +935,162 @@ function startMockHttpServer(port, handler) {
   console.log('✓ Stage A Golden Fixture verified: PASS 17 | FAIL 0 | UNPROVEN 1 | SKIPPED 2 → Exit 2 (UNPROVEN)');
 }
 
+
+// ----------------------------------------------------------------------------
+// AC-19: A Harness Gap Reports As A Harness Fault Through The Real CLI (issue #5)
+// ----------------------------------------------------------------------------
+{
+  // Issue #5 reported that an unimplemented `custom` probe yields exit 3. It
+  // did not: probes.js returned HARNESS_CONFIGURATION, the runner's catch
+  // overwrote it with PRODUCT_BUG, and nothing ever populated `harnessErrors`,
+  // so exit 3 was unreachable from the CLI entirely. This spawns the real
+  // binary end to end -- the only assertion here that exercises the CLI's own
+  // wiring rather than a copy of it.
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-issue5-fixture-'));
+  const fixtureHarnessDir = path.join(fixtureDir, '.release-harness');
+  fs.mkdirSync(path.join(fixtureHarnessDir, 'scenarios'), { recursive: true });
+
+  const issue5Port = 35400;
+  fs.writeFileSync(path.join(fixtureHarnessDir, 'harness.config.json'), '{"schema_version":"1.0.0","product_slug":"issue5","harness_version":"1.0.0","port_block":{"start":35400,"range":50}}', 'utf8');
+  fs.writeFileSync(path.join(fixtureHarnessDir, 'topology.json'), '{"schema_version":"1.0.0","product_slug":"issue5","topology_type":"monorepo","nodes":[]}', 'utf8');
+  fs.writeFileSync(path.join(fixtureHarnessDir, 'origins.json'), `[{"origin_id":"web","type":"browser_app","auth":"none","url_source":"http://127.0.0.1:${issue5Port}","route_families":["/"],"safe_for_live":true,"evidence":["test"]}]`, 'utf8');
+  // `custom` is schema-valid and unimplemented -- exactly what the adopter declared.
+  fs.writeFileSync(
+    path.join(fixtureHarnessDir, 'scenarios', 'custom-probe.json'),
+    '{"id":"S-CUSTOM","name":"Custom probe scenario","origin_id":"web","tier":"smoke","policy":"required","steps":[{"action":"navigate","target":"/"}],"expected_side_effects":[{"service":"custom","probe_type":"custom","params":{"command":"echo hi"}}]}',
+    'utf8'
+  );
+
+  // Git runs in this temp directory only; the harness repo is never touched.
+  execSync('git init -b main', { cwd: fixtureDir, stdio: 'ignore' });
+  execSync('git add -A', { cwd: fixtureDir, stdio: 'ignore' });
+  execSync('git -c user.name=fixture -c user.email=fixture@test commit -m fixture', { cwd: fixtureDir, stdio: 'ignore' });
+
+  const srvIssue5 = await startMockHttpServer(issue5Port, (req, res) => {
+    const body = '<h1>OK</h1>';
+    res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Length': Buffer.byteLength(body) });
+    res.end(body);
+  });
+
+  const issue5Cli = path.join(repoRoot, 'packages', 'release-harness-core', 'bin', 'release-harness.js');
+  const issue5EvidenceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-issue5-evidence-'));
+
+  function runIssue5Cli(runId, extraArgs) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        [issue5Cli, 'run-local', '--run-id', runId, '--evidence-dir', issue5EvidenceDir, ...extraArgs],
+        { cwd: fixtureDir, stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d) => (stdout += d));
+      child.stderr.on('data', (d) => (stderr += d));
+      child.on('close', (code) => resolve({ code, stdout, stderr }));
+      child.on('error', reject);
+    });
+  }
+
+  try {
+    const certRun = await runIssue5Cli('issue5-certification', []);
+
+    assert.strictEqual(
+      certRun.code,
+      3,
+      `An unimplemented probe must exit 3 (harness), not 1 (product). stdout:\n${certRun.stdout}\nstderr:\n${certRun.stderr}`
+    );
+
+    const certVerdictPath = path.join(issue5EvidenceDir, 'runs', 'issue5-certification', 'verdict.json');
+    assert.ok(fs.existsSync(certVerdictPath), 'The run must still produce a verdict');
+    const certVerdict = JSON.parse(fs.readFileSync(certVerdictPath, 'utf8'));
+
+    assert.strictEqual(certVerdict.run_integrity, 'HARNESS_ERROR');
+    assert.strictEqual(certVerdict.exit_code, 3);
+    assert.ok(certVerdict.causes.includes('HARNESS_CONFIGURATION'), 'The verdict must name the harness cause');
+    assert.ok(
+      !certVerdict.causes.includes('PRODUCT_BUG'),
+      'Issue #5: the harness must not blame the adopter product for a feature the harness never built'
+    );
+    assert.strictEqual(certVerdict.scenarios[0].cause, 'HARNESS_CONFIGURATION');
+
+    // The harness fault must be recorded as a violation an operator can read,
+    // which only happens if the CLI actually pushed to harnessErrors.
+    const harnessViolations = (certVerdict.violations || []).filter((v) => v.type === 'HARNESS_RUNTIME_ERROR');
+    assert.strictEqual(harnessViolations.length, 1, 'The CLI must route the flagged observation into harnessErrors');
+    assert.ok(harnessViolations[0].description.includes('S-CUSTOM'), 'The violation must name the scenario that caused it');
+
+    // A dirty development run is non-certifiable, but that must not downgrade a
+    // harness fault to UNPROVEN/exit 2 and hide it.
+    fs.writeFileSync(path.join(fixtureDir, 'dirty.txt'), 'uncommitted\n', 'utf8');
+    const devRun = await runIssue5Cli('issue5-development', ['--allow-dirty']);
+    assert.strictEqual(
+      devRun.code,
+      3,
+      `--allow-dirty must not mask a harness fault as exit 2. stdout:\n${devRun.stdout}\nstderr:\n${devRun.stderr}`
+    );
+    const devVerdict = JSON.parse(fs.readFileSync(path.join(issue5EvidenceDir, 'runs', 'issue5-development', 'verdict.json'), 'utf8'));
+    assert.strictEqual(devVerdict.run_integrity, 'HARNESS_ERROR');
+    assert.strictEqual(devVerdict.execution_mode, 'DEVELOPMENT');
+    assert.strictEqual(devVerdict.exit_code, 3, 'A development run keeps the harness exit code');
+
+    // An unknown flag is a harness configuration error, not a silent no-op.
+    const badFlagRun = await runIssue5Cli('issue5-badflag', ['--not-a-real-flag']);
+    assert.strictEqual(badFlagRun.code, 3, 'An unknown run-local flag must exit 3');
+    assert.ok(badFlagRun.stderr.includes('unknown flag --not-a-real-flag'), 'The rejected flag must be named');
+
+    // A non-numeric port offset would reach compose and every probe as NaN.
+    const badOffsetRun = await runIssue5Cli('issue5-badoffset', ['--port-offset', 'abc']);
+    assert.strictEqual(badOffsetRun.code, 3, 'A non-numeric --port-offset must exit 3');
+    assert.ok(badOffsetRun.stderr.includes('--port-offset requires an integer'), 'The bad offset must be reported');
+
+    // --port-offset must reach the PROBES, not just compose and the health
+    // checks. A Postgres probe names the port it actually dialled in its own
+    // failure message, so a run at offset 100 against a declared 5432 must
+    // report 5532. Without the CLI passing portOffset into ScenarioRunner,
+    // concurrent runs health-check the shifted port and then probe the
+    // unshifted one -- verifying another run's containers, or nothing.
+    fs.writeFileSync(
+      path.join(fixtureHarnessDir, 'scenarios', 'pg-port.json'),
+      '{"id":"S-PGPORT","name":"Probe port shifting","origin_id":"web","tier":"smoke","policy":"required","steps":[{"action":"navigate","target":"/"}],"expected_side_effects":[{"service":"postgres","probe_type":"sql_query","params":{"host":"127.0.0.1","port":5432,"timeoutMs":1500}}]}',
+      'utf8'
+    );
+
+    const offsetRun = await runIssue5Cli('issue5-portoffset', ['--allow-dirty', '--port-offset', '100']);
+    assert.strictEqual(
+      offsetRun.code,
+      3,
+      `An unreachable probe is a harness environment fault (exit 3). stdout:\n${offsetRun.stdout}\nstderr:\n${offsetRun.stderr}`
+    );
+
+    const offsetVerdict = JSON.parse(fs.readFileSync(path.join(issue5EvidenceDir, 'runs', 'issue5-portoffset', 'verdict.json'), 'utf8'));
+    const pgViolation = (offsetVerdict.violations || []).find(
+      (v) => v.type === 'HARNESS_RUNTIME_ERROR' && String(v.description).includes('S-PGPORT')
+    );
+    assert.ok(pgViolation, 'The Postgres probe must report a harness fault the operator can read');
+    assert.ok(
+      pgViolation.description.includes('127.0.0.1:5532'),
+      `--port-offset must shift the port the probe dials: expected 5532 (5432 + 100), got "${pgViolation.description}"`
+    );
+    assert.ok(
+      !pgViolation.description.includes('127.0.0.1:5432'),
+      'The probe must not also dial the unshifted port'
+    );
+  } finally {
+    srvIssue5.close();
+    try { fs.rmSync(fixtureDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch {}
+    try { fs.rmSync(issue5EvidenceDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch {}
+  }
+
+  recordPass('AC-19', 'Harness Gap Reports As Harness Fault Through The Real CLI (issue #5)', 'INTEGRATION');
+}
+
 // ----------------------------------------------------------------------------
 // Validation & Criteria Matrix Report
 // ----------------------------------------------------------------------------
-const ALL_18_CRITERIA = [
+const ALL_19_CRITERIA = [
   'AC-01', 'AC-02', 'AC-03', 'AC-04', 'AC-05', 'AC-06', 'AC-07', 'AC-08', 'AC-09',
   'AC-10', 'AC-11', 'AC-12', 'AC-13', 'AC-14', 'AC-15', 'AC-16', 'AC-17', 'AC-18',
+  'AC-19',
 ];
 
 console.log('\n========================================================================================');
@@ -842,7 +1100,7 @@ console.log('  CRITERION | LAYER       | STATUS | DESCRIPTION                   
 console.log('----------------------------------------------------------------------------------------');
 
 let allPassed = true;
-for (const acId of ALL_18_CRITERIA) {
+for (const acId of ALL_19_CRITERIA) {
   const res = criteriaResults[acId];
   if (res && res.status === 'PASS') {
     console.log(`  ${acId.padEnd(9)} | ${res.layer.padEnd(11)} | PASS   | ${res.name}`);
@@ -852,10 +1110,10 @@ for (const acId of ALL_18_CRITERIA) {
   }
 }
 
-assert.ok(allPassed, 'Every single one of the 18 Acceptance Criteria must pass');
+assert.ok(allPassed, 'Every single one of the 19 Acceptance Criteria must pass');
 
 console.log('========================================================================================');
-console.log(`  SUMMARY: 18 / 18 Acceptance Criteria AUTOMATED & VERIFIED GREEN (Real Playwright Engine) ✓ `);
+console.log(`  SUMMARY: 19 / 19 Acceptance Criteria AUTOMATED & VERIFIED GREEN (Real Playwright Engine) ✓ `);
 console.log('======================================================================\n');
 
 process.exit(0);
