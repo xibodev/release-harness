@@ -77,36 +77,89 @@ Commands:
   clean         Clean up run workspaces and lingering scoped test containers
 
 Options:
-  --config       Path to harness config (default: .release-harness/harness.config.json)
-  --evidence-dir External evidence output directory (default: system cache)
-  --allow-dirty  Allow uncommitted changes (marks run as NON-CERTIFYING development mode, exit 2)
-  --with-agents  Opt-in to scaffold AI agent instructions and skills during init
-  --force        Overwrite existing files during init
-  --dry-run      Simulate action without writing files
-  --run-id       Target a specific run ID for evaluation or cleanup
-  --port-offset  Port block offset for concurrent runs (default: 0)
-  --time         Fixed evaluation timestamp for deterministic replay
-  --version, -v  Show release-harness version
-  --help, -h     Show this help message
+  --evidence-dir    External evidence output directory (default: system cache)
+  --allow-dirty     Allow uncommitted changes (marks run as NON-CERTIFYING development mode, exit 2)
+  --with-agents     Scaffold AI agent instructions and skills during init
+  --contracts-only  Scaffold only .release-harness/ contracts, no agent instructions
+  --force           Overwrite existing files during init
+  --overwrite       Alias for --force
+  --dry-run         Simulate action without writing files
+  --run-id          Target a specific run ID for evaluation or cleanup
+  --port-offset     Port block offset for concurrent runs (default: 0)
+  --time            Fixed evaluation timestamp for deterministic replay
+  --version, -v     Show release-harness version
+  --help, -h        Show this help message
 `);
 }
 
-function parseFlags(args) {
+/**
+ * The flags each command accepts. A flag absent from its command's list is a
+ * configuration error, not a no-op: `--contracts-only` was documented but read
+ * nowhere, so it exited 0 while doing the opposite of what it promised.
+ */
+export const KNOWN_FLAGS = {
+  doctor: [],
+  init: ['with-agents', 'contracts-only', 'force', 'overwrite', 'dry-run'],
+  'check-pr': ['allow-dirty'],
+  'run-local': ['evidence-dir', 'allow-dirty', 'run-id', 'port-offset', 'time'],
+  evaluate: ['evidence-dir', 'run-id', 'time'],
+  clean: ['evidence-dir', 'run-id'],
+};
+
+/**
+ * Parse `--flag` / `--flag value` arguments.
+ *
+ * The returned value is the flag map itself, carrying two extra non-enumerable
+ * views so both call shapes read correctly from one return value:
+ *
+ *   const flags = parseFlags(args);                        // map, as before
+ *   const { flags, unknown } = parseFlags(args, allowed);  // validated
+ *
+ * With no `allowedFlags` nothing is validated and `unknown` is always empty, so
+ * a one-argument call behaves exactly as it did before validation existed.
+ * The views are non-enumerable, so they never appear in `Object.keys`,
+ * `JSON.stringify`, or a spread of the flag map.
+ *
+ * `flags` and `unknown` are consequently reserved names: no command accepts
+ * `--flags` or `--unknown`, and both are reported as unknown when validating.
+ */
+export function parseFlags(args, allowedFlags = null) {
   const flags = {};
+  const unknown = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg.startsWith('--')) {
-      const key = arg.slice(2);
-      const next = args[i + 1];
-      if (next && !next.startsWith('--')) {
-        flags[key] = next;
-        i++;
-      } else {
-        flags[key] = true;
-      }
+    if (!arg.startsWith('--')) continue;
+    const key = arg.slice(2);
+    if (key === 'flags' || key === 'unknown') {
+      // Reserved by the return shape above; never let one shadow a view.
+      unknown.push(key);
+      continue;
+    }
+    const next = args[i + 1];
+    if (next && !next.startsWith('--')) {
+      flags[key] = next;
+      i++;
+    } else {
+      flags[key] = true;
+    }
+    if (allowedFlags && !allowedFlags.includes(key)) {
+      unknown.push(key);
     }
   }
+  Object.defineProperty(flags, 'flags', { value: flags, enumerable: false });
+  Object.defineProperty(flags, 'unknown', { value: unknown, enumerable: false });
   return flags;
+}
+
+/**
+ * Print each unrecognised flag. Callers turn a non-empty list into exit 3 --
+ * a harness configuration error, not a product failure.
+ */
+function reportUnknownFlags(unknown) {
+  for (const u of unknown) {
+    console.error(`Error: unknown flag --${u}`);
+  }
+  console.error('Run "release-harness --help" for the flags this command accepts.');
 }
 
 function resolveEvidenceRoot(flags, productSlug) {
@@ -246,7 +299,11 @@ async function handleDoctor(args) {
 }
 
 async function handleInit(args) {
-  const flags = parseFlags(args);
+  const { flags, unknown } = parseFlags(args, KNOWN_FLAGS.init);
+  if (unknown.length > 0) {
+    reportUnknownFlags(unknown);
+    return 3;
+  }
   const cwd = process.cwd();
   const dryRun = Boolean(flags['dry-run']);
   const force = Boolean(flags['force'] || flags['overwrite']);
