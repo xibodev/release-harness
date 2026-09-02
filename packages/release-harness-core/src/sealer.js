@@ -32,8 +32,27 @@ export class EvidenceSealer {
 
   assertCanWrite() {
     if (this.state !== 'COLLECTING' && this.state !== 'SANITIZING') {
-      throw new Error(`Evidence write rejected: evidence directory is ${this.state} (closed to mutations)`);
+      throw new Error(
+        `Evidence write rejected: the evidence directory is sealed (state: ${this.state}); no further writes are permitted`
+      );
     }
+  }
+
+  /**
+   * The single write path for evidence artifacts. Routing every write through the
+   * lifecycle guard means a post-seal write fails where it happens, rather than
+   * surfacing later as a manifest hash mismatch at verification time.
+   *
+   * @param {string} relPath Path relative to the evidence directory.
+   * @param {string|Buffer} content Bytes to write.
+   * @returns {string} The absolute path written.
+   */
+  writeEvidence(relPath, content) {
+    this.assertCanWrite();
+    const target = path.join(this.evidenceDir, relPath);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content, typeof content === 'string' ? 'utf8' : undefined);
+    return target;
   }
 
   categorizeFile(relPath) {
