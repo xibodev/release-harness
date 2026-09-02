@@ -453,6 +453,13 @@ function startMockHttpServer(port, handler) {
   fs.writeFileSync(path.join(hDir, 'origins.json'), '[{"origin_id":"mock-web","type":"browser_app","auth":"none","url_source":"http://127.0.0.1:35000","route_families":["/"],"safe_for_live":true,"evidence":["test"]}]', 'utf8');
   fs.writeFileSync(path.join(hDir, 'scenarios', 'smoke.json'), '{"id":"SMOKE-1","name":"Smoke","origin_id":"mock-web","tier":"smoke","policy":"required","steps":[{"action":"navigate","target":"/"}]}', 'utf8');
 
+  // Make the fixture a real repository. Cleanliness now fails closed, so a
+  // non-git directory reports dirty and run-local exits 2 (UNPROVEN) — which
+  // would mask what this test actually measures: concurrent execution.
+  execSync('git init -b main', { cwd: tmpConcurFixture, stdio: 'ignore' });
+  execSync('git add -A', { cwd: tmpConcurFixture, stdio: 'ignore' });
+  execSync('git -c user.name=fixture -c user.email=fixture@test commit -m fixture', { cwd: tmpConcurFixture, stdio: 'ignore' });
+
   const mockPortConcur = 35000;
   const srvConcur = await startMockHttpServer(mockPortConcur, (req, res) => {
     const body = '<h1>OK</h1>';

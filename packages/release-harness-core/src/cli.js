@@ -702,6 +702,21 @@ async function handleCheckPr(args) {
 }
 
 async function handleRunLocal(args) {
+  function reportMaterialization(label, res) {
+    const s = res.stats;
+    console.log(
+      `   ${label}: ${s.fileCount} file(s), ${s.byteCount} byte(s), ` +
+        `${s.emptyDirCount} empty dir(s) in ${s.elapsedMs}ms (${s.strategy} enumeration)`
+    );
+    if (s.skippedCount > 0) {
+      console.warn(
+        `   ! ${s.skippedCount} enumerated path(s) were NOT materialized; ` +
+          `the tree digest covers ${s.enumeratedCount} path(s) but the workspace holds ${s.fileCount}.`
+      );
+    }
+    for (const warn of s.warnings) console.warn(`   ! ${warn}`);
+  }
+
   const flags = parseFlags(args);
   const cwd = process.cwd();
   const runStartedAt = new Date().toISOString();
@@ -880,21 +895,6 @@ async function handleRunLocal(args) {
    * basename denylist, or a file skipped mid-copy, looked exactly like a clean
    * run. A degradation nobody can see is not a warning.
    */
-  const reportMaterialization = (label, res) => {
-    const s = res.stats;
-    console.log(
-      `   ${label}: ${s.fileCount} file(s), ${s.byteCount} byte(s), ` +
-        `${s.emptyDirCount} empty dir(s) in ${s.elapsedMs}ms (${s.strategy} enumeration)`
-    );
-    if (s.skippedCount > 0) {
-      console.warn(
-        `   ! ${s.skippedCount} enumerated path(s) were NOT materialized; ` +
-          `the tree digest covers ${s.enumeratedCount} path(s) but the workspace holds ${s.fileCount}.`
-      );
-    }
-    for (const warn of s.warnings) console.warn(`   ! ${warn}`);
-  };
-
     fs.writeFileSync(path.join(runEvidenceDir, 'execution.log'), logContent, 'utf8');
 
     // Persist complete raw results into evidence directory before sealing
