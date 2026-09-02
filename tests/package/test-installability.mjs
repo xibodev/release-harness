@@ -142,6 +142,20 @@ for (const runtime of ['.claude', '.opencode']) {
 }
 console.log(`  ✓ .release-harness/ and multi-runtime AI agents scaffolded (${bundledSkills} namespaced skills per runtime)`);
 
+// The bundle must teach the agent to author side-effect probes. An implemented
+// probe that no skill can emit is unreachable in practice: the adopting agent
+// writes scenarios from scenario-compiler, so a probe absent from that skill is
+// a probe nobody declares.
+const compilerSkill = fs.readFileSync(
+  path.join(consumerRepoDir, '.claude', 'skills', 'release-harness-scenario-compiler', 'SKILL.md'),
+  'utf8'
+);
+assert.ok(compilerSkill.includes('expected_side_effects'), 'scenario-compiler must teach expected_side_effects');
+assert.ok(compilerSkill.includes('probe_type'), 'scenario-compiler must teach probe_type');
+assert.ok(compilerSkill.includes('"service": "custom"'), 'scenario-compiler must show the custom probe form');
+assert.ok(compilerSkill.includes('sql_query'), 'scenario-compiler must warn that sql_query is unimplemented');
+console.log('  ✓ scenario-compiler teaches side-effect probes including the custom form');
+
 // Point origin to designated test port 38500
 const originsPath = path.join(consumerRepoDir, '.release-harness', 'origins.json');
 const origins = JSON.parse(fs.readFileSync(originsPath, 'utf8'));
