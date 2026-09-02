@@ -724,8 +724,24 @@ function startMockHttpServer(port, handler) {
   // every platform. A repository carrying committed symlink blobs, cloned on
   // Windows with core.symlinks=false, materializes those entries as regular
   // files and legitimately digests differently than on POSIX.
-  const digestAgain = materializer.getSourceInfo(repoRoot).treeDigest;
-  assert.strictEqual(digestAgain, sourceInfo.treeDigest, 'Digest must be stable across calls on an unchanged tree');
+  // Stability is asserted against a controlled fixture, not repoRoot: the suite
+  // writes evidence directories and workspaces into the repository as it runs,
+  // and untracked files now count toward the digest, so two calls against the
+  // live repo legitimately differ. Asserting there would fail for a reason
+  // unrelated to what this test claims to verify.
+  const stableRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'ac12-stable-'));
+  try {
+    fs.writeFileSync(path.join(stableRepo, 'a.txt'), 'content\n');
+    execSync('git init -b main', { cwd: stableRepo, stdio: 'ignore' });
+    execSync('git add -A', { cwd: stableRepo, stdio: 'ignore' });
+    execSync('git -c user.name=fixture -c user.email=fixture@test commit -m fixture', { cwd: stableRepo, stdio: 'ignore' });
+
+    const first = materializer.getSourceInfo(stableRepo).treeDigest;
+    const second = materializer.getSourceInfo(stableRepo).treeDigest;
+    assert.strictEqual(second, first, 'Digest must be stable across calls on an unchanged tree');
+  } finally {
+    try { fs.rmSync(stableRepo, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch {}
+  }
 
   const deepRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'ac12-deep-'));
   try {
