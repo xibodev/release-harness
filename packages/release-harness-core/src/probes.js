@@ -2,6 +2,9 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
 
 /**
  * Independent side-effect and health probes.
@@ -277,6 +280,236 @@ export async function probeMailpit({ host = '127.0.0.1', port = 8025, probe_type
   return { ok: false, message: `Unsupported Mailpit probe_type: ${probe_type}`, cause: 'HARNESS_CONFIGURATION', isHarnessError: true };
 }
 
+/**
+ * Project-Owned Custom Probe.
+ *
+ * Every other probe here is web-service-shaped. A product whose real deliverable
+ * is a FILE -- a rendered video, a compiled binary, a generated PDF, an exported
+ * dataset -- had no way to assert on its actual output, so the gate could drive
+ * the UI green while saying nothing about whether the artifact was valid.
+ *
+ * The harness holds no opinion about what is asserted. The project declares a
+ * command; the harness runs it, compares the exit code, and seals stdout/stderr
+ * as evidence.
+ *
+ * SECURITY BOUNDARY -- the reason this is safe to ship:
+ *
+ *   `command` and `args` come from the project's committed .release-harness/
+ *   contract and nowhere else. The agent authors it, a human sees it in the
+ *   diff, git binds it to a reviewed revision, and the run executes what was
+ *   committed. The harness never accepts a command synthesized at run time,
+ *   derived from probe output, or read from the product under test.
+ *
+ *   That direction is the whole point. If the thing being certified could
+ *   author its own assertion, it would be grading its own exam and
+ *   certification would mean nothing. `shell: false` keeps it there: argv is
+ *   passed as a vector with no shell in between, so a contract value cannot
+ *   smuggle in `; rm -rf` or `&& curl evil` through interpolation.
+ *
+ * @returns {{ok: boolean, message: string, cause?: string, isHarnessError?: boolean, evidencePath?: string|null}}
+ */
+export async function probeCustom({
+  command,
+  args = [],
+  expect_exit_code = 0,
+  timeoutMs = 60000,
+  cwd,
+  evidenceDir,
+  probeId = 'custom',
+}) {
+  if (typeof command !== 'string' || command.trim() === '') {
+    return {
+      ok: false,
+      message:
+        'Custom probe requires params.command (a non-empty string) declared in the committed .release-harness/ contract',
+      cause: 'HARNESS_CONFIGURATION',
+      isHarnessError: true,
+    };
+  }
+  if (!Array.isArray(args)) {
+    return {
+      ok: false,
+      message: `Custom probe params.args must be an array of strings (got ${typeof args})`,
+      cause: 'HARNESS_CONFIGURATION',
+      isHarnessError: true,
+    };
+  }
+  // execFile throws a synchronous RangeError on a non-integer timeout. A typo in
+  // the contract must be reported as the configuration error it is, rather than
+  // escaping as an unhandled rejection that the runner's catch would file as a
+  // PRODUCT_BUG -- blaming the adopter's product for their own contract typo.
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 0) {
+    return {
+      ok: false,
+      message: `Custom probe params.timeoutMs must be a non-negative integer (got ${JSON.stringify(timeoutMs)})`,
+      cause: 'HARNESS_CONFIGURATION',
+      isHarnessError: true,
+    };
+  }
+  if (!Number.isInteger(expect_exit_code)) {
+    return {
+      ok: false,
+      message: `Custom probe params.expect_exit_code must be an integer (got ${JSON.stringify(expect_exit_code)})`,
+      cause: 'HARNESS_CONFIGURATION',
+      isHarnessError: true,
+    };
+  }
+
+  const stringArgs = args.map(String);
+  const started = Date.now();
+
+  const result = await new Promise((resolve) => {
+    execFile(
+      command,
+      stringArgs,
+      {
+        cwd: cwd || process.cwd(),
+        timeout: timeoutMs,
+        encoding: 'utf8',
+        maxBuffer: 8 * 1024 * 1024,
+        shell: false,
+        windowsHide: true,
+      },
+      (err, stdout, stderr) => {
+        // Never trust what comes back: on some failure paths execFile hands the
+        // callback undefined streams, and String() on those yields "undefined",
+        // which would then be sealed as if the process had printed it.
+        const out = typeof stdout === 'string' ? stdout : '';
+        const errOut = typeof stderr === 'string' ? stderr : '';
+
+        if (!err) {
+          resolve({ kind: 'exited', code: 0, stdout: out, stderr: errOut });
+          return;
+        }
+        // Order matters. A timeout kill and a numeric exit are distinguished by
+        // `killed`/`signal`, not by `code` -- a killed process reports code null,
+        // and testing `typeof err.code === 'number'` first would misfile a
+        // maxBuffer abort (whose code is a string) as a spawn failure.
+        if (err.killed || err.signal) {
+          resolve({ kind: 'timeout', code: null, signal: err.signal || null, stdout: out, stderr: errOut });
+          return;
+        }
+        if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+          resolve({ kind: 'overflow', code: null, stdout: out, stderr: errOut, detail: err.message });
+          return;
+        }
+        if (typeof err.code === 'number') {
+          resolve({ kind: 'exited', code: err.code, stdout: out, stderr: errOut });
+          return;
+        }
+        // ENOENT, EACCES, EPERM: the command never ran at all.
+        resolve({ kind: 'spawn_error', code: null, stdout: out, stderr: errOut, detail: err.message });
+      }
+    );
+  });
+
+  const elapsedMs = Date.now() - started;
+  const STREAM_CAP = 256 * 1024;
+
+  // Seal the outcome BEFORE adjudicating it, so a failing probe leaves behind
+  // the same evidence a passing one does. Evidence only of successes is not
+  // evidence.
+  let evidencePath = null;
+  let evidenceError = null;
+  if (evidenceDir) {
+    try {
+      const probesDir = path.join(evidenceDir, 'probes');
+      fs.mkdirSync(probesDir, { recursive: true });
+      // A probeId is assembled from scenario and service ids, which may contain
+      // path separators or characters no filesystem accepts. Collapse it to a
+      // safe basename so the write cannot escape probes/.
+      const safeId = String(probeId).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120) || 'custom';
+      const target = path.join(probesDir, `${safeId}.json`);
+      fs.writeFileSync(
+        target,
+        JSON.stringify(
+          {
+            probe_id: probeId,
+            command,
+            args: stringArgs,
+            expect_exit_code,
+            exit_code: result.code,
+            timed_out: result.kind === 'timeout',
+            elapsed_ms: elapsedMs,
+            stdout: result.stdout.slice(0, STREAM_CAP),
+            stderr: result.stderr.slice(0, STREAM_CAP),
+            stdout_truncated: result.stdout.length > STREAM_CAP,
+            stderr_truncated: result.stderr.length > STREAM_CAP,
+          },
+          null,
+          2
+        ) + '\n',
+        'utf8'
+      );
+      evidencePath = target;
+    } catch (err) {
+      // Fail loudly or not at all. A swallowed write failure would leave the
+      // verdict claiming sealed evidence for a file that is not on disk, which
+      // surfaces later as an unexplained manifest mismatch.
+      evidenceError = err.message;
+    }
+  }
+
+  if (evidenceError) {
+    return {
+      ok: false,
+      message: `Custom probe "${command}" ran but its evidence could not be sealed under ${evidenceDir}: ${evidenceError}`,
+      cause: 'HARNESS_ENVIRONMENT',
+      isHarnessError: true,
+      evidencePath: null,
+    };
+  }
+
+  if (result.kind === 'spawn_error') {
+    return {
+      ok: false,
+      message: `Custom probe could not execute "${command}": ${result.detail}. The command must exist and be executable from the run workspace.`,
+      cause: 'HARNESS_CONFIGURATION',
+      isHarnessError: true,
+      evidencePath,
+    };
+  }
+
+  if (result.kind === 'timeout') {
+    return {
+      ok: false,
+      message: `Custom probe "${command}" exceeded its ${timeoutMs}ms timeout and was killed${result.signal ? ` (${result.signal})` : ''}`,
+      cause: 'HARNESS_ENVIRONMENT',
+      isHarnessError: true,
+      evidencePath,
+    };
+  }
+
+  if (result.kind === 'overflow') {
+    return {
+      ok: false,
+      message: `Custom probe "${command}" produced more output than the harness can capture: ${result.detail}. A probe should assert, not stream.`,
+      cause: 'HARNESS_CONFIGURATION',
+      isHarnessError: true,
+      evidencePath,
+    };
+  }
+
+  if (result.code !== expect_exit_code) {
+    // A failed project assertion is a PRODUCT failure, deliberately carrying no
+    // isHarnessError: the harness did its job correctly and the answer was no.
+    const excerpt = result.stderr.trim() ? ` -- ${result.stderr.trim().slice(0, 300)}` : '';
+    return {
+      ok: false,
+      message: `Custom probe "${command}" exited ${result.code}, expected ${expect_exit_code}${excerpt}`,
+      cause: 'PRODUCT_BUG',
+      evidencePath,
+    };
+  }
+
+  return {
+    ok: true,
+    message: `Custom probe "${command}" exited ${result.code} as expected (${elapsedMs}ms)`,
+    cause: 'NONE',
+    evidencePath,
+  };
+}
+
 export async function verifySecurityHeaders(originUrl, securityHeaderContract) {
   if (!securityHeaderContract) return { ok: true };
   const parsed = new URL(originUrl);
@@ -346,6 +579,10 @@ export async function verifySideEffect(sideEffect) {
 
   if (service === 'mailpit') {
     return probeMailpit({ ...params, probe_type });
+  }
+
+  if (service === 'custom') {
+    return probeCustom({ ...params, probe_type });
   }
 
   // Fail-closed on unknown services or unsupported combinations (no optimistic stubs allowed)
