@@ -886,6 +886,189 @@ function recordPass(num, name) {
   );
   matIg.cleanup();
 
+  // `git check-ignore` exits 1 with empty output when NOTHING in the batch is
+  // ignored. That is a normal answer, not a failure, and misreading it discards
+  // git's authority for the whole walk. This repo ignores only FILES, so the
+  // directory batch comes back exit 1 - while holding coverage/ and
+  // node_modules/, which the conservative basename denylist would drop but this
+  // repository does not ignore. Read correctly they are kept; read as a failure
+  // the workspace silently loses them.
+  const ex1 = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-exit1-'));
+  execSync('git init -b main', { cwd: ex1, stdio: 'ignore' });
+  execSync('git config user.email "t@t.t"', { cwd: ex1, stdio: 'ignore' });
+  execSync('git config user.name "t"', { cwd: ex1, stdio: 'ignore' });
+  fs.writeFileSync(path.join(ex1, '.gitignore'), '*.log\n');
+  fs.writeFileSync(path.join(ex1, 'app.js'), 'console.log(1)\n');
+  // Wholly-ignored contents make git collapse this to `logs/` in its directory
+  // listing, so the check-ignore batch is non-empty and the branch is reached.
+  fs.mkdirSync(path.join(ex1, 'logs'), { recursive: true });
+  fs.writeFileSync(path.join(ex1, 'logs', 'run.log'), 'noise\n');
+  // Both are in FALLBACK_IGNORED_NAMES by basename and NOT ignored by this repo.
+  assert.ok(FALLBACK_IGNORED_NAMES.has('coverage'), 'Fixture premise: coverage/ is on the basename denylist');
+  assert.ok(FALLBACK_IGNORED_NAMES.has('node_modules'), 'Fixture premise: node_modules/ is on the basename denylist');
+  fs.mkdirSync(path.join(ex1, 'coverage'), { recursive: true });
+  fs.mkdirSync(path.join(ex1, 'node_modules'), { recursive: true });
+  fs.mkdirSync(path.join(ex1, 'uploads'), { recursive: true });
+  execSync('git add -A', { cwd: ex1, stdio: 'ignore' });
+  execSync('git commit -m init', { cwd: ex1, stdio: 'ignore' });
+
+  const wsEx1 = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-exit1ws-'));
+  const matEx1 = new SourceMaterializer(wsEx1);
+  const ex1Res = matEx1.materializeRepo(ex1, 'source', { includeUntracked: false });
+
+  assert.strictEqual(ex1Res.stats.strategy, 'git', 'The exit-1 fixture must be enumerated by git');
+  for (const d of ['coverage', 'node_modules']) {
+    assert.ok(
+      fs.existsSync(path.join(ex1Res.targetDir, d)),
+      `"${d}/" is on the basename denylist but NOT ignored by this repository, so it must be recreated - ` +
+        'a check-ignore exit of 1 means "nothing in the batch is ignored", not "git failed"'
+    );
+  }
+  assert.ok(
+    fs.existsSync(path.join(ex1Res.targetDir, 'logs')),
+    'logs/ holds only git-ignored files, so it is workspace-empty and must be recreated'
+  );
+  assert.ok(fs.existsSync(path.join(ex1Res.targetDir, 'uploads')), 'A genuinely empty directory must be recreated');
+  assert.deepStrictEqual(
+    fs.readdirSync(ex1Res.targetDir).sort(),
+    ['.gitignore', 'app.js', 'coverage', 'logs', 'node_modules', 'uploads'],
+    'Exit 1 from check-ignore must keep git as the ignore authority for the whole walk'
+  );
+  assert.strictEqual(ex1Res.stats.emptyDirCount, 4, 'Exactly coverage/, logs/, node_modules/ and uploads/ are workspace-empty');
+  assert.deepStrictEqual(
+    ex1Res.stats.warnings,
+    [],
+    'A check-ignore exit of 1 is a successful answer and must not be reported as a fallback'
+  );
+
+  // Empty directories still must not move the digest on this path either.
+  const ex1Digest = ex1Res.sourceInfo.treeDigest;
+  for (const d of ['coverage', 'node_modules', 'uploads', 'logs']) {
+    fs.rmSync(path.join(ex1, d), { recursive: true, force: true });
+  }
+  assert.strictEqual(
+    matEx1.computeTreeDigest(ex1, enumerateSource(ex1, { includeUntracked: false }).files),
+    ex1Digest,
+    'Empty directories must not affect the tree digest'
+  );
+  matEx1.cleanup();
+
+  // The reverse failure: git IS the authority, but its ignore rules cannot be
+  // obtained. Falling back to basenames here silently reinstates the build-tree
+  // skeletons the git path exists to exclude, while the run still reports
+  // strategy 'git'. A degradation that quiet must at minimum be named, so the
+  // adopter can see why a certification workspace grew a dist/ it never had.
+  // Exercised by shadowing `git` with a shim that fails ONLY check-ignore.
+  const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-shim-'));
+  const isWin = process.platform === 'win32';
+  let realGit = null;
+  try {
+    realGit = execSync(isWin ? 'where git' : 'command -v git', { encoding: 'utf8' })
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !/\.cmd$/i.test(l))[0];
+  } catch {
+    realGit = null;
+  }
+  let shimInstalled = false;
+  if (realGit) {
+    try {
+      if (isWin) {
+        fs.writeFileSync(
+          path.join(shimDir, 'git.cmd'),
+          [
+            '@echo off',
+            'for %%A in (%*) do if "%%~A"=="check-ignore" (',
+            '  echo fatal: simulated check-ignore failure>&2',
+            '  exit /b 128',
+            ')',
+            `"${realGit}" %*`,
+            '',
+          ].join('\r\n')
+        );
+      } else {
+        const shimPath = path.join(shimDir, 'git');
+        fs.writeFileSync(
+          shimPath,
+          '#!/bin/sh\n' +
+            'for a in "$@"; do\n' +
+            '  if [ "$a" = "check-ignore" ]; then echo "fatal: simulated check-ignore failure" >&2; exit 128; fi\n' +
+            'done\n' +
+            `exec "${realGit}" "$@"\n`
+        );
+        fs.chmodSync(shimPath, 0o755);
+      }
+      shimInstalled = true;
+    } catch {
+      shimInstalled = false;
+    }
+  }
+
+  const deg = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-degraded-'));
+  execSync('git init -b main', { cwd: deg, stdio: 'ignore' });
+  execSync('git config user.email "t@t.t"', { cwd: deg, stdio: 'ignore' });
+  execSync('git config user.name "t"', { cwd: deg, stdio: 'ignore' });
+  fs.writeFileSync(path.join(deg, '.gitignore'), 'dist/\n');
+  fs.writeFileSync(path.join(deg, 'app.js'), 'console.log(1)\n');
+  fs.mkdirSync(path.join(deg, 'dist', 'skeleton'), { recursive: true });
+  fs.writeFileSync(path.join(deg, 'dist', 'artifact.bin'), 'junk\n');
+  fs.mkdirSync(path.join(deg, 'uploads'), { recursive: true });
+  execSync('git add -A', { cwd: deg, stdio: 'ignore' });
+  execSync('git commit -m init', { cwd: deg, stdio: 'ignore' });
+
+  const priorPath = process.env.PATH;
+  let shimActive = false;
+  let degRes = null;
+  const wsDeg = fs.mkdtempSync(path.join(os.tmpdir(), 'f30-degws-'));
+  const matDeg = new SourceMaterializer(wsDeg);
+  if (shimInstalled) {
+    process.env.PATH = `${shimDir}${path.delimiter}${priorPath}`;
+    try {
+      // Only meaningful if the shim really is what `git` now resolves to, and
+      // only check-ignore is affected - ls-files must still succeed, or this
+      // would be testing total git failure instead.
+      try {
+        execSync('git check-ignore -z --stdin', { cwd: deg, input: Buffer.from('dist\0', 'utf8'), stdio: ['pipe', 'pipe', 'ignore'] });
+      } catch (err) {
+        shimActive = err && err.status === 128;
+      }
+      let lsFilesOk = false;
+      try {
+        execSync('git ls-files -z --cached', { cwd: deg, stdio: ['ignore', 'pipe', 'ignore'] });
+        lsFilesOk = true;
+      } catch {
+        lsFilesOk = false;
+      }
+      shimActive = shimActive && lsFilesOk;
+      if (shimActive) degRes = matDeg.materializeRepo(deg, 'source', { includeUntracked: false });
+    } finally {
+      process.env.PATH = priorPath;
+    }
+  }
+
+  if (shimActive && degRes) {
+    assert.strictEqual(degRes.stats.strategy, 'git', 'File enumeration still succeeds, so the run still claims git authority');
+    assert.ok(
+      degRes.stats.warnings.some(
+        (w) => w.includes('ignore rules could not be obtained') && w.includes('empty-directory scan')
+      ),
+      'Losing git ignore authority for the empty-directory walk must be reported, not applied silently'
+    );
+    assert.ok(
+      degRes.stats.warnings.some((w) => w.includes('may be recreated in the workspace as empty skeletons')),
+      'The warning must state the consequence: ignored directories may be recreated'
+    );
+    matDeg.cleanup();
+  } else {
+    console.log(
+      '  … [F-30] degraded-ignore-authority case skipped: this environment could not shadow `git` on PATH. ' +
+        'NOT RUN: the warning emitted when a git repository\'s ignore rules cannot be obtained for the empty-directory scan.'
+    );
+  }
+  fs.rmSync(shimDir, { recursive: true, force: true });
+  fs.rmSync(deg, { recursive: true, force: true });
+  fs.rmSync(wsDeg, { recursive: true, force: true });
+
   // A non-git tree has no ignore authority to consult and must keep working:
   // the conservative basename denylist still applies, and empty product
   // directories are still recreated.
@@ -921,6 +1104,8 @@ function recordPass(num, name) {
   fs.rmSync(wsIncl, { recursive: true, force: true });
   fs.rmSync(ig, { recursive: true, force: true });
   fs.rmSync(wsIg, { recursive: true, force: true });
+  fs.rmSync(ex1, { recursive: true, force: true });
+  fs.rmSync(wsEx1, { recursive: true, force: true });
   fs.rmSync(plainSrc, { recursive: true, force: true });
   fs.rmSync(wsPlain, { recursive: true, force: true });
   fs.rmSync(wsCol, { recursive: true, force: true });

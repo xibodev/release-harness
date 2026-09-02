@@ -131,6 +131,10 @@ const DENYLIST_FALLBACK_CONSEQUENCE =
   'falling back to the conservative basename denylist, which excludes directories such as coverage/ and .cache/ by name. ' +
   'Any product source under those names will be absent from both the workspace copy and the tree digest.';
 
+const EMPTY_DIR_DENYLIST_FALLBACK_CONSEQUENCE =
+  'falling back to the conservative basename denylist, which knows nothing of the ignore rules in this repository. ' +
+  'Directories the repository ignores — dist/, build/, target/ and the like — may be recreated in the workspace as empty skeletons.';
+
 function gitOutputToPaths(stdout) {
   return stdout
     .toString('utf8')
@@ -466,8 +470,12 @@ function fsEnumerate(absPath, warnings) {
  *
  * `check-ignore` exits 1 with empty stdout when NOTHING in the batch is ignored.
  * That is a successful answer, not a failure, and is reported as such.
+ *
+ * When a null result IS a failure rather than an absence of git authority, the
+ * causing error is recorded on `failure.error` so the caller can name the cause
+ * instead of degrading silently.
  */
-function resolveGitIgnoreSets(absPath) {
+function resolveGitIgnoreSets(absPath, failure = {}) {
   let listed;
   try {
     listed = gitOutputToPaths(
@@ -479,7 +487,8 @@ function resolveGitIgnoreSets(absPath) {
         maxBuffer: 64 * 1024 * 1024,
       })
     );
-  } catch {
+  } catch (err) {
+    failure.error = err;
     return null;
   }
 
@@ -507,8 +516,12 @@ function resolveGitIgnoreSets(absPath) {
       // Exit 1 = "none of the batch is ignored", which arrives as a thrown
       // error with empty stdout. Anything that produced no stdout at all and
       // did not exit 1 is a real failure: fall back rather than assert.
-      if (err && err.status === 1 && err.stdout !== undefined) stdout = err.stdout;
-      else return null;
+      if (err && err.status === 1 && err.stdout !== undefined) {
+        stdout = err.stdout;
+      } else {
+        failure.error = err;
+        return null;
+      }
     }
     for (const p of gitOutputToPaths(stdout)) ignoredDirs.add(p.replace(/\/+$/, ''));
   }
@@ -545,7 +558,9 @@ function resolveGitIgnoreSets(absPath) {
  * Cost is bounded at two git subprocesses for the whole tree, plus the same
  * single directory walk as before — never a subprocess per directory.
  *
- * Never throws: an unreadable directory is reported as a warning and skipped.
+ * Never throws: an unreadable directory is reported as a warning and skipped,
+ * as is a git repository whose ignore rules could not be obtained — that fallback
+ * is the difference between excluding build trees and recreating them.
  */
 export function enumerateEmptyDirectories(sourcePath, warnings = []) {
   const absPath = path.resolve(sourcePath);
@@ -560,6 +575,8 @@ export function enumerateEmptyDirectories(sourcePath, warnings = []) {
   // Only a tree that IS its own repository may use git's ignore rules; a nested
   // sub-repo's ignores are the parent's business, exactly as in `enumerateSource`.
   let ignoreSets = null;
+  let isOwnRepo = false;
+  const ignoreFailure = {};
   try {
     const topLevel = execSync('git rev-parse --show-toplevel', {
       cwd: absPath,
@@ -567,9 +584,26 @@ export function enumerateEmptyDirectories(sourcePath, warnings = []) {
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000,
     }).trim();
-    if (topLevel && samePath(topLevel, absPath)) ignoreSets = resolveGitIgnoreSets(absPath);
+    if (topLevel && samePath(topLevel, absPath)) {
+      isOwnRepo = true;
+      ignoreSets = resolveGitIgnoreSets(absPath, ignoreFailure);
+    }
   } catch {
+    // Not a repository, or the probe itself failed. Either way this tree has no
+    // git authority to consult here, and `enumerateSource` has already reported
+    // the same condition against the same source path.
     ignoreSets = null;
+  }
+
+  // The tree IS a git repository, so `enumerateSource` enumerated it with git's
+  // authority and reports strategy 'git' — but that authority could not be
+  // obtained for this walk. Falling back to basenames here silently undoes the
+  // exclusion the git path exists to provide, so it is named, exactly as every
+  // other fallback in this file is.
+  if (isOwnRepo && ignoreSets === null) {
+    warnings.push(
+      `Source IS a git repository, but its ignore rules could not be obtained for the empty-directory scan (${gitFailureReason(ignoreFailure.error)}); ${EMPTY_DIR_DENYLIST_FALLBACK_CONSEQUENCE}`
+    );
   }
 
   /**
