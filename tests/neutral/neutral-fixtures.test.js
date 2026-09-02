@@ -9,10 +9,11 @@ import { EvidenceSealer } from '../../packages/release-harness-core/src/sealer.j
 import { PlaywrightSuiteAdapter } from '../../packages/release-harness-core/src/playwright-adapter.js';
 import { verifySideEffect, probeS3, probePostgres, probeRedis, probeMailpit } from '../../packages/release-harness-core/src/probes.js';
 import { SourceMaterializer } from '../../packages/release-harness-core/src/materializer.js';
+import { enumerateSource } from '../../packages/release-harness-core/src/source-enumerator.js';
 import { validateTopology, validateOrigins, validateScenario, validateHarnessConfig, ValidationError } from '../../packages/release-harness-core/src/validator.js';
 
 console.log('======================================================================');
-console.log('       Release-Harness: 28 Neutral Acceptance Fixtures Suite         ');
+console.log('       Release-Harness: 29 Neutral Acceptance Fixtures Suite         ');
 console.log('======================================================================\n');
 
 const testResults = [];
@@ -399,6 +400,48 @@ function recordPass(num, name) {
   recordPass(27, 'Exact Artifact Continuity (Immutable OCI Digest Reuse)');
 }
 
+// F-29: Git-Aware Source Enumeration Preserves Nested Product Directories
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'f29-enum-'));
+  execSync('git init -b main', { cwd: tmp, stdio: 'ignore' });
+  execSync('git config user.email "t@t.t"', { cwd: tmp, stdio: 'ignore' });
+  execSync('git config user.name "t"', { cwd: tmp, stdio: 'ignore' });
+
+  // Product source that the old basename denylist destroyed
+  fs.mkdirSync(path.join(tmp, 'src', 'content', 'docs'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'src', 'content', 'docs', 'intro.mdx'), '# Intro\n');
+  fs.mkdirSync(path.join(tmp, 'uploads'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'uploads', 'keep.txt'), 'tracked\n');
+
+  // Generated store that must NOT be copied
+  fs.writeFileSync(path.join(tmp, '.gitignore'), '.pnpm-store/\n.env\n');
+  fs.mkdirSync(path.join(tmp, '.pnpm-store'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, '.pnpm-store', 'blob.bin'), 'x'.repeat(1024));
+  fs.writeFileSync(path.join(tmp, '.env'), 'DATABASE_URL=postgres://secret\n');
+
+  execSync('git add -A', { cwd: tmp, stdio: 'ignore' });
+  execSync('git commit -m init', { cwd: tmp, stdio: 'ignore' });
+
+  const res = enumerateSource(tmp);
+
+  assert.strictEqual(res.strategy, 'git', 'Git repo must use git enumeration');
+  assert.ok(res.files.includes('src/content/docs/intro.mdx'), 'Nested docs must survive');
+  assert.ok(res.files.includes('uploads/keep.txt'), 'Tracked uploads must survive');
+  assert.ok(!res.files.some((f) => f.startsWith('.pnpm-store/')), 'Ignored store must be excluded');
+  assert.ok(!res.files.includes('.env'), 'Gitignored .env must be excluded');
+  assert.ok(!res.files.some((f) => f.startsWith('.git/')), '.git must never be enumerated');
+  assert.ok(
+    res.warnings.some((w) => w.includes('.env')),
+    'Excluded but likely-needed file must produce a warning'
+  );
+
+  // Determinism
+  assert.deepStrictEqual(enumerateSource(tmp).files, res.files, 'Enumeration must be deterministic');
+
+  fs.rmSync(tmp, { recursive: true, force: true });
+  recordPass(29, 'Git-Aware Source Enumeration Preserves Nested Product Directories');
+}
+
 // F-28: Component & Contract Mismatch in Multi-Repo Graph
 {
   const top = {
@@ -416,5 +459,5 @@ function recordPass(num, name) {
 }
 
 console.log('\n======================================================================');
-console.log(`  ALL 28 / 28 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
+console.log(`  ALL 29 / 29 NEUTRAL ACCEPTANCE FIXTURES VERIFIED GREEN (PASS) ✓    `);
 console.log('======================================================================\n');
