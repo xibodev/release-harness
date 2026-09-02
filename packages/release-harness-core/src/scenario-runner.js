@@ -43,14 +43,50 @@ const SUPPORTED_ACTIONS = new Set([
  * Real Playwright Scenario Compiler and Execution Engine with Deep Observability.
  */
 export class ScenarioRunner {
-  constructor({ origins = [], topology = null, networkPolicy = null, evidenceDir, workspaceDir, customExtensions = {} }) {
+  constructor({ origins = [], topology = null, networkPolicy = null, evidenceDir, workspaceDir, customExtensions = {}, portOffset = 0 }) {
     this.origins = origins;
     this.topology = topology;
     this.networkPolicy = networkPolicy;
     this.evidenceDir = evidenceDir;
     this.workspaceDir = workspaceDir || evidenceDir;
     this.extensions = customExtensions;
+    this.portOffset = portOffset;
     this.playwright = getPlaywright();
+  }
+
+  /**
+   * Shift a probe's port by the run's offset so concurrent runs verify their
+   * own containers. Health checks already honoured `--port-offset` while probes
+   * did not, so two simultaneous runs health-checked the shifted port and then
+   * probed the unshifted one.
+   *
+   * A probe targeting a fixed external port sets `absolute_port: true` to opt
+   * out. An absent port stays absent so each probe's own default applies.
+   */
+  applyPortOffset(params = {}) {
+    if (!this.portOffset || params.absolute_port || typeof params.port !== 'number') {
+      return params;
+    }
+    return { ...params, port: params.port + this.portOffset };
+  }
+
+  /**
+   * Assemble the parameters one side-effect probe is invoked with.
+   *
+   * Ports shift with the run offset first. `evidenceDir` gives a probe
+   * somewhere to seal its output, `cwd` defaults to the materialized workspace
+   * so a probe that executes runs against the detached source rather than the
+   * developer's working directory, and `probeId` gives that output a stable
+   * name. A scenario that declares any of them explicitly keeps its own value.
+   */
+  buildProbeParams(scenario, sideEffect) {
+    const baseParams = this.applyPortOffset(sideEffect.params || {});
+    return {
+      ...baseParams,
+      evidenceDir: baseParams.evidenceDir || this.evidenceDir,
+      cwd: baseParams.cwd || this.workspaceDir,
+      probeId: baseParams.probeId || `${scenario.id}-${sideEffect.service}-${sideEffect.probe_type}`,
+    };
   }
 
   resolveOriginUrl(originId) {
@@ -374,26 +410,41 @@ export class ScenarioRunner {
       // Deep Side Effect Observation Capture
       if (Array.isArray(scenario.expected_side_effects)) {
         for (const sideEffect of scenario.expected_side_effects) {
-          const sideRes = await verifySideEffect(sideEffect);
+          const sideRes = await verifySideEffect({
+            ...sideEffect,
+            params: this.buildProbeParams(scenario, sideEffect),
+          });
+
           rawResult.side_effect_observations.push({
             service: sideEffect.service,
             probe_type: sideEffect.probe_type,
             expected_condition: `${sideEffect.probe_type} on ${sideEffect.service}`,
             observed_result: sideRes.message,
             passed: sideRes.ok,
+            cause: sideRes.cause || null,
+            is_harness_error: Boolean(sideRes.isHarnessError),
           });
 
           if (!sideRes.ok) {
             rawResult.side_effects_failed = true;
             rawResult.side_effect_error = sideRes.message;
-            throw new Error(`Side effect verification failed: ${sideRes.message}`);
+            // Carry the probe's own attribution out through the throw; the
+            // catch below would otherwise call every failure a product bug.
+            const probeErr = new Error(`Side effect verification failed: ${sideRes.message}`);
+            probeErr.harnessCause = sideRes.cause || null;
+            probeErr.isHarnessError = Boolean(sideRes.isHarnessError);
+            throw probeErr;
           }
         }
       }
     } catch (err) {
       rawResult.failed = true;
       rawResult.error_message = err.message;
-      rawResult.cause = 'PRODUCT_BUG';
+      // A probe that reported its own cause keeps it. Anything else — a
+      // Playwright timeout, a failed assertion, a thrown navigation error —
+      // is a product failure by default.
+      rawResult.cause = err.harnessCause || 'PRODUCT_BUG';
+      rawResult.is_harness_error = Boolean(err.isHarnessError);
     } finally {
       if (context) await context.close().catch(() => {});
       if (browser) await browser.close().catch(() => {});
