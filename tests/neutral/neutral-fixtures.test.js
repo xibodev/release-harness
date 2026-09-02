@@ -440,6 +440,40 @@ function recordPass(num, name) {
   execSync('git add -A', { cwd: inner, stdio: 'ignore' });
   execSync('git commit -m inner', { cwd: inner, stdio: 'ignore' });
 
+  // A TRUE gitlink (index mode 160000) — the submodule form, which git reports
+  // as a BARE name with no trailing slash, unlike the untracked nested repo
+  // above. Registered with update-index --cacheinfo so the case is covered
+  // without a clone or any network access.
+  const submod = path.join(tmp, 'submod');
+  fs.mkdirSync(submod, { recursive: true });
+  execSync('git init -b main', { cwd: submod, stdio: 'ignore' });
+  execSync('git config user.email "t@t.t"', { cwd: submod, stdio: 'ignore' });
+  execSync('git config user.name "t"', { cwd: submod, stdio: 'ignore' });
+  fs.writeFileSync(path.join(submod, 'sub.txt'), 'submodule content\n');
+  execSync('git add -A', { cwd: submod, stdio: 'ignore' });
+  execSync('git commit -m sub', { cwd: submod, stdio: 'ignore' });
+  const submodSha = execSync('git rev-parse HEAD', { cwd: submod, encoding: 'utf8' }).trim();
+  execSync(`git update-index --add --cacheinfo 160000,${submodSha},submod`, { cwd: tmp, stdio: 'ignore' });
+
+  // A symlinked directory. `git ls-files` walks THROUGH it and emits paths
+  // beneath it; the filesystem walk never descends one. Unless enumeration
+  // considers ancestry, the same tree enumerates differently by strategy — and
+  // the same bytes are counted twice on the git path, under two different names.
+  // A junction is used because it needs no elevation on Windows.
+  const linkTargetDir = path.join(tmp, 'link-target');
+  fs.mkdirSync(linkTargetDir, { recursive: true });
+  fs.writeFileSync(path.join(linkTargetDir, 'shared.txt'), 'counted once\n');
+  let symlinkedDirCreated = false;
+  try {
+    fs.symlinkSync(linkTargetDir, path.join(tmp, 'linkdir'), 'junction');
+    symlinkedDirCreated = fs.lstatSync(path.join(tmp, 'linkdir')).isSymbolicLink();
+  } catch {
+    symlinkedDirCreated = false;
+  }
+  if (!symlinkedDirCreated) {
+    console.log('  … [F-29] symlinked-directory case skipped: this environment cannot create a directory link');
+  }
+
   const res = enumerateSource(tmp);
 
   assert.strictEqual(res.strategy, 'git', 'Git repo must use git enumeration');
@@ -460,18 +494,105 @@ function recordPass(num, name) {
     assert.ok(st.isFile(), `Enumerated entry must be an existing regular file: ${rel}`);
   }
 
-  // CONTRACT: a nested git repo is a bare directory entry in git's output and
-  // must not reach a consumer that would readFileSync it (EISDIR).
-  assert.ok(!res.files.includes('vendor-app'), 'Nested sub-repo directory must not be an entry');
+  // CONTRACT: a nested git repo is a directory entry in git's output and must not
+  // reach a consumer that would readFileSync it (EISDIR). Compare NORMALIZED
+  // first segments: git reports an untracked nested repo WITH a trailing slash
+  // ("vendor-app/") and a gitlink as a bare name ("submod"), so a bare
+  // `includes('vendor-app')` check silently never fires for the untracked form.
+  const firstSegments = new Set(res.files.map((f) => f.replace(/\/+$/, '').split('/')[0]));
+  assert.ok(
+    !firstSegments.has('vendor-app'),
+    `Nested sub-repo directory must not be an entry (got: ${JSON.stringify(res.files.filter((f) => f.replace(/\/+$/, '').split('/')[0] === 'vendor-app'))})`
+  );
   assert.ok(
     !res.files.some((f) => f.startsWith('vendor-app/.git/')),
     'Nested sub-repo .git content must never leak into enumeration'
   );
 
+  // CONTRACT: a TRUE gitlink (index mode 160000) is reported as a bare name and
+  // must be excluded too — the form the trailing-slash normalization does not cover.
+  assert.ok(!res.files.includes('submod'), 'Gitlink/submodule bare directory entry must not be an entry');
+  assert.ok(!firstSegments.has('submod'), 'No path under a gitlink/submodule may be enumerated');
+  assert.ok(
+    res.warnings.some((w) => w.includes('submod') && w.includes('directories rather than regular files')),
+    'Excluding a gitlink must be reported as a directory exclusion, naming the path'
+  );
+
+  // CONTRACT (N1): the two strategies must enumerate the same tree IDENTICALLY.
+  // git walks through a symlinked directory; the filesystem walk does not. If
+  // enumeration ignores ancestry, the git path emits the linked bytes a second
+  // time under the link name, inflating the digest and double-copying — and the
+  // digest then changes with the strategy, which makes it useless as provenance.
+  if (symlinkedDirCreated) {
+    assert.ok(
+      res.files.includes('link-target/shared.txt'),
+      'The real path of a symlink target inside the tree must be enumerated'
+    );
+    assert.ok(
+      !firstSegments.has('linkdir'),
+      `No path may be enumerated through a symlinked directory (got: ${JSON.stringify(res.files.filter((f) => f.split('/')[0] === 'linkdir'))})`
+    );
+    assert.strictEqual(
+      res.files.filter((f) => f.endsWith('shared.txt')).length,
+      1,
+      'Symlinked-directory contents must be counted exactly once, under their real path'
+    );
+
+    // The equivalence itself, asserted directly: the SAME tree shape enumerated
+    // by each strategy must produce byte-identical file lists.
+    const equivGit = fs.mkdtempSync(path.join(os.tmpdir(), 'f29-equiv-git-'));
+    const equivFs = fs.mkdtempSync(path.join(os.tmpdir(), 'f29-equiv-fs-'));
+    let equivBuilt = true;
+    for (const root of [equivGit, equivFs]) {
+      fs.writeFileSync(path.join(root, 'top.txt'), 'top\n');
+      fs.mkdirSync(path.join(root, 'real'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'real', 'deep.txt'), 'deep\n');
+      try {
+        fs.symlinkSync(path.join(root, 'real'), path.join(root, 'alias'), 'junction');
+      } catch {
+        equivBuilt = false;
+      }
+    }
+    if (equivBuilt) {
+      execSync('git init -b main', { cwd: equivGit, stdio: 'ignore' });
+      execSync('git config user.email "t@t.t"', { cwd: equivGit, stdio: 'ignore' });
+      execSync('git config user.name "t"', { cwd: equivGit, stdio: 'ignore' });
+      const gitSide = enumerateSource(equivGit);
+      const fsSide = enumerateSource(equivFs);
+      assert.strictEqual(gitSide.strategy, 'git', 'Equivalence probe: git side must use git enumeration');
+      assert.strictEqual(fsSide.strategy, 'filesystem', 'Equivalence probe: fs side must use filesystem enumeration');
+      assert.deepStrictEqual(
+        gitSide.files,
+        fsSide.files,
+        `Both strategies must enumerate an identical tree identically (git=${JSON.stringify(gitSide.files)} fs=${JSON.stringify(fsSide.files)})`
+      );
+      assert.deepStrictEqual(
+        gitSide.files,
+        ['real/deep.txt', 'top.txt'],
+        'The agreed enumeration must be the non-traversing one, naming linked content once under its real path'
+      );
+    }
+    fs.rmSync(equivGit, { recursive: true, force: true });
+    fs.rmSync(equivFs, { recursive: true, force: true });
+  }
+
   // CONTRACT: a file deleted but not staged is in the index, not on disk (ENOENT).
   assert.ok(
     !res.files.includes('deleted-later.txt'),
     'File deleted from the worktree without staging must not be enumerated'
+  );
+  // The exclusion is right; the EXPLANATION must not assert a cause it has not
+  // established. An index-absent path can equally be a checkout that never
+  // materialized (core.symlinks=false on Windows), so the wording stays hedged.
+  const missingWarning = res.warnings.find((w) => w.includes('deleted-later.txt'));
+  assert.ok(missingWarning, 'An index-present, worktree-absent path must be reported');
+  assert.ok(
+    !/These were deleted without staging/.test(missingWarning),
+    'The index-absent warning must not assert an unstaged deletion as the established cause'
+  );
+  assert.ok(
+    /checkout that did not materialize/.test(missingWarning),
+    'The index-absent warning must name the checkout-gap alternative alongside the deletion case'
   );
 
   // CONTRACT: no duplicates, and sorted ascending independent of git's ordering.

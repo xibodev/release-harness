@@ -188,6 +188,82 @@ function summarizePaths(list, limit = 5) {
 }
 
 /**
+ * Resolve, for any relative directory path, the shallowest ancestor-or-self that
+ * is a symlink — or null when the whole chain is made of real directories.
+ *
+ * The two strategies disagree about symlinked directories unless ancestry is
+ * considered: `fsEnumerate` never descends one (a Dirent reflects lstat, so a
+ * link is not `isDirectory()`), but `git ls-files` walks straight through it and
+ * emits paths beneath it. `classifyEntry` cannot see the difference, because a
+ * path under a linked directory lstats as a perfectly ordinary regular file.
+ *
+ * Memoized per directory prefix and short-circuited below a known link, so an
+ * ancestor check costs at most one lstat per DISTINCT directory in the tree —
+ * not one per component per file.
+ */
+function makeSymlinkAncestorResolver(absPath) {
+  const cache = new Map([['', null]]);
+  const resolve = (relDir) => {
+    const cached = cache.get(relDir);
+    if (cached !== undefined) return cached;
+    const slash = relDir.lastIndexOf('/');
+    const parent = slash === -1 ? '' : relDir.slice(0, slash);
+    const inherited = resolve(parent);
+    let result;
+    if (inherited !== null) {
+      // An ancestor already links away; this level needs no stat of its own.
+      result = inherited;
+    } else {
+      let isLink = false;
+      try {
+        isLink = fs.lstatSync(path.join(absPath, relDir)).isSymbolicLink();
+      } catch {
+        isLink = false;
+      }
+      result = isLink ? relDir : null;
+    }
+    cache.set(relDir, result);
+    return result;
+  };
+  return (rel) => {
+    const slash = rel.replace(/\/+$/, '').lastIndexOf('/');
+    if (slash === -1) return null;
+    return resolve(rel.slice(0, slash));
+  };
+}
+
+/**
+ * Index modes keyed by path, used only to explain why an indexed path is absent
+ * from disk. Mode 120000 is a symlink blob: with `core.symlinks=false` (the
+ * Windows default without Developer Mode) the checkout may never materialize it,
+ * which is a checkout-configuration gap and NOT an unstaged deletion. Returns an
+ * empty map on any failure — the caller then softens its wording instead of
+ * asserting a cause it has not established.
+ */
+function readIndexModes(absPath) {
+  const modes = new Map();
+  try {
+    const stdout = execSync('git ls-files -s -z', {
+      cwd: absPath,
+      encoding: 'buffer',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 30000,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    for (const row of stdout.toString('utf8').split('\0')) {
+      if (!row) continue;
+      const tab = row.indexOf('\t');
+      if (tab === -1) continue;
+      const mode = row.slice(0, row.indexOf(' '));
+      modes.set(row.slice(tab + 1).replace(/\\/g, '/'), mode);
+    }
+  } catch {
+    return new Map();
+  }
+  return modes;
+}
+
+/**
  * Turn a raw candidate list into the enumeration contract: relative POSIX paths
  * naming regular files that exist on disk, deduplicated and sorted.
  *
@@ -198,24 +274,53 @@ function summarizePaths(list, limit = 5) {
  * index stage for a file in an unresolved merge conflict (the same content
  * hashed three times, yielding a digest that no longer matches the identical
  * tree once the conflict is resolved).
+ *
+ * It also enforces the equivalence the module exists for: a path is dropped when
+ * any ANCESTOR directory component is a symlink. `git ls-files` walks through a
+ * symlinked directory and emits paths beneath it; the filesystem walk never
+ * descends one. Without this check the same tree enumerates differently by
+ * strategy, and a digest that changes with strategy is not a provenance record.
+ * Not-traversing is the side both strategies are aligned to: the linked target
+ * is either already inside the tree — in which case its bytes are enumerated
+ * under their real path and a second path double-counts them — or outside it, in
+ * which case following the link would silently widen the declared source
+ * boundary and copy files the adopter never placed in the tree.
  */
-function refineEntries(absPath, candidates, warnings) {
+function refineEntries(absPath, candidates, warnings, indexModes = new Map()) {
   const seen = new Set();
   const files = [];
+  const symlinkAncestorOf = makeSymlinkAncestorResolver(absPath);
   const dropped = {
     directory: [],
     missing: [],
+    missingSymlinkBlob: [],
     dangling: [],
     linkedDirectory: [],
+    underLinkedDirectory: [],
     unreadable: [],
     special: [],
   };
+  const linkedAncestors = new Set();
 
-  for (const rel of candidates) {
+  for (const raw of candidates) {
+    if (!raw) continue;
+    // `git ls-files` reports an untracked nested repository with a trailing
+    // slash ("vendor-app/"). Normalize so dedupe is meaningful and so a path
+    // cannot be reported in two spellings.
+    const rel = raw.replace(/\/+$/, '');
     if (!rel || seen.has(rel)) continue;
     seen.add(rel);
+
+    const linkedAncestor = symlinkAncestorOf(rel);
+    if (linkedAncestor !== null) {
+      linkedAncestors.add(linkedAncestor);
+      dropped.underLinkedDirectory.push(rel);
+      continue;
+    }
+
     const kind = classifyEntry(path.join(absPath, rel));
     if (kind === 'file') files.push(rel);
+    else if (kind === 'missing' && indexModes.get(rel) === '120000') dropped.missingSymlinkBlob.push(rel);
     else dropped[kind].push(rel);
   }
 
@@ -228,7 +333,15 @@ function refineEntries(absPath, candidates, warnings) {
   if (dropped.missing.length > 0) {
     warnings.push(
       `Excluded ${dropped.missing.length} path(s) present in the git index but absent from the working tree: ${summarizePaths(dropped.missing)}. ` +
-        'These were deleted without staging the deletion; the workspace mirrors the working tree, so they will not be present.'
+        'The workspace mirrors the working tree, so they will not be present. The usual cause is a deletion that was not staged, ' +
+        'but a checkout that did not materialize the path produces the same result.'
+    );
+  }
+  if (dropped.missingSymlinkBlob.length > 0) {
+    warnings.push(
+      `Excluded ${dropped.missingSymlinkBlob.length} symlink(s) recorded in the git index (mode 120000) but absent from the working tree: ${summarizePaths(dropped.missingSymlinkBlob)}. ` +
+        'This is a checkout configuration gap rather than a deletion: with core.symlinks=false — the Windows default outside Developer Mode — ' +
+        'git does not materialize symlink blobs. Enable Developer Mode or set core.symlinks=true and re-checkout if the build needs these paths.'
     );
   }
   if (dropped.dangling.length > 0) {
@@ -239,6 +352,13 @@ function refineEntries(absPath, candidates, warnings) {
   if (dropped.linkedDirectory.length > 0) {
     warnings.push(
       `Excluded ${dropped.linkedDirectory.length} symlink(s) that resolve to a directory rather than a file: ${summarizePaths(dropped.linkedDirectory)}.`
+    );
+  }
+  if (dropped.underLinkedDirectory.length > 0) {
+    warnings.push(
+      `Excluded ${dropped.underLinkedDirectory.length} path(s) reached only through a symlinked directory (${summarizePaths([...linkedAncestors])}): ${summarizePaths(dropped.underLinkedDirectory)}. ` +
+        'Symlinked directories are not traversed by either enumeration strategy: their contents are either already enumerated under their real path, ' +
+        'or they lie outside the declared source tree. Copy or move the contents into the tree if the build needs them.'
     );
   }
   if (dropped.unreadable.length > 0) {
@@ -280,6 +400,7 @@ function fsEnumerate(absPath, warnings) {
       const rel = relBase ? `${relBase}/${entry.name}` : entry.name;
       // Dirent reflects lstat, so a symlink to a directory is not isDirectory()
       // and is never descended into — it is classified in refineEntries instead.
+      // The git path reaches the same outcome through the ancestor check there.
       if (entry.isDirectory()) walk(abs, rel);
       else out.push(rel);
     }
@@ -352,6 +473,7 @@ export function enumerateSource(sourcePath) {
 
   let files = null;
   let strategy = 'filesystem';
+  let indexModes = new Map();
 
   let topLevel = null;
   let probeError = null;
@@ -384,6 +506,7 @@ export function enumerateSource(sourcePath) {
     try {
       files = gitEnumerate(absPath);
       strategy = 'git';
+      indexModes = readIndexModes(absPath);
     } catch (err) {
       files = null;
       warnings.push(
@@ -399,5 +522,5 @@ export function enumerateSource(sourcePath) {
 
   if (files === null) files = fsEnumerate(absPath, warnings);
 
-  return { files: refineEntries(absPath, files, warnings), strategy, warnings };
+  return { files: refineEntries(absPath, files, warnings, indexModes), strategy, warnings };
 }
