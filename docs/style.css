@@ -501,3 +501,27 @@ footer a, footer .text-link { color: var(--teal-strong) !important; }
 .start-section .start-grid { margin-top: 2rem; }
 .trust-section { padding-bottom: clamp(60px, 9vw, 112px); }
 .trust-section strong { font-weight: 700; color: var(--ink); }
+
+/* --- site-level nav inside the docs sidebar (harmonises the two shells) --- */
+.sidebar-site-nav {
+  display: flex;
+  gap: .25rem;
+  margin: 0 0 1.15rem;
+  padding: 0 0 1.05rem;
+  border-bottom: 1px solid var(--line);
+}
+.sidebar-site-nav a {
+  padding: .34rem .55rem;
+  border: 1px solid transparent;
+  color: var(--ink-soft);
+  font: 700 10.5px var(--font-mono);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.sidebar-site-nav a:hover { color: var(--ink); border-color: var(--line); }
+.sidebar-site-nav a.nav-current {
+  color: var(--teal);
+  border-color: color-mix(in srgb, var(--teal) 45%, transparent);
+}
+.sidebar-site-nav a:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
