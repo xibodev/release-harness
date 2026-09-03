@@ -525,3 +525,7 @@ footer a, footer .text-link { color: var(--teal-strong) !important; }
   border-color: color-mix(in srgb, var(--teal) 45%, transparent);
 }
 .sidebar-site-nav a:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* the docs sidebar nav is independent of the landing header's .site-nav,
+   which is hidden below 760px; this one must survive every viewport */
+.sidebar-site-nav { display: flex !important; flex-wrap: wrap; }
