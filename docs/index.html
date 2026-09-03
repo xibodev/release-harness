@@ -283,6 +283,21 @@
     <!-- Developer Quickstart -->
     <section id="installation">
       <h2 id="installation">Developer Quickstart & CLI</h2>
+
+      <div class="callout warning">
+        <div class="callout-title">⚠ UPGRADING FROM 1.1.0 — READ FIRST</div>
+        <p>v1.2.0 corrects behaviour that was previously wrong. <strong>A run that was green on 1.1.0 may legitimately fail on 1.2.0.</strong> Each of these is a correction, not a regression:</p>
+        <ul>
+          <li><strong>Git-ignored files no longer reach the workspace.</strong> Source is now materialized from git, so a build depending on an untracked local file — a <code>.env</code>, an uncommitted fixture — will fail. Materialization names the excluded file so the cause is visible. Commit it, or provide the value through your compose file's environment. That earlier green proved the build worked on a machine where someone had once created that file, not that it worked from committed source.</li>
+          <li><strong><code>sql_query</code> scenarios now exit 3.</strong> The probe never executed any SQL; the previous green was unearned. Use a custom probe.</li>
+          <li><strong>Harness faults report exit 3</strong> where they previously reported exit 1 as a product failure. Check any CI that assumed exit 1 meant your code was broken.</li>
+          <li><strong><code>--allow-dirty</code> no longer masks integrity failures.</strong> It still yields exit 2 for a would-be pass or fail, but a harness error keeps exit 3 and invalid evidence keeps exit 4.</li>
+          <li><strong>Scaffolded skills are namespaced</strong> <code>release-harness-*</code> so they cannot shadow same-named skills you already have. Unnamespaced copies from 1.1.0 are left in place; remove them manually if unwanted.</li>
+          <li><strong>Contracts are validated against their schemas at load time</strong>, so an unsupported <code>service</code> or <code>probe_type</code> is rejected with a clear message instead of surfacing deep in the engine.</li>
+        </ul>
+        <p style="margin-bottom: 0;">Full detail in <a href="https://github.com/xibodev/release-harness/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+      </div>
+
       <p>Install the package into your project as a development dependency:</p>
 
       <div class="code-header">
@@ -308,8 +323,8 @@
           </tr>
           <tr>
             <td><code>init</code></td>
-            <td>none</td>
-            <td>Scaffolds project-owned <code>.release-harness/</code> contracts, <code>AGENTS.md</code>, and multi-runtime AI agents + skills.</td>
+            <td><code>--with-agents</code>, <code>--contracts-only</code>, <code>--force</code>, <code>--dry-run</code></td>
+            <td>Scaffolds project-owned <code>.release-harness/</code> contracts. A bare <code>init</code> writes contracts only; <code>--with-agents</code> adds <code>AGENTS.md</code>, <code>AI-ADOPTION.md</code> and the multi-runtime agent and skill bundle. Unknown flags are rejected with exit 3.</td>
           </tr>
           <tr>
             <td><code>check-pr</code></td>
@@ -697,6 +712,34 @@ npx release-harness init</code></pre>
     }
   ]
 }</code></pre>
+
+      <h3 style="margin-top: 2.5rem;">Custom Probes — Asserting on Your Actual Deliverable</h3>
+      <p>The named probes cover services the harness speaks: <code>minio</code>/<code>s3</code>, <code>redis</code>, and <code>mailpit</code>. But a product whose deliverable is a <strong>file</strong> — a rendered video, a compiled binary, a generated PDF, an exported dataset — needs to assert on the artifact itself. A gate that drives your UI and certifies green while saying nothing about the file you shipped is not certifying the thing that matters.</p>
+      <p>A custom probe runs a command your project owns:</p>
+      <pre><code>{
+  "expected_side_effects": [
+    {
+      "service": "custom",
+      "probe_type": "custom",
+      "params": {
+        "command": "./scripts/probe-artifact.sh",
+        "args": ["renders/final.mp4"],
+        "expect_exit_code": 0
+      }
+    }
+  ]
+}</code></pre>
+      <p>The harness executes the command against the materialized workspace, treats the exit code as the verdict, and seals stdout and stderr into <code>evidence/probes/</code> where they are hashed with the rest of the run's evidence. It holds no opinion about what you assert — the core never learns what <code>ffmpeg</code> is.</p>
+      <ul>
+        <li><strong>Commit the script.</strong> The command must live in your repository and be named in the committed contract. A command generated at run time would let the thing being certified author its own assertion.</li>
+        <li><strong>Exit 0 means the assertion held.</strong> Any other code fails the scenario as a product failure. Write diagnostics to stderr — they are captured as evidence.</li>
+        <li><strong>Assert the deliverable, not the mechanism.</strong> Check that the <code>.mp4</code> is valid H.264 of the expected duration, not that a tool was invoked.</li>
+        <li><strong>Keep it deterministic and offline.</strong> No network, no wall-clock dependence, no machine-specific state.</li>
+        <li><strong>Exit code only.</strong> There is no <code>expect_stdout_contains</code>; assert inside your script and signal through the exit code.</li>
+      </ul>
+      <div class="callout warning">
+        <strong>⚠ <code>sql_query</code> is not implemented.</strong> The harness ships no SQL client, so it cannot execute a query or evaluate <code>expected_rows_count</code> / <code>forbidden_values</code>. As of v1.2.0 it <strong>fails closed</strong> and says so, rather than reporting success whenever the database port happened to be open. Assert database state with a custom probe that runs your own query tool.
+      </div>
     </section>
 
     <!-- Existing Playwright Suite Adapter -->
