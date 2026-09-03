@@ -1,59 +1,43 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // 1. Theme Management (Light / Dark)
   const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const storageKey = 'rh_theme';
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const savedTheme = localStorage.getItem('rh_theme') || (prefersDark ? 'dark' : 'light');
 
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     if (themeToggleBtn) {
-      themeToggleBtn.innerText = theme === 'dark' ? '☀️ LIGHT' : '🌙 DARK';
+      const nextLabel = theme === 'dark' ? 'LIGHT' : 'DARK';
+      themeToggleBtn.textContent = nextLabel;
+      themeToggleBtn.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`);
     }
-    localStorage.setItem('rh_theme', theme);
+    try { localStorage.setItem(storageKey, theme); } catch (_) { /* Storage may be unavailable. */ }
   }
 
-  applyTheme(savedTheme);
+  let savedTheme;
+  try { savedTheme = localStorage.getItem(storageKey); } catch (_) { savedTheme = null; }
+  applyTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
+  themeToggleBtn?.addEventListener('click', () => {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
 
-  if (themeToggleBtn) {
-    themeToggleBtn.addEventListener('click', () => {
-      const current = document.documentElement.getAttribute('data-theme') || 'light';
-      applyTheme(current === 'dark' ? 'light' : 'dark');
-    });
-  }
-
-  // 2. Client-Side Instant Search
   const searchInput = document.getElementById('search-input');
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase().trim();
-      const searchableItems = document.querySelectorAll('section[id], .skill-item, .tech-card, .tech-table tr');
-
-      if (!query) {
-        searchableItems.forEach(el => el.style.display = '');
-        return;
-      }
-
-      searchableItems.forEach(el => {
-        const text = el.innerText.toLowerCase();
-        if (text.includes(query)) {
-          el.style.display = '';
-        } else {
-          el.style.display = 'none';
-        }
-      });
-    });
-
-    // Keyboard shortcut '/' or 'Ctrl+K'
-    window.addEventListener('keydown', (e) => {
-      if ((e.key === '/' || (e.ctrlKey && e.key === 'k') || (e.metaKey && e.key === 'k')) && document.activeElement !== searchInput) {
-        e.preventDefault();
-        searchInput.focus();
-        searchInput.select();
-      }
+  const searchableItems = document.querySelectorAll('section[id], .skill-item, .tech-card, .tech-table tbody tr');
+  function runSearch() {
+    const query = searchInput?.value.toLowerCase().trim() || '';
+    searchableItems.forEach((element) => {
+      element.hidden = Boolean(query) && !element.innerText.toLowerCase().includes(query);
     });
   }
+  searchInput?.addEventListener('input', runSearch);
+  window.addEventListener('keydown', (event) => {
+    const isShortcut = event.key === '/' || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k');
+    if (isShortcut && document.activeElement !== searchInput) {
+      event.preventDefault();
+      searchInput?.focus();
+      searchInput?.select();
+    }
+  });
 
-  // 3. Interactive Terminal Simulation
   const terminalOutputs = {
     'run-local': [
       '<span class="t-cyan">$ npx release-harness run-local</span>',
@@ -79,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
       '<span class="t-green t-bold">=== Verdict: PASS (Integrity: COMPLETE, Exit: 0) ===</span>',
       'Summary: Passed: 3, Failed: 0, Unproven: 0, Skipped: 0'
     ],
-    'doctor': [
+    doctor: [
       '<span class="t-cyan">$ npx release-harness doctor</span>',
       '<span class="t-bold">Release-Harness v1.0.1 Diagnostics & Prerequisites</span>',
       '',
@@ -97,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
       '',
       '<span class="t-green t-bold">Status: Ready.</span>'
     ],
-    'init': [
+    init: [
       '<span class="t-cyan">$ npx release-harness init</span>',
       'Scaffolding project-owned Release-Harness contracts and multi-runtime AI agents...',
       '',
@@ -126,82 +110,109 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const termBody = document.getElementById('terminal-body');
-  const termBtns = document.querySelectorAll('.term-btn');
-
-  function renderTerminal(cmdKey) {
+  const termBtns = [...document.querySelectorAll('.term-btn')];
+  function renderTerminal(command) {
     if (!termBody) return;
-    const lines = terminalOutputs[cmdKey] || [];
-    termBody.innerHTML = lines.join('\n');
+    termBody.innerHTML = (terminalOutputs[command] || []).join('\n');
   }
-
-  termBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      termBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const cmd = btn.getAttribute('data-cmd');
-      renderTerminal(cmd);
+  function setTerminal(button) {
+    termBtns.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle('active', selected);
+      item.setAttribute('aria-selected', String(selected));
+      item.tabIndex = selected ? 0 : -1;
+    });
+    renderTerminal(button.dataset.cmd);
+  }
+  termBtns.forEach((button, index) => {
+    button.addEventListener('click', () => setTerminal(button));
+    button.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const target = event.key === 'Home' ? termBtns[0] : event.key === 'End' ? termBtns.at(-1) : termBtns[(index + (event.key === 'ArrowRight' ? 1 : -1) + termBtns.length) % termBtns.length];
+      target.focus();
+      setTerminal(target);
     });
   });
+  if (termBtns[0]) setTerminal(termBtns[0]);
 
-  renderTerminal('run-local');
-
-  // 4. Tab Containers
-  document.querySelectorAll('.tab-container').forEach(container => {
-    const btns = container.querySelectorAll('.tab-btn');
-    const panes = container.querySelectorAll('.tab-pane');
-
-    btns.forEach((btn, idx) => {
-      btn.addEventListener('click', () => {
-        btns.forEach(b => b.classList.remove('active'));
-        panes.forEach(p => p.classList.remove('active'));
-
-        btn.classList.add('active');
-        if (panes[idx]) panes[idx].classList.add('active');
+  document.querySelectorAll('.tab-container').forEach((container) => {
+    const buttons = [...container.querySelectorAll('.tab-btn')];
+    const panes = [...container.querySelectorAll('.tab-pane')];
+    function selectTab(button) {
+      const index = buttons.indexOf(button);
+      buttons.forEach((item, itemIndex) => {
+        const selected = itemIndex === index;
+        item.classList.toggle('active', selected);
+        item.setAttribute('aria-selected', String(selected));
+        item.tabIndex = selected ? 0 : -1;
+        panes[itemIndex]?.classList.toggle('active', selected);
+        if (panes[itemIndex]) panes[itemIndex].hidden = !selected;
+      });
+    }
+    buttons.forEach((button, index) => {
+      button.addEventListener('click', () => selectTab(button));
+      button.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const target = event.key === 'Home' ? buttons[0] : event.key === 'End' ? buttons.at(-1) : buttons[(index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length];
+        target.focus();
+        selectTab(target);
       });
     });
+    if (buttons[0]) selectTab(buttons[0]);
   });
 
-  // 5. Expandable Skill Accordion
-  document.querySelectorAll('.skill-header').forEach(header => {
-    header.addEventListener('click', () => {
+  document.querySelectorAll('.skill-header').forEach((header) => {
+    const toggle = () => {
       const item = header.parentElement;
-      item.classList.toggle('open');
+      const isOpen = item.classList.toggle('open');
+      header.setAttribute('aria-expanded', String(isOpen));
+      const content = document.getElementById(header.getAttribute('aria-controls'));
+      if (content) content.hidden = !isOpen;
+    };
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); }
     });
   });
 
-  // 6. Copy Buttons
-  document.querySelectorAll('.copy-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetId = btn.getAttribute('data-target');
-      const targetEl = targetId ? document.getElementById(targetId) : btn.parentElement.nextElementSibling;
-      const textToCopy = targetEl ? targetEl.innerText.trim() : '';
-
-      navigator.clipboard.writeText(textToCopy).then(() => {
-        const orig = btn.innerText;
-        btn.innerText = 'COPIED!';
-        setTimeout(() => btn.innerText = orig, 1800);
-      });
-    });
-  });
-
-  // 7. Active Scrollspy
-  const sections = document.querySelectorAll('section[id], h2[id]');
-  const navLinks = document.querySelectorAll('.nav-link');
-
-  window.addEventListener('scroll', () => {
-    let current = '';
-    sections.forEach(section => {
-      const sectionTop = section.offsetTop - 140;
-      if (window.scrollY >= sectionTop) {
-        current = section.getAttribute('id');
+  async function copyText(text) {
+    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.append(area);
+    area.select();
+    document.execCommand('copy');
+    area.remove();
+  }
+  document.querySelectorAll('.copy-btn').forEach((button) => {
+    button.type = 'button';
+    button.setAttribute('aria-label', 'Copy code to clipboard');
+    button.addEventListener('click', async () => {
+      const target = button.dataset.target ? document.getElementById(button.dataset.target) : button.parentElement.nextElementSibling;
+      if (!target) return;
+      const original = button.textContent;
+      try {
+        await copyText(target.innerText.trim());
+        button.textContent = 'COPIED!';
+      } catch (_) {
+        button.textContent = 'COPY FAILED';
       }
-    });
-
-    navLinks.forEach(link => {
-      link.classList.remove('active');
-      if (link.getAttribute('href') === `#${current}`) {
-        link.classList.add('active');
-      }
+      window.setTimeout(() => { button.textContent = original; }, 1800);
     });
   });
+
+  const navLinks = [...document.querySelectorAll('.nav-link[href^="#"]')];
+  const sections = [...document.querySelectorAll('section[id]')];
+  function markActive(id) {
+    navLinks.forEach((link) => link.classList.toggle('active', link.getAttribute('href') === `#${id}`));
+  }
+  const observer = new IntersectionObserver((entries) => {
+    const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) markActive(visible.target.id);
+  }, { rootMargin: '-12% 0px -75% 0px', threshold: [0, .2, .5] });
+  sections.forEach((section) => observer.observe(section));
 });
