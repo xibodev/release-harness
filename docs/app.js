@@ -1,7 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   const themeToggleBtn = document.getElementById('theme-toggle-btn');
   const storageKey = 'rh_theme';
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
@@ -15,7 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let savedTheme;
   try { savedTheme = localStorage.getItem(storageKey); } catch (_) { savedTheme = null; }
-  applyTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
+  // Light is the default. A visitor's OS preference does not choose for them —
+  // only their own explicit toggle, remembered across visits, does.
+  applyTheme(savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'light');
   themeToggleBtn?.addEventListener('click', () => {
     applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
   });
