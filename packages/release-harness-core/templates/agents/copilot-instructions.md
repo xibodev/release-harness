@@ -11,6 +11,7 @@ This repository uses @xibodev/release-harness for deterministic quality-gating a
    `npx release-harness check-pr` (Level 1 PR Gate)
    `npx release-harness run-local` (Level 2 Local UAT Gate)
 3. All verdicts are calculated deterministically by the harness engine into `verdict.json`.
-4. Route failures by exit code: fix product defects for exit 1; treat exit 2 with
-   `--allow-dirty` as expected non-certifying development; fix harness
-   configuration, not product code, for exit 3; treat exit 4 as invalid evidence.
+4. Route failures using `verdict.causes` and runtime diagnostics: fix
+   `PRODUCT_BUG`, acquire missing fixtures, treat exit 2 with `--allow-dirty` as
+   expected non-certifying development, do not infer a product defect from exit
+   3 alone, and treat exit 4 as invalid evidence.

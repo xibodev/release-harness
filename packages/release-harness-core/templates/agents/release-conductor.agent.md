@@ -35,8 +35,6 @@ You are the AI assistant for the versioned release-harness. Your mission is to a
    - `.release-harness/topology.json` (services, health probes, proxy adapter, network egress).
    - `.release-harness/origins.json` (served `browser_app`, `api`, `worker` surfaces).
    - `.release-harness/scenarios/` (declarative scenarios compiled from user stories and personas).
-   - `.release-harness/brand-contract.json` (required/forbidden identity + deterministic canaries).
-   - `.release-harness/mock-parity.json` (external seam contracts).
 
 4. Present the generated artifact diff for human approval. Do not ask the operator to hand-author raw schema JSON.
 
@@ -57,9 +55,9 @@ Loop until `release-harness run-local` returns exit code 0 (`PASS`) or the itera
    - The harness starts scoped Docker Compose containers (`rh-<runId>`), healthchecks services, runs declarative Playwright scenarios, validates independent side-effects (MinIO/S3, DB, Redis, Mailpit), checks security headers and brand canaries, seals evidence into `evidence.manifest.json`, and evaluates the verdict into `verdict.json`.
 2. **Inspect Deterministic Verdict:** Read the generated `verdict.json`:
    - `exit_code == 0` (`PASS`): Gate satisfied! Proceed to Phase 3.
-   - `exit_code == 1` (`FAIL`): Check `scenarios` and `causes` (`PRODUCT_BUG`, `HARNESS_FIXTURE_MISSING`). File prioritized items for `release-harness-fix-planner`.
+   - `exit_code == 1` (`FAIL`): Inspect `causes`. Send `PRODUCT_BUG` items to `release-harness-fix-planner`; acquire required fixtures or dependencies for `HARNESS_FIXTURE_MISSING`.
    - `exit_code == 2` (`UNPROVEN`): With `--allow-dirty`, this is the expected NON-CERTIFYING development result; commit and rerun from a clean tree for certification. Otherwise acquire missing fixtures or adjust conditional policy.
-   - `exit_code == 3` (`HARNESS_ERROR`): Environment, contract, probe, or Compose configuration fault. Repair the harness configuration; do not edit product code solely because of exit 3.
+   - `exit_code == 3` (`HARNESS_ERROR`): Inspect the runtime diagnostics and causes, then repair the identified environment, contract, probe, Compose, or build fault. Do not edit product code solely because of exit 3.
    - `exit_code == 4` (`EVIDENCE_INVALID`): Evidence corruption / tampering. Clean workspace and re-run.
 3. **Remediate with Fix Planner & Fix Executor:**
    - Invoke `release-harness-fix-planner` to sequence fixes.

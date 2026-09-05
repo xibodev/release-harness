@@ -167,7 +167,7 @@ for (const conductorPath of [
   assert.ok(conductor.includes('npx release-harness skills list'), `${conductorPath} must inspect packaged skills`);
   assert.ok(conductor.includes('release-harness-project-cartographer'), `${conductorPath} must use the prefixed cartographer`);
   assert.ok(conductor.includes('generated artifact diff'), `${conductorPath} must require human artifact review`);
-  assert.ok(conductor.includes('do not edit product code solely because of exit 3'), `${conductorPath} must route exit 3 correctly`);
+  assert.match(conductor, /do not edit product code solely because of exit 3/i, `${conductorPath} must route exit 3 correctly`);
 }
 console.log('  ✓ Multi-runtime conductors enforce prefixed, artifact-first adoption');
 

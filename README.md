@@ -122,9 +122,9 @@ Use release-conductor to run our release quality gate and drive this branch to g
 | Status | Exit Code | Description | Action |
 |---|---|---|---|
 | `PASS` | `0` | All required & conditional scenarios passed with verified side effects | Certified for release |
-| `FAIL` | `1` | One or more scenarios failed due to product defects or unmet required dependencies | Invoke `release-harness-fix-planner` & `release-harness-fix-executor` |
+| `FAIL` | `1` | One or more required scenarios failed | Inspect causes: fix `PRODUCT_BUG`; supply required fixtures or dependencies |
 | `UNPROVEN` | `2` | Preconditions unmet, active waivers present, or non-certifying dev run (`--allow-dirty`) | Acquire fixtures or commit changes |
-| `HARNESS_ERROR` | `3` | Malformed scenario, missing runtime environment, Compose crash, or a probe the harness does not implement | Fix harness configuration; do not edit product code solely because of exit 3 |
+| `HARNESS_ERROR` | `3` | Malformed scenario, missing runtime environment, Compose/build crash, or an unimplemented probe | Follow runtime diagnostics; do not infer a product defect from exit 3 alone |
 | `EVIDENCE_INVALID` | `4` | Evidence file tampering or SHA-256 checksum mismatch detected | Clean workspace with `clean` |
 
 ---

@@ -2,6 +2,6 @@
 - For initial adoption, run `npx release-harness skills list`, scaffold with `init --with-agents`, and follow `AI-ADOPTION.md`.
 - Use `release-harness-project-cartographer` and `release-harness-scenario-compiler` to derive contracts, then present generated diffs for human review.
 - When verifying code changes, run `npx release-harness run-local` in the terminal.
-- Inspect `verdict.json` in the evidence directory. Fix product code for exit 1, not for harness configuration errors (exit 3).
+- Inspect `verdict.json`, its causes, and runtime diagnostics. Fix `PRODUCT_BUG`, acquire missing fixtures, and do not infer a product defect from exit 3 alone.
 - Treat `--allow-dirty` exit 2 as non-certifying development; a clean commit is required for certified exit 0.
 - Do not mutate `.release-harness/topology.json` or `origins.json` unless service ports change.

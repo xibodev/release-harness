@@ -72,16 +72,20 @@ resulting diff for approval.
 | Code | Meaning |
 |------|---------|
 | 0 | Certified |
-| 1 | Product failure — a scenario or assertion failed |
+| 1 | Required failure — inspect causes for a product bug or missing fixture |
 | 2 | Unproven — development mode, or a dirty tree with `--allow-dirty` |
 | 3 | Harness error — misconfiguration, unknown flag, unimplemented probe |
 | 4 | Evidence invalid — the sealed evidence does not verify |
 
+**Exit 1 requires cause-based remediation.** Fix product code for
+`PRODUCT_BUG`; acquire the required fixture or dependency for
+`HARNESS_FIXTURE_MISSING`.
+
 **Exit 3 means the harness could not do its job, not that the product is
 broken.** Read the reported cause before changing product code: a malformed
 contract, an unsupported `service` or `probe_type`, an unknown CLI flag, or a
-probe the harness does not implement all land here. Changing product code in
-response to an exit 3 fixes nothing.
+probe the harness does not implement all land here. Do not infer a product
+defect from the exit number alone; follow the runtime diagnostics.
 
 Exit 4 means the sealed evidence does not match its manifest. Do not re-run
 until you know why — treat it as a tampering or corruption signal, not as flake.
