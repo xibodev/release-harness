@@ -430,10 +430,10 @@ npx release-harness init --with-agents</code></pre>
       <p><strong>Golden Sequence after installing the package:</strong></p>
       <ol>
         <li>Run <code>npx release-harness doctor</code> to verify Docker, Compose, Playwright, and other prerequisites.</li>
-        <li>Run <code>npx release-harness init --with-agents</code> to scaffold contracts, <code>AI-ADOPTION.md</code>, and the skill bundle. Use <code>npx release-harness skills list</code> to inspect the bundle before or after scaffolding.</li>
+        <li>Run <code>npx release-harness init --with-agents</code> to scaffold contracts, <code>AI-ADOPTION.md</code>, and the skill bundle. Restart or reload the active agent session so it reindexes new skills. Use <code>npx release-harness skills list</code> to inspect the bundle before or after scaffolding.</li>
         <li>Invoke <code>release-harness-project-cartographer</code> to derive <code>topology.json</code> and <code>origins.json</code> from source, then present the generated diff for human review.</li>
         <li>Invoke <code>release-harness-scenario-compiler</code> to compile scenarios and side-effect probes from user stories and personas, then present the generated diff for human review.</li>
-        <li>Run <code>npx release-harness run-local</code> to establish a local certified GREEN baseline.</li>
+        <li>While generated changes are uncommitted, run <code>npx release-harness run-local --allow-dirty</code> and inspect underlying results (exit 2 is expected). Resolve failures, approve and commit the artifacts, then run <code>npx release-harness run-local</code> for a certified GREEN exit 0.</li>
         <li>Run <code>npx release-harness check-pr</code> on pull requests and <code>npx release-harness run-local</code> on release branches.</li>
       </ol>
 
@@ -453,7 +453,7 @@ npx release-harness init --with-agents</code></pre>
       <!-- The 18 Bundled Skills -->
       <h3 id="skill-catalog" data-od-id="heading-skill-catalog">The 18 Bundled Cognitive Skills</h3>
       <p>
-        Run <code>npx release-harness skills list</code> to inspect these capabilities without writing files. <code>init --with-agents</code> then populates <code>.claude/skills/</code> and <code>.opencode/skills/</code>. Every identifier uses the <code>release-harness-</code> prefix so it cannot shadow a same-named skill you already have:
+        Run <code>npx release-harness skills list</code> to inspect these capabilities without writing files. <code>init --with-agents</code> then populates <code>.claude/skills/</code>, <code>.agents/skills/</code>, and <code>.opencode/skills/</code>. Every identifier uses the <code>release-harness-</code> prefix so it cannot shadow a same-named skill you already have:
       </p>
 
       <div class="skill-item" data-od-id="skill-item-01">

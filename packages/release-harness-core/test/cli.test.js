@@ -29,6 +29,7 @@ async function captureCli(args) {
   assert.strictEqual(result.exitCode, 0);
   assert.match(result.stdout, /Release-Harness Cognitive Skills \(18 bundled\)/);
   assert.match(result.stdout, /\.claude\/skills\//);
+  assert.match(result.stdout, /\.agents\/skills\//);
   assert.match(result.stdout, /\.opencode\/skills\//);
   assert.match(result.stdout, /release-harness-project-cartographer/);
   assert.match(result.stdout, /release-harness-scenario-compiler/);
@@ -41,6 +42,7 @@ async function captureCli(args) {
   assert.match(result.stdout, /Skill: release-harness-project-cartographer/);
   assert.match(result.stdout, /Capability: Scans the project repository/);
   assert.match(result.stdout, /\.claude\/skills\/release-harness-project-cartographer\/SKILL\.md/);
+  assert.match(result.stdout, /\.agents\/skills\/release-harness-project-cartographer\/SKILL\.md/);
 }
 
 {

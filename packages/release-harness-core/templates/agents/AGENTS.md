@@ -10,6 +10,7 @@ Cross-tool entry point for **Release-Harness** across Claude Code, GitHub Copilo
 - `.copilot/agents/release-conductor.md` — GitHub Copilot CLI
 - `.github/agents/release-conductor.agent.md` — GitHub Copilot Extensions / Workspace
 - `.opencode/agents/release-conductor.md` — opencode
+- `.agents/skills/release-harness-*` — shared Agent Skills bundle for compatible runtimes
 
 ## Deterministic Core Boundary
 AI personas do NOT calculate or override verdicts. Gate outcomes (`PASS`, `FAIL`, `UNPROVEN`, `HARNESS_ERROR`, `EVIDENCE_INVALID`) are computed solely by the deterministic `release-harness` CLI from sealed evidence.

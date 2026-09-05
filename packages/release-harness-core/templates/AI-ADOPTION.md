@@ -35,7 +35,8 @@ npx release-harness skills info project-cartographer
 
 The skills scaffold under `release-harness-` prefixed names
 (`release-harness-project-cartographer`) so they cannot shadow a same-named
-skill already installed. Invoke them by the namespaced name.
+skill already installed. They are copied to `.claude/skills/`,
+`.agents/skills/`, and `.opencode/skills/`. Invoke them by the namespaced name.
 
 **Use `release-harness-project-cartographer` rather than mapping the repository
 by hand.** It derives topology and origins from real ports, health endpoints,
@@ -58,12 +59,15 @@ resulting diff for approval.
 1. `npx release-harness doctor` — verify host prerequisites first; a missing
    Docker or Playwright wastes everything downstream.
 2. `npx release-harness init --with-agents` — contracts plus the skill bundle.
+   Restart or reload the active agent session so the host reindexes new skills.
 3. `release-harness-project-cartographer` — derive `topology.json` and
    `origins.json`, then present their diff for review.
 4. `release-harness-scenario-compiler` — compile scenarios and their side-effect
    probes from user stories and personas, then present their diff for review.
-5. `npx release-harness run-local` — establish a green baseline before wiring
-   anything into CI.
+5. While generated changes are uncommitted, run
+   `npx release-harness run-local --allow-dirty` and inspect the underlying
+   results (exit 2 is expected). Resolve failures, approve and commit the
+   artifacts, then run `npx release-harness run-local` for certified exit 0.
 6. Wire `npx release-harness check-pr` into pull requests and
    `npx release-harness run-local` into release branches.
 

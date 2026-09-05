@@ -209,6 +209,7 @@ export const SKILL_NAMESPACE = 'release-harness-';
 
 const SKILL_TARGETS = [
   { label: 'Claude Code', relativeDir: '.claude/skills' },
+  { label: 'Agent Skills', relativeDir: '.agents/skills' },
   { label: 'opencode', relativeDir: '.opencode/skills' },
 ];
 
@@ -332,7 +333,7 @@ function handleSkills(args) {
     for (const target of SKILL_TARGETS) {
       const targetPath = skillTargetPath(target, skill.name);
       const status = isSkillScaffolded(target, skill.name) ? 'scaffolded' : 'not scaffolded';
-      console.log(`  ${target.label.padEnd(11)} ${targetPath} (${status})`);
+      console.log(`  ${target.label.padEnd(13)} ${targetPath} (${status})`);
     }
     console.log('\nScaffold with: npx release-harness init --with-agents');
     return 0;
@@ -342,7 +343,7 @@ function handleSkills(args) {
   console.log('Scaffold targets:');
   for (const target of SKILL_TARGETS) {
     const scaffolded = skills.filter((skill) => isSkillScaffolded(target, skill.name)).length;
-    console.log(`  ${target.label.padEnd(11)} ${target.relativeDir}/ (${scaffolded}/${skills.length} scaffolded)`);
+    console.log(`  ${target.label.padEnd(13)} ${target.relativeDir}/ (${scaffolded}/${skills.length} scaffolded)`);
   }
   console.log('\nCapabilities:');
   for (const skill of skills) {
@@ -688,6 +689,12 @@ npx release-harness run-local
     reportSkillCollisions(opencodeSkillsDir, tmplSkillsDir, '.opencode/skills', force);
     copyDirectoryRecursive(tmplSkillsDir, opencodeSkillsDir, force, dryRun, SKILL_NAMESPACE);
 
+    // Shared Agent Skills standard: Copilot CLI, Cursor, and other compatible hosts.
+    const sharedSkillsDir = path.join(cwd, '.agents', 'skills');
+    if (!dryRun) fs.mkdirSync(sharedSkillsDir, { recursive: true });
+    reportSkillCollisions(sharedSkillsDir, tmplSkillsDir, '.agents/skills', force);
+    copyDirectoryRecursive(tmplSkillsDir, sharedSkillsDir, force, dryRun, SKILL_NAMESPACE);
+
     // GitHub Copilot: .github/agents & .github/copilot-instructions.md
     const ghAgentsDir = path.join(cwd, '.github', 'agents');
     if (!dryRun) fs.mkdirSync(ghAgentsDir, { recursive: true });
@@ -711,6 +718,10 @@ npx release-harness run-local
     printSkillScaffoldingTip();
   }
 
+  if (withAgents && !dryRun) {
+    console.log('\nAgent host notice: Restart or reload the active agent session so it discovers the newly scaffolded skills.');
+    console.log('Confirm scaffold status with "npx release-harness skills list".');
+  }
   console.log('\nInitialization complete. Run "npx release-harness doctor" to verify.');
   return 0;
 }

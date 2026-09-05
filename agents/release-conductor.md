@@ -25,6 +25,7 @@ You are the AI assistant for the versioned release-harness. Your mission is to a
 1. Verify the bundled skills before manual exploration:
    - Run `npx release-harness skills list`. Bundled identifiers use the `release-harness-*` prefix.
    - If the target directories report the skills as not scaffolded, run `npx release-harness doctor`, then `npx release-harness init --with-agents`.
+   - Restart or reload the active agent session after scaffolding so the host reindexes the new skills.
    - Invoke `release-harness-project-cartographer` and `release-harness-scenario-compiler` by their prefixed names. Do not fall back to hand-mapping services or routes until package discovery and scaffolding have been checked.
 
 2. Read product context in order:
@@ -49,9 +50,11 @@ You are the AI assistant for the versioned release-harness. Your mission is to a
 
 ## Phase 2 — Deterministic Release-Harness Execution Loop
 
-Loop until `release-harness run-local` returns exit code 0 (`PASS`) or the iteration budget is exhausted:
+Iterate until the underlying results pass or the iteration budget is exhausted, then perform one clean certification run:
 
-1. **Execute Deterministic Gate:** Run `npx release-harness run-local --evidence-dir <external-dir>`.
+1. **Execute Deterministic Gate:**
+   - On a clean tree, run `npx release-harness run-local --evidence-dir <external-dir>`.
+   - While generated contracts or source fixes are uncommitted, run `npx release-harness run-local --allow-dirty --evidence-dir <external-dir>`. Exit 2 is expected even when the underlying result passes.
    - The harness materializes a detached source workspace (source repo and `.git` remain strictly immutable). Git-ignored assets never reach it; untracked files only reach `--allow-dirty` development runs. Check local fixtures and environment inputs before treating a missing-file build failure as a product defect.
    - The harness starts scoped Docker Compose containers (`rh-<runId>`), healthchecks services, runs declarative Playwright scenarios, validates independent side-effects (MinIO/S3, DB, Redis, Mailpit), checks security headers and brand canaries, seals evidence into `evidence.manifest.json`, and evaluates the verdict into `verdict.json`.
 2. **Inspect Deterministic Verdict:** Read the generated `verdict.json`:
@@ -63,7 +66,7 @@ Loop until `release-harness run-local` returns exit code 0 (`PASS`) or the itera
 3. **Remediate with Fix Planner & Fix Executor:**
    - Invoke `release-harness-fix-planner` to sequence fixes.
    - Invoke `release-harness-fix-executor` to apply and validate fixes on the feature branch.
-4. **Repeat:** Re-run `release-harness run-local` to verify remediation.
+4. **Repeat:** Re-run in development mode while the tree is dirty. Once underlying results pass, commit the approved changes and run once without `--allow-dirty`; only exit 0 proceeds to Phase 3.
 
 ## Phase 3 — Human Local-UAT Sign-off Gate (Single Planned Interrupt)
 

@@ -51,12 +51,14 @@ This scaffolds:
 - `.release-harness/` (contract specifications: `topology.json`, `origins.json`, `harness.config.json`, `scenarios/smoke.json`)
 - `AGENTS.md`, `AI-ADOPTION.md` & `.cursorrules` in project root
 - Multi-runtime agent instructions (`.claude/`, `.github/`, `.opencode/`, `.copilot/`)
-- 18 specialized AI skill playbooks for discovery, pre-release audits, and bug fixing, scaffolded under `release-harness-*` names so they cannot shadow skills you already have.
+- 18 specialized AI skill playbooks for discovery, pre-release audits, and bug fixing, scaffolded under `release-harness-*` names in `.claude/skills/`, `.agents/skills/`, and `.opencode/skills/`.
 
 *(A bare `npx release-harness init` writes contracts only; `--contracts-only` states that explicitly. The two scaffolding flags are mutually exclusive. **The skill bundle ships with `init --with-agents`, not with `npm install`** — it lives inside the package until init copies it out.)*
 
 Before scaffolding, `npx release-harness skills list` previews the 18 bundled
 capabilities and their target directories without writing to the workspace.
+After scaffolding, restart or reload the active agent session so it reindexes
+the new skills.
 
 ### 3. Derive topology and origins
 
@@ -71,6 +73,17 @@ and side-effect expectations into `.release-harness/scenarios/`, then review
 the generated diff.
 
 ### 5. Establish a local GREEN baseline
+
+While generated artifacts are uncommitted, run a non-certifying development
+gate and inspect its underlying results (exit 2 is expected):
+
+```bash
+npx release-harness run-local --allow-dirty
+```
+
+Resolve any underlying failures, review and commit the generated artifacts,
+then run the clean certification gate:
+
 ```bash
 npx release-harness run-local
 ```

@@ -5,6 +5,7 @@ This repository uses @xibodev/release-harness for deterministic quality-gating a
 ## Release Quality Workflow
 1. For initial adoption, run `npx release-harness skills list`, then
    `npx release-harness init --with-agents` and follow `AI-ADOPTION.md`.
+   Restart or reload the active agent session after scaffolding.
    Derive contracts with `release-harness-project-cartographer` and
    `release-harness-scenario-compiler`; present generated diffs for human review.
 2. When asked to check, verify, or release changes, run:
@@ -16,3 +17,5 @@ This repository uses @xibodev/release-harness for deterministic quality-gating a
    no verdict exists. For exit 2 with `--allow-dirty`, resolve underlying failed
    scenarios before committing for certification. Do not infer a product defect
    from exit 3 alone, and treat exit 4 as invalid evidence.
+5. While changes are uncommitted, use `run-local --allow-dirty`, resolve any
+   underlying failures, then commit and run once without the flag for exit 0.

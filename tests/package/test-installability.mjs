@@ -80,8 +80,11 @@ const skillsListOut = execSync(`${npxCmd} release-harness skills list`, { cwd: c
 assert.ok(skillsListOut.includes('18 bundled'), 'skills list must report the bundled skill count');
 assert.ok(skillsListOut.includes('release-harness-project-cartographer'), 'skills list must use canonical prefixed names');
 assert.ok(skillsListOut.includes('.claude/skills/'), 'skills list must name the Claude scaffold target');
+assert.ok(skillsListOut.includes('.agents/skills/'), 'skills list must name the shared Agent Skills target');
 assert.ok(skillsListOut.includes('.opencode/skills/'), 'skills list must name the opencode scaffold target');
+assert.ok(skillsListOut.includes('Scaffold all skills: npx release-harness init --with-agents'), 'skills list output must reach its final guidance');
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.claude')), 'skills list must not extract templates');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.agents')), 'skills list must not create the shared target');
 
 const skillInfoOut = execSync(`${npxCmd} release-harness skills info project-cartographer`, {
   cwd: consumerRepoDir,
@@ -109,6 +112,7 @@ assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'scenario
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'A bare init must not scaffold AGENTS.md');
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, 'AI-ADOPTION.md')), 'A bare init must not scaffold AI-ADOPTION.md');
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.claude')), 'A bare init must not scaffold agents implicitly');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.agents')), 'A bare init must not scaffold shared skills implicitly');
 assert.ok(bareInitOut.includes('--with-agents'), 'A bare init must name the flag that scaffolds the agent bundle');
 console.log('  ✓ Bare init wrote contracts only and pointed at --with-agents');
 
@@ -129,13 +133,16 @@ console.log('  ✓ --with-agents + --contracts-only rejected with exit 3');
 
 // Now the explicit opt-in.
 const initOut = execSync(`${npxCmd} release-harness init --with-agents`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.match(initOut, /restart or reload the active agent session/i, 'Agent scaffolding must tell an active host to reindex skills');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'AGENTS.md must be scaffolded');
+assert.ok(fs.readFileSync(path.join(consumerRepoDir, 'AGENTS.md'), 'utf8').includes('.agents/skills/release-harness-*'), 'AGENTS.md must identify the shared skill target');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md')), 'Claude agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.github', 'agents', 'release-conductor.agent.md')), 'GitHub Copilot agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md')), 'opencode agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.copilot', 'agents', 'release-conductor.md')), 'Copilot CLI agent must be scaffolded');
 const scaffoldedSkillsOut = execSync(`${npxCmd} release-harness skills list`, { cwd: consumerRepoDir, encoding: 'utf8' });
 assert.match(scaffoldedSkillsOut, /Claude Code\s+\.claude\/skills\/ \(18\/18 scaffolded\)/);
+assert.match(scaffoldedSkillsOut, /Agent Skills\s+\.agents\/skills\/ \(18\/18 scaffolded\)/);
 assert.match(scaffoldedSkillsOut, /opencode\s+\.opencode\/skills\/ \(18\/18 scaffolded\)/);
 
 // The adoption guide reaches the project the same way the skills do -- through
@@ -190,7 +197,7 @@ const bundledSkills = fs
   .filter((e) => e.isDirectory()).length;
 assert.strictEqual(bundledSkills, 18, 'The bundle must ship exactly 18 skills (update the docs and this number together)');
 
-for (const runtime of ['.claude', '.opencode']) {
+for (const runtime of ['.claude', '.agents', '.opencode']) {
   const scaffolded = fs.readdirSync(path.join(consumerRepoDir, runtime, 'skills'));
   assert.strictEqual(scaffolded.length, bundledSkills, `All ${bundledSkills} skills must be scaffolded into ${runtime}/skills`);
   for (const skillDir of scaffolded) {
