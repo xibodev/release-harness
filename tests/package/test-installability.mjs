@@ -69,16 +69,35 @@ assert.ok(versionOut.includes(corePkgVersion), `Version must report the publishe
 // 4b. Help test
 const helpOut = execSync(`${npxCmd} release-harness --help`, { cwd: consumerRepoDir, encoding: 'utf8' });
 assert.ok(helpOut.includes('doctor'), 'Help must list doctor command');
+assert.ok(helpOut.includes('skills'), 'Help must list skills command');
 assert.ok(helpOut.includes('check-pr'), 'Help must list check-pr command');
 assert.ok(helpOut.includes('run-local'), 'Help must list run-local command');
 assert.ok(helpOut.includes('clean'), 'Help must list clean command');
 console.log('  ✓ release-harness --help verified');
 
-// 4c. Doctor test
+// 4c. Skills can be inspected from the package before any templates are extracted.
+const skillsListOut = execSync(`${npxCmd} release-harness skills list`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.ok(skillsListOut.includes('18 bundled'), 'skills list must report the bundled skill count');
+assert.ok(skillsListOut.includes('release-harness-project-cartographer'), 'skills list must use canonical prefixed names');
+assert.ok(skillsListOut.includes('.claude/skills/'), 'skills list must name the Claude scaffold target');
+assert.ok(skillsListOut.includes('.opencode/skills/'), 'skills list must name the opencode scaffold target');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.claude')), 'skills list must not extract templates');
+
+const skillInfoOut = execSync(`${npxCmd} release-harness skills info project-cartographer`, {
+  cwd: consumerRepoDir,
+  encoding: 'utf8',
+});
+assert.ok(skillInfoOut.includes('Skill: release-harness-project-cartographer'), 'skills info must accept a bare skill name');
+assert.ok(skillInfoOut.includes('Capability:'), 'skills info must describe the skill capability');
+console.log('  ✓ Bundled skills inspected before scaffolding');
+
+// 4d. Doctor test
 const doctorOut = execSync(`${npxCmd} release-harness doctor`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.ok(doctorOut.includes('init --with-agents'), 'doctor must point agents to bundle scaffolding');
+assert.ok(doctorOut.includes('skills list'), 'doctor must point agents to in-flight skill discovery');
 console.log('  ✓ release-harness doctor executed');
 
-// 4d. Init scaffolding test
+// 4e. Init scaffolding test
 console.log('\n5. Testing release-harness init scaffolding...');
 
 // A bare init writes contracts only. Agent scaffolding is explicit opt-in, so
@@ -114,6 +133,9 @@ assert.ok(fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'AGENTS.md mus
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md')), 'Claude agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.github', 'agents', 'release-conductor.agent.md')), 'GitHub Copilot agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md')), 'opencode agent must be scaffolded');
+const scaffoldedSkillsOut = execSync(`${npxCmd} release-harness skills list`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.match(scaffoldedSkillsOut, /Claude Code\s+\.claude\/skills\/ \(18\/18 scaffolded\)/);
+assert.match(scaffoldedSkillsOut, /opencode\s+\.opencode\/skills\/ \(18\/18 scaffolded\)/);
 
 // The adoption guide reaches the project the same way the skills do -- through
 // init. It has to state that, or an agent that looked for the bundle before
