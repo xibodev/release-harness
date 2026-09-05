@@ -133,6 +133,7 @@ assert.ok(fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'AGENTS.md mus
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md')), 'Claude agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.github', 'agents', 'release-conductor.agent.md')), 'GitHub Copilot agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md')), 'opencode agent must be scaffolded');
+assert.ok(fs.existsSync(path.join(consumerRepoDir, '.copilot', 'agents', 'release-conductor.md')), 'Copilot CLI agent must be scaffolded');
 const scaffoldedSkillsOut = execSync(`${npxCmd} release-harness skills list`, { cwd: consumerRepoDir, encoding: 'utf8' });
 assert.match(scaffoldedSkillsOut, /Claude Code\s+\.claude\/skills\/ \(18\/18 scaffolded\)/);
 assert.match(scaffoldedSkillsOut, /opencode\s+\.opencode\/skills\/ \(18\/18 scaffolded\)/);
@@ -145,12 +146,30 @@ assert.ok(fs.existsSync(adoptionPath), 'AI-ADOPTION.md must be scaffolded with -
 const adoption = fs.readFileSync(adoptionPath, 'utf8');
 assert.ok(/init --with-agents/.test(adoption), 'AI-ADOPTION.md must name the command that scaffolds the bundle');
 assert.ok(/not with `npm install`|not with npm install/.test(adoption), 'AI-ADOPTION.md must say the bundle does not arrive with npm install');
-assert.ok(adoption.includes('project-cartographer'), 'AI-ADOPTION.md must point at project-cartographer');
+assert.ok(adoption.includes('release-harness-project-cartographer'), 'AI-ADOPTION.md must use the canonical cartographer name');
+assert.ok(adoption.includes('release-harness-scenario-compiler'), 'AI-ADOPTION.md must use the canonical compiler name');
+assert.ok(adoption.includes('generated review artifacts'), 'AI-ADOPTION.md must frame contracts as generated artifacts');
+assert.match(adoption, /present the\s+resulting diff for approval/, 'AI-ADOPTION.md must require human artifact review');
+assert.ok(adoption.includes('check-pr') && adoption.includes('release branches'), 'AI-ADOPTION.md must cover CI/CD integration');
 for (const code of ['| 0 |', '| 1 |', '| 2 |', '| 3 |', '| 4 |']) {
   assert.ok(adoption.includes(code), `AI-ADOPTION.md exit-code table must cover ${code}`);
 }
 assert.ok(/[Ee]xit 3 means the harness could not do its job/.test(adoption), 'AI-ADOPTION.md must explain that exit 3 is not a product failure');
 console.log('  ✓ AI-ADOPTION.md scaffolded with the adoption order and exit-code table');
+
+for (const conductorPath of [
+  path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md'),
+  path.join(consumerRepoDir, '.copilot', 'agents', 'release-conductor.md'),
+  path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md'),
+  path.join(corePkgDir, 'templates', 'agents', 'release-conductor.agent.md'),
+]) {
+  const conductor = fs.readFileSync(conductorPath, 'utf8');
+  assert.ok(conductor.includes('npx release-harness skills list'), `${conductorPath} must inspect packaged skills`);
+  assert.ok(conductor.includes('release-harness-project-cartographer'), `${conductorPath} must use the prefixed cartographer`);
+  assert.ok(conductor.includes('generated artifact diff'), `${conductorPath} must require human artifact review`);
+  assert.ok(conductor.includes('do not edit product code solely because of exit 3'), `${conductorPath} must route exit 3 correctly`);
+}
+console.log('  ✓ Multi-runtime conductors enforce prefixed, artifact-first adoption');
 
 // Skills scaffold under the release-harness- namespace so they cannot shadow a
 // same-named skill the consumer already has installed globally.

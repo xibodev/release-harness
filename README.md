@@ -36,7 +36,7 @@ npm install -D @xibodev/release-harness
 
 ---
 
-## Quick Start
+## Artifact-First Quick Start
 
 ### 1. Check host prerequisites
 ```bash
@@ -55,17 +55,32 @@ This scaffolds:
 
 *(A bare `npx release-harness init` writes contracts only; `--contracts-only` states that explicitly. The two scaffolding flags are mutually exclusive. **The skill bundle ships with `init --with-agents`, not with `npm install`** — it lives inside the package until init copies it out.)*
 
-### 3. Run Level 1 PR Integration Gate
-```bash
-npx release-harness check-pr
-```
+Before scaffolding, `npx release-harness skills list` previews the 18 bundled
+capabilities and their target directories without writing to the workspace.
 
-### 4. Run Level 2 Local Release UAT Gate
+### 3. Derive topology and origins
+
+Invoke `release-harness-project-cartographer` to inspect real services, ports,
+and health probes and generate `topology.json` and `origins.json`. Review the
+generated diff rather than hand-authoring raw schema JSON.
+
+### 4. Compile scenarios
+
+Invoke `release-harness-scenario-compiler` to compile user stories, personas,
+and side-effect expectations into `.release-harness/scenarios/`, then review
+the generated diff.
+
+### 5. Establish a local GREEN baseline
 ```bash
 npx release-harness run-local
 ```
 
-### 5. Clean up temporary workspaces and containers
+### 6. Integrate existing CI/CD
+
+Run `npx release-harness check-pr` on pull requests and
+`npx release-harness run-local` on release branches.
+
+To clean up temporary workspaces and containers:
 ```bash
 npx release-harness clean
 ```
@@ -74,10 +89,14 @@ npx release-harness clean
 
 ## Using with AI Coding Agents
 
+**[`AI-ADOPTION.md`](packages/release-harness-core/templates/AI-ADOPTION.md) is
+the standard integration protocol for AI coding agents.** `init --with-agents`
+copies it into the adopting repository alongside the skill bundle.
+
 Tell your AI agent (Claude Code, GitHub Copilot, opencode, Cursor):
 
 ```text
-Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating. Run `npx release-harness init --with-agents` first — the skill bundle ships with init, not with npm install — then read AI-ADOPTION.md and use project-cartographer to derive the contracts rather than reading the repository by hand.
+Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating. Run `npx release-harness skills list` to inspect the packaged bundle, then `npx release-harness init --with-agents` and read AI-ADOPTION.md. Use `release-harness-project-cartographer` and `release-harness-scenario-compiler` to derive contract artifacts from source, and present their diffs for review instead of hand-authoring JSON.
 ```
 
 Or delegate directly using the shipped `release-conductor` persona:
@@ -103,9 +122,9 @@ Use release-conductor to run our release quality gate and drive this branch to g
 | Status | Exit Code | Description | Action |
 |---|---|---|---|
 | `PASS` | `0` | All required & conditional scenarios passed with verified side effects | Certified for release |
-| `FAIL` | `1` | One or more scenarios failed due to product defects or unmet required dependencies | Invoke `fix-planner` & `fix-executor` |
+| `FAIL` | `1` | One or more scenarios failed due to product defects or unmet required dependencies | Invoke `release-harness-fix-planner` & `release-harness-fix-executor` |
 | `UNPROVEN` | `2` | Preconditions unmet, active waivers present, or non-certifying dev run (`--allow-dirty`) | Acquire fixtures or commit changes |
-| `HARNESS_ERROR` | `3` | Malformed scenario, missing runtime environment, Compose crash, or a probe the harness does not implement | Fix configuration |
+| `HARNESS_ERROR` | `3` | Malformed scenario, missing runtime environment, Compose crash, or a probe the harness does not implement | Fix harness configuration; do not edit product code solely because of exit 3 |
 | `EVIDENCE_INVALID` | `4` | Evidence file tampering or SHA-256 checksum mismatch detected | Clean workspace with `clean` |
 
 ---
