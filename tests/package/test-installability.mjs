@@ -69,16 +69,38 @@ assert.ok(versionOut.includes(corePkgVersion), `Version must report the publishe
 // 4b. Help test
 const helpOut = execSync(`${npxCmd} release-harness --help`, { cwd: consumerRepoDir, encoding: 'utf8' });
 assert.ok(helpOut.includes('doctor'), 'Help must list doctor command');
+assert.ok(helpOut.includes('skills'), 'Help must list skills command');
 assert.ok(helpOut.includes('check-pr'), 'Help must list check-pr command');
 assert.ok(helpOut.includes('run-local'), 'Help must list run-local command');
 assert.ok(helpOut.includes('clean'), 'Help must list clean command');
 console.log('  ✓ release-harness --help verified');
 
-// 4c. Doctor test
+// 4c. Skills can be inspected from the package before any templates are extracted.
+const skillsListOut = execSync(`${npxCmd} release-harness skills list`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.ok(skillsListOut.includes('18 bundled'), 'skills list must report the bundled skill count');
+assert.ok(skillsListOut.includes('release-harness-project-cartographer'), 'skills list must use canonical prefixed names');
+assert.ok(skillsListOut.includes('.claude/skills/'), 'skills list must name the Claude scaffold target');
+assert.ok(skillsListOut.includes('.agents/skills/'), 'skills list must name the shared Agent Skills target');
+assert.ok(skillsListOut.includes('.opencode/skills/'), 'skills list must name the opencode scaffold target');
+assert.ok(skillsListOut.includes('Scaffold all skills: npx release-harness init --with-agents'), 'skills list output must reach its final guidance');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.claude')), 'skills list must not extract templates');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.agents')), 'skills list must not create the shared target');
+
+const skillInfoOut = execSync(`${npxCmd} release-harness skills info project-cartographer`, {
+  cwd: consumerRepoDir,
+  encoding: 'utf8',
+});
+assert.ok(skillInfoOut.includes('Skill: release-harness-project-cartographer'), 'skills info must accept a bare skill name');
+assert.ok(skillInfoOut.includes('Capability:'), 'skills info must describe the skill capability');
+console.log('  ✓ Bundled skills inspected before scaffolding');
+
+// 4d. Doctor test
 const doctorOut = execSync(`${npxCmd} release-harness doctor`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.ok(doctorOut.includes('init --with-agents'), 'doctor must point agents to bundle scaffolding');
+assert.ok(doctorOut.includes('skills list'), 'doctor must point agents to in-flight skill discovery');
 console.log('  ✓ release-harness doctor executed');
 
-// 4d. Init scaffolding test
+// 4e. Init scaffolding test
 console.log('\n5. Testing release-harness init scaffolding...');
 
 // A bare init writes contracts only. Agent scaffolding is explicit opt-in, so
@@ -90,6 +112,7 @@ assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'scenario
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'A bare init must not scaffold AGENTS.md');
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, 'AI-ADOPTION.md')), 'A bare init must not scaffold AI-ADOPTION.md');
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.claude')), 'A bare init must not scaffold agents implicitly');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.agents')), 'A bare init must not scaffold shared skills implicitly');
 assert.ok(bareInitOut.includes('--with-agents'), 'A bare init must name the flag that scaffolds the agent bundle');
 console.log('  ✓ Bare init wrote contracts only and pointed at --with-agents');
 
@@ -110,10 +133,17 @@ console.log('  ✓ --with-agents + --contracts-only rejected with exit 3');
 
 // Now the explicit opt-in.
 const initOut = execSync(`${npxCmd} release-harness init --with-agents`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.match(initOut, /restart or reload the active agent session/i, 'Agent scaffolding must tell an active host to reindex skills');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'AGENTS.md must be scaffolded');
+assert.ok(fs.readFileSync(path.join(consumerRepoDir, 'AGENTS.md'), 'utf8').includes('.agents/skills/release-harness-*'), 'AGENTS.md must identify the shared skill target');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md')), 'Claude agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.github', 'agents', 'release-conductor.agent.md')), 'GitHub Copilot agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md')), 'opencode agent must be scaffolded');
+assert.ok(fs.existsSync(path.join(consumerRepoDir, '.copilot', 'agents', 'release-conductor.md')), 'Copilot CLI agent must be scaffolded');
+const scaffoldedSkillsOut = execSync(`${npxCmd} release-harness skills list`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.match(scaffoldedSkillsOut, /Claude Code\s+\.claude\/skills\/ \(18\/18 scaffolded\)/);
+assert.match(scaffoldedSkillsOut, /Agent Skills\s+\.agents\/skills\/ \(18\/18 scaffolded\)/);
+assert.match(scaffoldedSkillsOut, /opencode\s+\.opencode\/skills\/ \(18\/18 scaffolded\)/);
 
 // The adoption guide reaches the project the same way the skills do -- through
 // init. It has to state that, or an agent that looked for the bundle before
@@ -123,12 +153,31 @@ assert.ok(fs.existsSync(adoptionPath), 'AI-ADOPTION.md must be scaffolded with -
 const adoption = fs.readFileSync(adoptionPath, 'utf8');
 assert.ok(/init --with-agents/.test(adoption), 'AI-ADOPTION.md must name the command that scaffolds the bundle');
 assert.ok(/not with `npm install`|not with npm install/.test(adoption), 'AI-ADOPTION.md must say the bundle does not arrive with npm install');
-assert.ok(adoption.includes('project-cartographer'), 'AI-ADOPTION.md must point at project-cartographer');
+assert.ok(adoption.includes('release-harness-project-cartographer'), 'AI-ADOPTION.md must use the canonical cartographer name');
+assert.ok(adoption.includes('release-harness-scenario-compiler'), 'AI-ADOPTION.md must use the canonical compiler name');
+assert.ok(adoption.includes('generated review artifacts'), 'AI-ADOPTION.md must frame contracts as generated artifacts');
+assert.match(adoption, /present the\s+resulting diff for approval/, 'AI-ADOPTION.md must require human artifact review');
+assert.ok(adoption.includes('check-pr') && adoption.includes('release branches'), 'AI-ADOPTION.md must cover CI/CD integration');
 for (const code of ['| 0 |', '| 1 |', '| 2 |', '| 3 |', '| 4 |']) {
   assert.ok(adoption.includes(code), `AI-ADOPTION.md exit-code table must cover ${code}`);
 }
 assert.ok(/[Ee]xit 3 means the harness could not do its job/.test(adoption), 'AI-ADOPTION.md must explain that exit 3 is not a product failure');
 console.log('  ✓ AI-ADOPTION.md scaffolded with the adoption order and exit-code table');
+
+for (const conductorPath of [
+  path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md'),
+  path.join(consumerRepoDir, '.copilot', 'agents', 'release-conductor.md'),
+  path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md'),
+  path.join(corePkgDir, 'templates', 'agents', 'release-conductor.agent.md'),
+]) {
+  const conductor = fs.readFileSync(conductorPath, 'utf8');
+  assert.ok(conductor.includes('npx release-harness skills list'), `${conductorPath} must inspect packaged skills`);
+  assert.ok(conductor.includes('release-harness-project-cartographer'), `${conductorPath} must use the prefixed cartographer`);
+  assert.ok(conductor.includes('generated artifact diff'), `${conductorPath} must require human artifact review`);
+  assert.ok(conductor.includes('Inspect underlying scenario statuses and causes'), `${conductorPath} must preserve dirty-run failures`);
+  assert.match(conductor, /do not edit product code solely because of exit 3/i, `${conductorPath} must route exit 3 correctly`);
+}
+console.log('  ✓ Multi-runtime conductors enforce prefixed, artifact-first adoption');
 
 // Skills scaffold under the release-harness- namespace so they cannot shadow a
 // same-named skill the consumer already has installed globally.
@@ -148,7 +197,7 @@ const bundledSkills = fs
   .filter((e) => e.isDirectory()).length;
 assert.strictEqual(bundledSkills, 18, 'The bundle must ship exactly 18 skills (update the docs and this number together)');
 
-for (const runtime of ['.claude', '.opencode']) {
+for (const runtime of ['.claude', '.agents', '.opencode']) {
   const scaffolded = fs.readdirSync(path.join(consumerRepoDir, runtime, 'skills'));
   assert.strictEqual(scaffolded.length, bundledSkills, `All ${bundledSkills} skills must be scaffolded into ${runtime}/skills`);
   for (const skillDir of scaffolded) {

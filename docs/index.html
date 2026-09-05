@@ -77,9 +77,9 @@ Evaluating deterministic gate verdict...
       </div>
       <div class="verdict-grid">
         <article class="verdict-row verdict-pass" data-od-id="landing-exit-0"><span class="verdict-code">0</span><div><strong>PASS</strong><p>All required &amp; conditional scenarios passed with verified side effects.</p></div><span>Ready for promotion / deployment.</span></article>
-        <article class="verdict-row verdict-fail" data-od-id="landing-exit-1"><span class="verdict-code">1</span><div><strong>FAIL</strong><p>One or more required scenarios failed due to product bugs or missing dependencies.</p></div><span>Patch code.</span></article>
-        <article class="verdict-row verdict-unproven" data-od-id="landing-exit-2"><span class="verdict-code">2</span><div><strong>UNPROVEN</strong><p>Preconditions unmet, active waivers present, or dirty git tree with <code>--allow-dirty</code>.</p></div><span>Stage missing fixtures or commit changes.</span></article>
-        <article class="verdict-row verdict-error" data-od-id="landing-exit-3"><span class="verdict-code">3</span><div><strong>HARNESS_ERROR</strong><p>Malformed scenario, missing runtime environment, or Docker Compose crash.</p></div><span>Verify prerequisites and Compose configuration.</span></article>
+        <article class="verdict-row verdict-fail" data-od-id="landing-exit-1"><span class="verdict-code">1</span><div><strong>FAIL</strong><p>A required result failed, or certification stopped before writing a verdict.</p></div><span>Inspect causes or runtime diagnostics.</span></article>
+        <article class="verdict-row verdict-unproven" data-od-id="landing-exit-2"><span class="verdict-code">2</span><div><strong>UNPROVEN</strong><p>Preconditions unmet, active waivers present, or dirty git tree with <code>--allow-dirty</code>.</p></div><span>Resolve underlying failures before committing.</span></article>
+        <article class="verdict-row verdict-error" data-od-id="landing-exit-3"><span class="verdict-code">3</span><div><strong>HARNESS_ERROR</strong><p>Malformed scenario, missing runtime environment, or Docker Compose crash.</p></div><span>Inspect runtime diagnostics.</span></article>
         <article class="verdict-row verdict-invalid" data-od-id="landing-exit-4"><span class="verdict-code">4</span><div><strong>EVIDENCE_INVALID</strong><p>Evidence file tampering, injected logs, or SHA-256 checksum mismatch.</p></div><span>Clean corrupted workspace.</span></article>
       </div>
       <a class="button-link" href="docs.html#core-invariants" data-od-id="read-exit-code-reference">Read exit-code reference</a>
@@ -90,13 +90,13 @@ Evaluating deterministic gate verdict...
       <div class="start-grid">
         <div>
           <h2>Bring the harness into your project.</h2>
-          <p>Install the package into your project as a development dependency, verify the host, then scaffold project-owned contracts.</p>
+          <p>Install the package, verify the host, then scaffold the skills that derive project-owned contract artifacts for review.</p>
         </div>
         <div class="install-panel">
           <div class="code-header"><span>TERMINAL</span><button class="copy-btn" type="button" data-od-id="copy-install">COPY</button></div>
           <pre id="install-command"><code>npm install -D @xibodev/release-harness
 npx release-harness doctor
-npx release-harness init</code></pre>
+npx release-harness init --with-agents</code></pre>
           <a href="docs.html#onboarding-project">Follow the onboarding guide <span aria-hidden="true">→</span></a>
         </div>
       </div>

@@ -1,4 +1,7 @@
 # Release-Harness Cursor Rules
-- When verifying code changes, run `npx release-harness run-local` in the terminal.
-- Inspect `verdict.json` in the evidence directory. Fix code defects until exit code is 0.
-- Do not mutate `.release-harness/topology.json` or `origins.json` unless service ports change.
+- For initial adoption, run `npx release-harness skills list`, scaffold with `init --with-agents`, reload the agent session, and follow `AI-ADOPTION.md`.
+- Use `release-harness-project-cartographer` and `release-harness-scenario-compiler` to derive contracts, then present generated diffs for human review.
+- While changes are uncommitted, run `npx release-harness run-local --allow-dirty`; after underlying results pass, commit and run once without the flag for certification.
+- Inspect `verdict.json`, its causes, and runtime diagnostics. Fix `PRODUCT_BUG`, acquire missing fixtures, and do not infer a product defect from exit 3 alone.
+- Treat `--allow-dirty` exit 2 as non-certifying development; resolve underlying failed scenarios before committing for certified exit 0.
+- Do not hand-edit `topology.json` or `origins.json`; accept cartographer-generated changes only after reviewing their diff.

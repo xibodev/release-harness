@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
+import { parse as parseYaml } from 'yaml';
 import { SourceMaterializer } from './materializer.js';
 import { EvidenceSealer } from './sealer.js';
 import { SecretRedactor } from './redactor.js';
@@ -36,6 +37,10 @@ export async function runCli(argv = process.argv.slice(2)) {
 
   if (command === 'init') {
     return handleInit(argv.slice(1));
+  }
+
+  if (command === 'skills') {
+    return handleSkills(argv.slice(1));
   }
 
   if (command === 'evaluate') {
@@ -71,6 +76,7 @@ Deterministic quality-gate adjudication and test execution engine.
 Commands:
   doctor        Check host prerequisites, toolchain, and project contracts
   init          Scaffold project-owned .release-harness/ contracts (use --with-agents for AI agents)
+  skills        Inspect bundled cognitive skills without scaffolding (list or info)
   check-pr      Run Level 1 PR Integration Gate (contracts, toolchain, and configured PR commands)
   run-local     Run Level 2 Local Release UAT Gate (sealed Compose, scenarios, probes)
   evaluate      Pure-function deterministic adjudication of existing evidence
@@ -201,6 +207,16 @@ export function detectCollisions(destDir, names) {
  */
 export const SKILL_NAMESPACE = 'release-harness-';
 
+const SKILL_TARGETS = [
+  { label: 'Claude Code', relativeDir: '.claude/skills' },
+  { label: 'Agent Skills', relativeDir: '.agents/skills' },
+  { label: 'opencode', relativeDir: '.opencode/skills' },
+];
+
+function bundledSkillsDir() {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/skills');
+}
+
 /**
  * Number of skills in the shipped bundle, or null when the templates cannot be
  * read. Counted rather than hard-coded so the figure quoted to the operator
@@ -208,11 +224,143 @@ export const SKILL_NAMESPACE = 'release-harness-';
  */
 export function countBundledSkills() {
   try {
-    const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/skills');
-    return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).length;
+    return fs.readdirSync(bundledSkillsDir(), { withFileTypes: true }).filter((e) => e.isDirectory()).length;
   } catch {
     return null;
   }
+}
+
+function readBundledSkills() {
+  const skillsDir = bundledSkillsDir();
+  if (!fs.existsSync(skillsDir)) {
+    throw new Error(`skill templates are missing from the installed package (expected at ${skillsDir})`);
+  }
+
+  return fs
+    .readdirSync(skillsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const skillFile = path.join(skillsDir, entry.name, 'SKILL.md');
+      if (!fs.existsSync(skillFile)) {
+        throw new Error(`bundled skill "${entry.name}" is missing SKILL.md`);
+      }
+      const content = fs.readFileSync(skillFile, 'utf8');
+      const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content);
+      if (!frontmatter) {
+        throw new Error(`bundled skill "${entry.name}" has no YAML frontmatter`);
+      }
+      const metadata = parseYaml(frontmatter[1]) || {};
+      const name = typeof metadata.name === 'string' && metadata.name.trim()
+        ? metadata.name.trim()
+        : `${SKILL_NAMESPACE}${entry.name}`;
+      const description = typeof metadata.description === 'string' && metadata.description.trim()
+        ? metadata.description.replace(/\s+/g, ' ').trim()
+        : 'No capability description provided.';
+      return { name, description };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function skillTargetPath(target, skillName) {
+  return `${target.relativeDir}/${skillName}/SKILL.md`;
+}
+
+function isSkillScaffolded(target, skillName) {
+  return fs.existsSync(path.resolve(process.cwd(), skillTargetPath(target, skillName)));
+}
+
+function printSkillsHelp() {
+  console.log(`Release-Harness cognitive skill inspection
+
+Usage:
+  release-harness skills [list]
+  release-harness skills info <skill-name>
+
+Both bare names (project-cartographer) and canonical names
+(${SKILL_NAMESPACE}project-cartographer) are accepted by info.`);
+}
+
+function handleSkills(args) {
+  const action = args[0] || 'list';
+
+  if (action === '--help' || action === '-h' || action === 'help') {
+    printSkillsHelp();
+    return 0;
+  }
+  if (action !== 'list' && action !== 'info') {
+    console.error(`Error: unknown skills action "${action}".`);
+    console.error('Run "release-harness skills --help" for usage.');
+    return 3;
+  }
+  if (action === 'list' && args.length > 1) {
+    console.error(`Error: unexpected argument "${args[1]}" after "skills list".`);
+    console.error('Run "release-harness skills --help" for usage.');
+    return 3;
+  }
+  if (action === 'info' && !args[1]) {
+    console.error('Error: "skills info" requires a skill name.');
+    console.error('Run "release-harness skills list" to see available skills.');
+    return 3;
+  }
+  if (action === 'info' && args.length > 2) {
+    console.error(`Error: unexpected argument "${args[2]}" after the skill name.`);
+    console.error('Run "release-harness skills --help" for usage.');
+    return 3;
+  }
+
+  let skills;
+  try {
+    skills = readBundledSkills();
+  } catch (err) {
+    console.error(`Error: unable to inspect bundled skills: ${err.message}`);
+    return 3;
+  }
+
+  if (action === 'info') {
+    const requestedName = args[1].startsWith(SKILL_NAMESPACE)
+      ? args[1]
+      : `${SKILL_NAMESPACE}${args[1]}`;
+    const skill = skills.find((candidate) => candidate.name === requestedName);
+    if (!skill) {
+      console.error(`Error: unknown bundled skill "${args[1]}".`);
+      console.error('Run "release-harness skills list" to see available skills.');
+      return 3;
+    }
+
+    console.log(`Skill: ${skill.name}`);
+    console.log(`Capability: ${skill.description}`);
+    console.log('Scaffold targets:');
+    for (const target of SKILL_TARGETS) {
+      const targetPath = skillTargetPath(target, skill.name);
+      const status = isSkillScaffolded(target, skill.name) ? 'scaffolded' : 'not scaffolded';
+      console.log(`  ${target.label.padEnd(13)} ${targetPath} (${status})`);
+    }
+    console.log('\nScaffold with: npx release-harness init --with-agents');
+    return 0;
+  }
+
+  console.log(`Release-Harness Cognitive Skills (${skills.length} bundled)`);
+  console.log('Scaffold targets:');
+  for (const target of SKILL_TARGETS) {
+    const scaffolded = skills.filter((skill) => isSkillScaffolded(target, skill.name)).length;
+    console.log(`  ${target.label.padEnd(13)} ${target.relativeDir}/ (${scaffolded}/${skills.length} scaffolded)`);
+  }
+  console.log('\nCapabilities:');
+  for (const skill of skills) {
+    console.log(`  ${skill.name}`);
+    console.log(`    ${skill.description}`);
+  }
+  console.log('\nScaffold all skills: npx release-harness init --with-agents');
+  return 0;
+}
+
+function printSkillScaffoldingTip() {
+  const skillCount = countBundledSkills();
+  const bundle = skillCount === null ? 'the bundled cognitive skills' : `${skillCount} cognitive skills`;
+  console.log('\n💡 Tip: Run "npx release-harness init --with-agents"');
+  console.log(`   to scaffold ${bundle}, including ${SKILL_NAMESPACE}project-cartographer`);
+  console.log(`   and ${SKILL_NAMESPACE}scenario-compiler, for artifact-first agent workflows.`);
+  console.log('   Preview capabilities with "npx release-harness skills list".');
 }
 
 /**
@@ -356,6 +504,7 @@ async function handleDoctor(args) {
   }
 
   console.log(`\nStatus: ${allGood ? 'Ready.' : 'Action items found (see above).'}`);
+  printSkillScaffoldingTip();
   return allGood ? 0 : 1;
 }
 
@@ -540,6 +689,12 @@ npx release-harness run-local
     reportSkillCollisions(opencodeSkillsDir, tmplSkillsDir, '.opencode/skills', force);
     copyDirectoryRecursive(tmplSkillsDir, opencodeSkillsDir, force, dryRun, SKILL_NAMESPACE);
 
+    // Shared Agent Skills standard: Copilot CLI, Cursor, and other compatible hosts.
+    const sharedSkillsDir = path.join(cwd, '.agents', 'skills');
+    if (!dryRun) fs.mkdirSync(sharedSkillsDir, { recursive: true });
+    reportSkillCollisions(sharedSkillsDir, tmplSkillsDir, '.agents/skills', force);
+    copyDirectoryRecursive(tmplSkillsDir, sharedSkillsDir, force, dryRun, SKILL_NAMESPACE);
+
     // GitHub Copilot: .github/agents & .github/copilot-instructions.md
     const ghAgentsDir = path.join(cwd, '.github', 'agents');
     if (!dryRun) fs.mkdirSync(ghAgentsDir, { recursive: true });
@@ -559,12 +714,14 @@ npx release-harness run-local
   } else {
     // With the implicit trigger removed, the bundle would otherwise be
     // undiscoverable, so name the flag that produces it.
-    const skillCount = countBundledSkills();
-    console.log('\n  Contracts written. To scaffold the AI agent bundle'
-      + ` (release-conductor${skillCount === null ? '' : ` + ${skillCount} skills`}):`);
-    console.log('    npx release-harness init --with-agents');
+    console.log('\n  Contracts written.');
+    printSkillScaffoldingTip();
   }
 
+  if (withAgents && !dryRun) {
+    console.log('\nAgent host notice: Restart or reload the active agent session so it discovers the newly scaffolded skills.');
+    console.log('Confirm scaffold status with "npx release-harness skills list".');
+  }
   console.log('\nInitialization complete. Run "npx release-harness doctor" to verify.');
   return 0;
 }

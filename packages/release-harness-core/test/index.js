@@ -6,5 +6,6 @@
 await import('./evaluator.test.js');
 await import('./sealer.test.js');
 await import('./validator.test.js');
+await import('./cli.test.js');
 
 console.log('\nAll release-harness-core unit & golden tests PASSED!');

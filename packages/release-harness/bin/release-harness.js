@@ -4,9 +4,9 @@ import { runCli } from '@xibodev/release-harness-core/cli';
 
 runCli()
   .then((exitCode) => {
-    process.exit(exitCode);
+    process.exitCode = exitCode;
   })
   .catch((err) => {
     console.error('Fatal Release-Harness Error:', err);
-    process.exit(3);
+    process.exitCode = 3;
   });

@@ -12,6 +12,7 @@ Cross-tool entry point for **Release-Harness** across Claude Code, GitHub Copilo
 - `.copilot/agents/release-conductor.md` — GitHub Copilot CLI variant
 - `.github/agents/release-conductor.agent.md` — GitHub Copilot Workspace / Extensions variant
 - `.opencode/agents/release-conductor.md` — opencode variant
+- `.agents/skills/release-harness-*` — shared Agent Skills bundle for compatible runtimes
 
 ## Principle of Deterministic Core Authority
 

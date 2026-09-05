@@ -241,20 +241,20 @@
           <tr class="exit-code exit-1" data-od-id="exit-code-1">
             <td><code style="color: var(--danger); font-weight: bold;">FAIL</code></td>
             <td><code>1</code></td>
-            <td>One or more required scenarios failed due to product bugs or missing dependencies.</td>
-            <td>Invoke <code>fix-planner</code> & <code>fix-executor</code> to patch code.</td>
+            <td>A required result failed, or certification stopped before writing a verdict.</td>
+            <td>Inspect verdict causes when present; otherwise follow runtime diagnostics.</td>
           </tr>
           <tr class="exit-code exit-2" data-od-id="exit-code-2">
             <td><code style="color: var(--warning); font-weight: bold;">UNPROVEN</code></td>
             <td><code>2</code></td>
             <td>Preconditions unmet, active waivers present, or dirty git tree with <code>--allow-dirty</code>.</td>
-            <td>Stage missing fixtures or commit uncommitted changes.</td>
+            <td>Inspect underlying results and resolve failures before committing.</td>
           </tr>
           <tr class="exit-code exit-3" data-od-id="exit-code-3">
             <td><code style="color: var(--danger); font-weight: bold;">HARNESS_ERROR</code></td>
             <td><code>3</code></td>
             <td>Malformed scenario, missing runtime environment, or Docker Compose crash.</td>
-            <td>Verify <code>doctor</code> prerequisites and Compose configuration.</td>
+            <td>Follow runtime diagnostics; do not infer a product defect from exit 3 alone.</td>
           </tr>
           <tr class="exit-code exit-4" data-od-id="exit-code-4">
             <td><code style="color: var(--danger); font-weight: bold;">EVIDENCE_INVALID</code></td>
@@ -274,7 +274,7 @@
         <div class="callout-title">UPGRADING FROM 1.1.0 — READ FIRST</div>
         <p>v1.2.0 corrects behaviour that was previously wrong. <strong>A run that was green on 1.1.0 may legitimately fail on 1.2.0.</strong> Each of these is a correction, not a regression:</p>
         <ul>
-          <li><strong>Git-ignored files no longer reach the workspace.</strong> Source is now materialized from git, so a build depending on an untracked local file — a <code>.env</code>, an uncommitted fixture — will fail. Materialization names the excluded file so the cause is visible. Commit it, or provide the value through your compose file's environment. That earlier green proved the build worked on a machine where someone had once created that file, not that it worked from committed source.</li>
+          <li><strong>Git-ignored files no longer reach the workspace.</strong> Certification runs also exclude untracked files; <code>--allow-dirty</code> development runs include untracked files that are not ignored. If a build depends on a missing <code>.env</code> or local fixture, inspect <code>git status</code>, <code>git check-ignore</code>, and materialization warnings. Commit non-secret assets or provide configuration through your Compose environment; never commit local credentials.</li>
           <li><strong><code>sql_query</code> scenarios now exit 3.</strong> The probe never executed any SQL; the previous green was unearned. Use a custom probe.</li>
           <li><strong>Harness faults report exit 3</strong> where they previously reported exit 1 as a product failure. Check any CI that assumed exit 1 meant your code was broken.</li>
           <li><strong><code>--allow-dirty</code> no longer masks integrity failures.</strong> It still yields exit 2 for a would-be pass or fail, but a harness error keeps exit 3 and invalid evidence keeps exit 4.</li>
@@ -313,6 +313,11 @@
             <td>Scaffolds project-owned <code>.release-harness/</code> contracts. A bare <code>init</code> writes contracts only; <code>--with-agents</code> adds <code>AGENTS.md</code>, <code>AI-ADOPTION.md</code> and the multi-runtime agent and skill bundle. Unknown flags are rejected with exit 3.</td>
           </tr>
           <tr>
+            <td><code>skills</code></td>
+            <td><code>list</code>, <code>info &lt;skill-name&gt;</code></td>
+            <td>Inspects all packaged cognitive skills, capabilities, target directories, and scaffold status without extracting templates. <code>info</code> accepts bare or <code>release-harness-</code> prefixed names.</td>
+          </tr>
+          <tr>
             <td><code>check-pr</code></td>
             <td><code>--allow-dirty</code></td>
             <td>Level 1 PR Integration Gate: checks schemas, contract validity, and clean git provenance.</td>
@@ -338,19 +343,19 @@
 
     <!-- Onboarding a Project -->
     <section id="onboarding-project" data-od-id="section-onboarding-project">
-      <h2 id="project-contracts" data-od-id="heading-onboarding-project">Manual Project Onboarding</h2>
-      <p>Follow these 3 steps if you are manually setting up the harness in your project:</p>
+      <h2 id="project-contracts" data-od-id="heading-onboarding-project">Artifact-First Project Onboarding</h2>
+      <p>Do not start from blank schemas. Let the bundled skills derive contracts from source, then review and approve the generated artifacts:</p>
 
-      <h3>Step 1: Run Doctor & Init</h3>
+      <h3>Step 1: Run Doctor & Scaffold the Skill Bundle</h3>
       <div class="code-header">
         <span>TERMINAL</span>
         <button class="copy-btn" type="button" data-od-id="copy-button-03">COPY</button>
       </div>
       <pre><code>npx release-harness doctor
-npx release-harness init</code></pre>
+npx release-harness init --with-agents</code></pre>
 
-      <h3>Step 2: Declare Service Nodes in <code>topology.json</code></h3>
-      <p>Open <code>.release-harness/topology.json</code> and declare your project service graph:</p>
+      <h3>Step 2: Derive and Review Service Contracts</h3>
+      <p>Invoke <code>release-harness-project-cartographer</code> to inspect Compose services, real ports, routes, and health probes. Review its generated <code>topology.json</code> and <code>origins.json</code> diff. The shape below is a reference, not a blank form to author by hand:</p>
       
       <div class="code-header">
         <span>.release-harness/topology.json</span>
@@ -378,8 +383,8 @@ npx release-harness init</code></pre>
   ]
 }</code></pre>
 
-      <h3>Step 3: Define Declarative Playwright Scenarios</h3>
-      <p>Place declarative test scenarios in <code>.release-harness/scenarios/smoke.json</code> (or <code>.yaml</code>):</p>
+      <h3>Step 3: Compile and Review Declarative Scenarios</h3>
+      <p>Invoke <code>release-harness-scenario-compiler</code> to compile user stories, personas, and side-effect expectations into <code>.release-harness/scenarios/</code>. Review the generated diff; the example below is schema reference only:</p>
 
       <div class="code-header">
         <span>.release-harness/scenarios/smoke.json</span>
@@ -406,7 +411,7 @@ npx release-harness init</code></pre>
     <section id="ai-agent-onboarding" data-od-id="section-ai-agent-onboarding">
       <h2 data-od-id="heading-ai-agent-onboarding">Using with AI Coding Agents</h2>
       <p>
-        Release-Harness is designed from the ground up for high-leverage AI engineering. Instead of micro-managing tool invocations, give your AI agent high-level goals and let it discover and orchestrate the harness autonomously.
+        <strong><code>AI-ADOPTION.md</code> is the standard integration protocol for AI coding agents.</strong> <code>init --with-agents</code> scaffolds it alongside the cognitive skills so every runtime follows the same artifact-first sequence and exit-code rules.
       </p>
 
       <div class="callout">
@@ -420,17 +425,17 @@ npx release-harness init</code></pre>
         <span>AI ONBOARDING PROMPT</span>
         <button class="copy-btn" type="button" data-od-id="copy-button-06">COPY</button>
       </div>
-      <pre><code>Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating. Run `npx release-harness init --with-agents` first &mdash; the skill bundle ships with init, not with npm install &mdash; then read AI-ADOPTION.md and use project-cartographer to derive the contracts rather than reading the repository by hand.</code></pre>
+      <pre><code>Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating. Run `npx release-harness skills list` to inspect the packaged bundle, then `npx release-harness init --with-agents` and read AI-ADOPTION.md. Use `release-harness-project-cartographer` and `release-harness-scenario-compiler` to derive contract artifacts from source, and present their diffs for review instead of hand-authoring JSON.</code></pre>
 
-      <p><strong>What the AI agent does automatically:</strong></p>
-      <ul>
-        <li>Installs <code>@xibodev/release-harness</code> as a project dev dependency.</li>
-        <li>Executes <code>npx release-harness doctor</code> to verify the environment.</li>
-        <li>Runs <code>npx release-harness init --with-agents</code> to scaffold <code>.release-harness/</code>, <code>AGENTS.md</code>, <code>AI-ADOPTION.md</code>, and the multi-runtime skill libraries. The bundle ships inside the package and only reaches the project through <code>init</code>, so an agent looking for <code>project-cartographer</code> before this step will not find it.</li>
-        <li>Reads <code>AI-ADOPTION.md</code> for the adoption order and the exit-code table.</li>
-        <li>Uses <code>project-cartographer</code> to derive <code>topology.json</code> and <code>origins.json</code> from your real ports, health endpoints, and service definitions &mdash; rather than hand-enumerating routes and Docker files.</li>
-        <li>Uses <code>scenario-compiler</code> to author scenarios under <code>.release-harness/scenarios/</code>, including the side-effect probes that assert what the product produced, then runs <code>npx release-harness run-local</code> to verify a certified green baseline.</li>
-      </ul>
+      <p><strong>Golden Sequence after installing the package:</strong></p>
+      <ol>
+        <li>Run <code>npx release-harness doctor</code> to verify Docker, Compose, Playwright, and other prerequisites.</li>
+        <li>Run <code>npx release-harness init --with-agents</code> to scaffold contracts, <code>AI-ADOPTION.md</code>, and the skill bundle. Restart or reload the active agent session so it reindexes new skills. Use <code>npx release-harness skills list</code> to inspect the bundle before or after scaffolding.</li>
+        <li>Invoke <code>release-harness-project-cartographer</code> to derive <code>topology.json</code> and <code>origins.json</code> from source, then present the generated diff for human review.</li>
+        <li>Invoke <code>release-harness-scenario-compiler</code> to compile scenarios and side-effect probes from user stories and personas, then present the generated diff for human review.</li>
+        <li>While generated changes are uncommitted, run <code>npx release-harness run-local --allow-dirty</code> and inspect underlying results (exit 2 is expected). Resolve failures, approve and commit the artifacts, then run <code>npx release-harness run-local</code> for a certified GREEN exit 0.</li>
+        <li>Run <code>npx release-harness check-pr</code> on pull requests and <code>npx release-harness run-local</code> on release branches.</li>
+      </ol>
 
       <!-- The Shipped release-conductor Persona -->
       <h3 id="release-conductor-agent" data-od-id="heading-release-conductor-agent">The Shipped <code>release-conductor</code> Agent Persona</h3>
@@ -448,55 +453,55 @@ npx release-harness init</code></pre>
       <!-- The 18 Bundled Skills -->
       <h3 id="skill-catalog" data-od-id="heading-skill-catalog">The 18 Bundled Cognitive Skills</h3>
       <p>
-        Running <code>npx release-harness init --with-agents</code> populates your project's local AI skill library (under <code>.claude/skills/</code> and <code>.opencode/skills/</code>) with 18 specialized release playbooks, each scaffolded under a <code>release-harness-</code> prefixed name so it cannot shadow a same-named skill you already have. A bare <code>init</code> writes contracts only:
+        Run <code>npx release-harness skills list</code> to inspect these capabilities without writing files. <code>init --with-agents</code> then populates <code>.claude/skills/</code>, <code>.agents/skills/</code>, and <code>.opencode/skills/</code>. Every identifier uses the <code>release-harness-</code> prefix so it cannot shadow a same-named skill you already have:
       </p>
 
       <div class="skill-item" data-od-id="skill-item-01">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-1">
           <div class="skill-title">
-            <span>project-cartographer</span>
+            <span>release-harness-project-cartographer</span>
             <span class="skill-badge">Discovery</span>
           </div>
           <span class="skill-arrow">▶</span>
         </button>
         <div class="skill-content" id="skill-content-1" hidden>
           <p>Scans Docker Compose, routes, and scripts to build <code>topology.json</code> and <code>origins.json</code>.</p>
-          <p><strong>Prompt:</strong> <code>Use project-cartographer to map our Docker Compose services into .release-harness/topology.json and origins.json.</code></p>
+          <p><strong>Prompt:</strong> <code>Use release-harness-project-cartographer to map our Docker Compose services into .release-harness/topology.json and origins.json.</code></p>
         </div>
       </div>
 
       <div class="skill-item" data-od-id="skill-item-02">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-2">
           <div class="skill-title">
-            <span>scenario-compiler</span>
+            <span>release-harness-scenario-compiler</span>
             <span class="skill-badge">Synthesis</span>
           </div>
           <span class="skill-arrow">▶</span>
         </button>
         <div class="skill-content" id="skill-content-2" hidden>
           <p>Translates user stories, personas, and auth flows into declarative Playwright scenarios.</p>
-          <p><strong>Prompt:</strong> <code>Use scenario-compiler to author Playwright test scenarios for our user checkout flow in .release-harness/scenarios/.</code></p>
+          <p><strong>Prompt:</strong> <code>Use release-harness-scenario-compiler to author Playwright test scenarios for our user checkout flow in .release-harness/scenarios/.</code></p>
         </div>
       </div>
 
       <div class="skill-item" data-od-id="skill-item-03">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-3">
           <div class="skill-title">
-            <span>fix-planner & fix-executor</span>
+            <span>release-harness-fix-planner &amp; release-harness-fix-executor</span>
             <span class="skill-badge">Remediation</span>
           </div>
           <span class="skill-arrow">▶</span>
         </button>
         <div class="skill-content" id="skill-content-3" hidden>
           <p>Parses failure causes in <code>verdict.json</code>, constructs an ordered <code>execution-plan.json</code>, applies source code diffs, and re-runs <code>run-local</code> until certified green.</p>
-          <p><strong>Prompt:</strong> <code>Use fix-planner and fix-executor to resolve the failing scenarios in verdict.json.</code></p>
+          <p><strong>Prompt:</strong> <code>Use release-harness-fix-planner and release-harness-fix-executor to resolve the failing scenarios in verdict.json.</code></p>
         </div>
       </div>
 
       <div class="skill-item" data-od-id="skill-item-04">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-4">
           <div class="skill-title">
-            <span>deep-screenshot-analysis</span>
+            <span>release-harness-deep-screenshot-analysis</span>
             <span class="skill-badge">Vision UX</span>
           </div>
           <span class="skill-arrow">▶</span>
@@ -509,7 +514,7 @@ npx release-harness init</code></pre>
       <div class="skill-item" data-od-id="skill-item-05">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-5">
           <div class="skill-title">
-            <span>security-audit & fintech-security-review</span>
+            <span>release-harness-security-audit &amp; release-harness-fintech-security-review</span>
             <span class="skill-badge">Security</span>
           </div>
           <span class="skill-arrow">▶</span>
@@ -522,7 +527,7 @@ npx release-harness init</code></pre>
       <div class="skill-item" data-od-id="skill-item-06">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-6">
           <div class="skill-title">
-            <span>database-readiness-audit & performance-audit</span>
+            <span>release-harness-database-readiness-audit &amp; release-harness-performance-audit</span>
             <span class="skill-badge">Infrastructure</span>
           </div>
           <span class="skill-arrow">▶</span>
