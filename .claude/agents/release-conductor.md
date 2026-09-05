@@ -55,8 +55,8 @@ Loop until `release-harness run-local` returns exit code 0 (`PASS`) or the itera
    - The harness starts scoped Docker Compose containers (`rh-<runId>`), healthchecks services, runs declarative Playwright scenarios, validates independent side-effects (MinIO/S3, DB, Redis, Mailpit), checks security headers and brand canaries, seals evidence into `evidence.manifest.json`, and evaluates the verdict into `verdict.json`.
 2. **Inspect Deterministic Verdict:** Read the generated `verdict.json`:
    - `exit_code == 0` (`PASS`): Gate satisfied! Proceed to Phase 3.
-   - `exit_code == 1` (`FAIL`): Inspect `causes`. Send `PRODUCT_BUG` items to `release-harness-fix-planner`; acquire required fixtures or dependencies for `HARNESS_FIXTURE_MISSING`.
-   - `exit_code == 2` (`UNPROVEN`): With `--allow-dirty`, this is the expected NON-CERTIFYING development result; commit and rerun from a clean tree for certification. Otherwise acquire missing fixtures or adjust conditional policy.
+   - `exit_code == 1` (`FAIL`): If a verdict exists, inspect `causes`: send `PRODUCT_BUG` items to `release-harness-fix-planner`, and acquire required fixtures or dependencies for `HARNESS_FIXTURE_MISSING`. If the run stopped before writing a verdict, follow its runtime diagnostic (for example, a dirty-tree rejection).
+   - `exit_code == 2` (`UNPROVEN`): Inspect underlying scenario statuses and causes. With `--allow-dirty`, exit 2 is the expected NON-CERTIFYING wrapper around an underlying pass or fail; resolve failures first, then commit and rerun from a clean tree for certification.
    - `exit_code == 3` (`HARNESS_ERROR`): Inspect the runtime diagnostics and causes, then repair the identified environment, contract, probe, Compose, or build fault. Do not edit product code solely because of exit 3.
    - `exit_code == 4` (`EVIDENCE_INVALID`): Evidence corruption / tampering. Clean workspace and re-run.
 3. **Remediate with Fix Planner & Fix Executor:**

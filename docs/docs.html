@@ -241,14 +241,14 @@
           <tr class="exit-code exit-1" data-od-id="exit-code-1">
             <td><code style="color: var(--danger); font-weight: bold;">FAIL</code></td>
             <td><code>1</code></td>
-            <td>One or more required scenarios failed due to product bugs or missing dependencies.</td>
-            <td>Inspect causes: fix <code>PRODUCT_BUG</code>, or supply required fixtures and dependencies.</td>
+            <td>A required result failed, or certification stopped before writing a verdict.</td>
+            <td>Inspect verdict causes when present; otherwise follow runtime diagnostics.</td>
           </tr>
           <tr class="exit-code exit-2" data-od-id="exit-code-2">
             <td><code style="color: var(--warning); font-weight: bold;">UNPROVEN</code></td>
             <td><code>2</code></td>
             <td>Preconditions unmet, active waivers present, or dirty git tree with <code>--allow-dirty</code>.</td>
-            <td>Stage missing fixtures or commit uncommitted changes.</td>
+            <td>Inspect underlying results and resolve failures before committing.</td>
           </tr>
           <tr class="exit-code exit-3" data-od-id="exit-code-3">
             <td><code style="color: var(--danger); font-weight: bold;">HARNESS_ERROR</code></td>

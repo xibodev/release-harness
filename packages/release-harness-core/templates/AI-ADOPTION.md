@@ -72,14 +72,19 @@ resulting diff for approval.
 | Code | Meaning |
 |------|---------|
 | 0 | Certified |
-| 1 | Required failure — inspect causes for a product bug or missing fixture |
-| 2 | Unproven — development mode, or a dirty tree with `--allow-dirty` |
+| 1 | Failure — inspect verdict causes, or runtime diagnostics if no verdict exists |
+| 2 | Unproven — inspect underlying results; may wrap a dirty development pass/fail |
 | 3 | Harness error — misconfiguration, unknown flag, unimplemented probe |
 | 4 | Evidence invalid — the sealed evidence does not verify |
 
-**Exit 1 requires cause-based remediation.** Fix product code for
-`PRODUCT_BUG`; acquire the required fixture or dependency for
-`HARNESS_FIXTURE_MISSING`.
+**Exit 1 requires cause-based remediation.** When a verdict exists, fix product
+code for `PRODUCT_BUG` and acquire the required fixture or dependency for
+`HARNESS_FIXTURE_MISSING`. A run can also reject a dirty tree before writing a
+verdict; in that case follow the runtime diagnostic.
+
+**Exit 2 does not erase underlying failures.** With `--allow-dirty`, inspect the
+scenario statuses and causes first. Resolve any underlying failure, then commit
+and rerun from a clean tree for certification.
 
 **Exit 3 means the harness could not do its job, not that the product is
 broken.** Read the reported cause before changing product code: a malformed

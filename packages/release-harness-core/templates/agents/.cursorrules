@@ -3,5 +3,5 @@
 - Use `release-harness-project-cartographer` and `release-harness-scenario-compiler` to derive contracts, then present generated diffs for human review.
 - When verifying code changes, run `npx release-harness run-local` in the terminal.
 - Inspect `verdict.json`, its causes, and runtime diagnostics. Fix `PRODUCT_BUG`, acquire missing fixtures, and do not infer a product defect from exit 3 alone.
-- Treat `--allow-dirty` exit 2 as non-certifying development; a clean commit is required for certified exit 0.
+- Treat `--allow-dirty` exit 2 as non-certifying development; resolve underlying failed scenarios before committing for certified exit 0.
 - Do not mutate `.release-harness/topology.json` or `origins.json` unless service ports change.
