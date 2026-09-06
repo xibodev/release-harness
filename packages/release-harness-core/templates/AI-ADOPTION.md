@@ -1,86 +1,147 @@
 # Adopting Release-Harness
 
-This file is for the AI agent doing the integration. It names the beats that are
-easy to miss; everything else is your judgment about this particular project.
+AI assistance is optional. The CLI can be used directly without agent scaffolding
+or a separate operating model. Use the playbooks that fit your product; no fixed
+set of product briefs, persona documents, backlog files or external agents is
+required. Existing requirements, source code and confirmed user journeys are
+valid inputs.
 
-## What this tool is
+This is the standard integration protocol for AI coding agents. Contracts are
+generated review artifacts: skills derive them from source, the human reviews
+their diff, and the deterministic CLI executes and adjudicates them. Neither a
+skill nor an agent can calculate, override, or talk a verdict into being green.
 
-Release-Harness executes contracts the project owns and adjudicates the result
-deterministically. It holds no opinion about what your project should assert.
-The value is the separation: **you author the contracts, the harness executes
-and seals them.** An agent cannot talk a run into being green, because the agent
-does not adjudicate — the evaluator reads sealed evidence and nothing else.
+## Discover Before Scaffolding
 
-## The beats that matter
-
-**The skills arrive with `init`, not with `npm install`.** They ship inside the
-package's `templates/` directory and only reach the project when you run:
+The skills arrive with `init --with-agents`, not with `npm install`. Inspect the
+packaged bundle without extracting anything:
 
 ```bash
-npx release-harness init --with-agents
+npx release-harness skills list
+npx release-harness skills info project-cartographer
+npx release-harness skills info release-harness-scenario-compiler
 ```
 
-A bare `init` writes contracts only. If you go looking for
-`project-cartographer` before running this, you will not find it — and its
-absence is not evidence that the bundle does not exist.
+`info` accepts bare and namespaced names. Invoke skills by their canonical
+`release-harness-*` names, not similarly named user skills. `init --with-agents`
+copies the bundle to `.claude/skills/`, `.agents/skills/`, and `.opencode/skills/`.
+A bare `init` or `init --contracts-only` writes contracts only. Discovery reports
+disk scaffold status, not whether the active host has registered the skill.
+Invalid scaffold status means to inspect that file's metadata/path, not to
+overwrite the project's contracts.
 
-The skills scaffold under `release-harness-` prefixed names
-(`release-harness-project-cartographer`) so they cannot shadow a same-named
-skill already installed. Invoke them by the namespaced name.
+The bundle contains playbooks, not executable toolkits. The host must provide
+file and shell tools, and screenshot review needs image input. Docker, browsers,
+databases, vulnerability scanners and credentials are separate prerequisites;
+scaffolding installs none of them. Use project-owned commands and authorized
+local targets only. Missing tooling or observations are deferred checks, not
+passes. Audit risk/visual scores never override the deterministic CLI verdict.
 
-**Use `project-cartographer` rather than reading the repository by hand.** It
-derives topology and origins from real ports, health endpoints, and service
-definitions. Hand-enumerating routes and Docker files is the expensive path this
-skill exists to replace, and it is the path that gets ports wrong.
+## Refresh The Host
 
-**Use `scenario-compiler` to draft scenarios**, including their side-effect
-probes. A scenario that only drives the UI proves the UI responded, not that the
-product did its job. If the product's real deliverable is a file — a rendered
-video, a compiled binary, a generated PDF, an exported dataset — assert it with
-a custom probe whose script is committed to the repository.
+Hosts may cache skills at session startup. After scaffolding, first check the
+host's skill list for `release-harness-project-cartographer`.
 
-**You author the contracts. The human does not hand-write JSON.** That is the
-point of the bundle. Show them the diff, not a blank schema.
+- Claude Code: if the new skill is missing, exit and relaunch Claude Code from
+  the same repository, then check its available skills again.
+- opencode: if the catalog is stale, exit and restart the opencode process from
+  the repository, then check discovery again.
+- GitHub Copilot CLI: exit and relaunch the CLI in the repository if its session
+  does not recognize the new skills.
+- Cursor/Codex and other compatible hosts: use the host's documented session
+  or window reload, or restart the host, and verify its catalog.
 
-## Order
+Exact hot-reload behavior varies by host/version; `/init` is not a portable
+skill reload command. Preserve a short handoff before restarting. If restarting
+is unavailable, read the scaffolded `SKILL.md` directly and follow its procedure
+with available tools; do not claim a missing host tool was invoked.
 
-1. `npx release-harness doctor` — verify host prerequisites first; a missing
-   Docker or Playwright wastes everything downstream.
-2. `npx release-harness init --with-agents` — contracts plus the skill bundle.
-3. `project-cartographer` — derive `topology.json` and `origins.json`.
-4. `scenario-compiler` — draft scenarios and their side-effect probes.
-5. `npx release-harness run-local` — establish a green baseline before wiring
-   anything into CI.
-6. Wire into the project's existing test and release flow, shaped by that
-   project's needs.
+## Golden Sequence And Phase Prompts
 
-## Exit codes
+1. Run `npx release-harness doctor` and address reported prerequisites. Inspect
+   `skills list`, then run `npx release-harness init --with-agents`. Refresh the host.
+2. Cartographer: "Use release-harness-project-cartographer to derive topology
+   and origins from actual services, ports, and health probes. Present the
+   generated artifact diff for review, including configuration assumptions."
+3. Compiler: "Use release-harness-scenario-compiler to compile these user
+   journeys into declarative scenarios with independently verifiable side
+   effects. Present the resulting diff for approval, not a blank schema."
+4. Conductor: "Use release-conductor to run doctor and the local readiness
+   gate with an explicit external evidence root. Report the deterministic
+   verdict, causes, scenario results, and any startup evidence."
+5. Remediation: "Use release-harness-fix-planner to derive an evidence-linked
+   execution-plan.json from this run's verdict and logs. Wait for approval,
+   then use release-harness-fix-executor for targeted fixes. Preserve unrelated
+   working changes and never weaken contracts to force a pass."
+6. While approved changes are uncommitted, run
+   `npx release-harness run-local --allow-dirty --evidence-dir <external-root>`.
+   Inspect underlying results; a complete dirty run is NON-CERTIFYING (exit 2),
+   not a green release. Resolve failures and unmet conditions. After human
+   approval and an authorized commit, rerun without `--allow-dirty` for certified
+   exit 0. Do not commit or stash user changes merely to make a command pass.
+7. Integrate `check-pr` on PRs and `run-local` on release branches only after
+   establishing that clean baseline. The deterministic CLI is the decider;
+   phase prompts and human review never substitute for its verdict.
 
-| Code | Meaning |
-|------|---------|
-| 0 | Certified |
-| 1 | Product failure — a scenario or assertion failed |
-| 2 | Unproven — development mode, or a dirty tree with `--allow-dirty` |
-| 3 | Harness error — misconfiguration, unknown flag, unimplemented probe |
-| 4 | Evidence invalid — the sealed evidence does not verify |
+## Evidence And Cause-Based Triage
+
+Choose an agreed private external evidence root to keep outputs out of the source
+repository and published documentation. Keep assessment reports, execution plans
+and session handoffs in an agreed private location outside sealed runs as well.
+Example `results/<ts>/...` paths in playbooks are relative to that assessment
+root, not a required public documentation tree. Review any material separately
+before publishing it; a hidden or gitignored directory alone is not a privacy
+boundary. These assessment formats are agent notes, not CLI configuration or
+automatically ingested evidence.
+
+For `--evidence-dir <root>` and run ID `<id>`, read
+`<root>/runs/<id>/verdict.json`, `<root>/runs/<id>/run.manifest.json`, and sealed
+files under `<root>/runs/<id>/evidence/`, including its `evidence.manifest.json`.
+Use the run ID printed by the CLI; do not guess `evidence/run-*/run-summary.json`.
+Without an override, the root is the platform cache's `release-harness/<product_slug>`:
+`LOCALAPPDATA`, then `XDG_CACHE_HOME`, otherwise `~/.cache`.
+
+| Code | Meaning and action |
+|------|--------------------|
+| 0 | Certified only when the CLI reports PASS with complete, valid evidence. |
+| 1 | Inspect causes: fix a demonstrated PRODUCT_BUG, acquire HARNESS_FIXTURE_MISSING inputs, or follow diagnostics if no verdict exists. |
+| 2 | UNPROVEN: inspect scenario statuses, unmet conditions and waivers; resolve underlying failures before clean certification. |
+| 3 | HARNESS_ERROR: inspect startup evidence, runtime diagnostics, and causes. UNKNOWN means attribution is unresolved, not a product defect. |
+| 4 | EVIDENCE_INVALID: preserve the entire run, investigate the mismatch, and never edit/reseal evidence to obtain a pass. |
 
 **Exit 3 means the harness could not do its job, not that the product is
-broken.** Read the reported cause before changing product code: a malformed
-contract, an unsupported `service` or `probe_type`, an unknown CLI flag, or a
-probe the harness does not implement all land here. Changing product code in
-response to an exit 3 fixes nothing.
+broken.** A startup failure may leave sealed startup evidence before scenarios
+execute. Use that evidence to distinguish an identified contract/environment
+fault from an ambiguous failure (exit 3, `UNKNOWN`). Never classify by exit
+number alone. If no verdict exists, report that absence and the CLI diagnostics;
+do not fabricate a verdict or fix product code without evidence.
 
-Exit 4 means the sealed evidence does not match its manifest. Do not re-run
-until you know why — treat it as a tampering or corruption signal, not as flake.
+Startup evidence may contain only structured, secret-safe observations. Raw
+build/Compose logs may be omitted; do not promise their capture or copy arbitrary
+logs into a report without reviewing them for secrets.
 
-## Two things adopters get wrong
+Dirty development does not suppress integrity faults: harness errors keep exit
+3 and invalid evidence keeps exit 4. Even exit 2 may contain failing scenarios.
+Preserve exit-4 evidence before investigation; `clean` is resource cleanup, not
+evidence repair. After investigation, use a new run ID for a new attempt.
 
-**Materialization mirrors committed source.** The run executes against a
-detached copy built from git, so a git-ignored file — a local `.env`, an
-uncommitted fixture — does not reach the workspace and the build that depends on
-it will fail. Materialization names the excluded file. Commit it, or supply the
-value through `.release-harness/harness.config.json`.
+## Materialization, Policy And Upgrades
 
-**A dirty tree cannot certify.** `run-local` on uncommitted changes needs
-`--allow-dirty`, and that run reports exit 2 (NON-CERTIFYING) by design. Commit
-before you expect a 0.
+Git-ignored local assets do not reach the detached source copy. Certification
+excludes untracked files; dirty development includes nonignored untracked files.
+Inspect `git status`, `git check-ignore`, and materialization warnings when a
+build cannot find a fixture or `.env`. Commit non-secret assets only when
+authorized; supply secrets via the project's approved runtime environment.
+
+`topology.json.network_policy` is canonical. Legacy
+`harness.config.json.network_policy` remains supported; conflicting declarations
+are rejected. Migrate deliberately to one policy and review its diff. Browser
+egress interception is not container-wide network sealing: configure and verify
+container isolation separately, and use local mocks for external dependencies.
+
+Existing projects keep their contracts and skill files by default. If changing
+an existing `product_slug`, update topology and harness config together and
+review both; do not change only one side. Repair incompatible runtime agent
+frontmatter in the specific agent file using that host's documented format,
+preserving its body and project customizations. Do not use blanket
+`init --overwrite` or `--force` as an upgrade shortcut: it resets contracts too.

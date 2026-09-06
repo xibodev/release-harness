@@ -16,3 +16,6 @@ pnpm-debug.log*
 .brains/
 .opencode/
 *.pen
+/_site/
+/docs/superpowers/
+/.superpowers/

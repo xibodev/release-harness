@@ -1,6 +1,6 @@
 ---
 name: release-harness-post-deploy-window-planner
-description: Plans the post-deployment observation window — what to watch in the first 30 minutes, first 24 hours, and the criteria that should trigger a retrospective. Inspired by the Production Ready Checklist's Post-Deployment section. Produces a structured plan that the on-call engineer can follow without guessing. Use when asked to "plan post-deploy window", "what should I watch after release", "set up 24-hour monitoring", or after release-harness-deployment-plan-generator.
+description: Drafts a product-specific observation plan for the first 30 minutes and 24 hours after deployment, including owners, checks and rollback criteria. Use for post-deployment planning or after release-harness-deployment-plan-generator. Does not execute monitoring or deployment actions.
 compatibility: Works with any source repo. Reads release-harness-monitoring-audit output when present.
 allowed-tools:
   - Read
@@ -13,14 +13,19 @@ allowed-tools:
 
 The hours after a deployment are when most incidents surface. This skill makes the observation window explicit, time-boxed, and owner-assigned.
 
+All report paths below are relative to an agreed private assessment root outside
+sealed runs, the source repository and published documentation. When audit inputs
+are absent, inspect the project's monitoring configuration and ask the owner to
+confirm targets, owners and thresholds. No external workflow agent is required.
+
 ## Required inputs
 
-- Optional: `./.quality-run/results/<ts>/monitoring/monitoring-report.md` for dashboards/alerts to reference.
-- Optional: `./.quality-run/results/<ts>/release/deployment-plan.md` for release metadata.
+- Optional: `results/<ts>/monitoring/monitoring-report.md` for dashboards/alerts to reference.
+- Optional: `results/<ts>/release/deployment-plan.md` for release metadata.
 
 ## What it produces
 
-Generate `./.quality-run/results/<ts>/release/post-deploy-window.md` with this structure, populated from project signals:
+Generate `results/<ts>/release/post-deploy-window.md` with this structure, populated from project signals:
 
 ```markdown
 # Post-Deployment Observation Window — <release-name>
@@ -34,14 +39,14 @@ Generate `./.quality-run/results/<ts>/release/post-deploy-window.md` with this s
 - Error rate dashboard: <link or placeholder>
 - p95 latency dashboard: <link or placeholder>
 - Health endpoint(s): <list from release-harness-monitoring-audit>
-- Critical journey synthetic checks: <list from journey-mapping>
+- Critical flow checks: <approved product-owned command, target and expected result for each flow>
 - Recent log stream filtered to `level >= warn`.
 
 ### Tripwires (rollback triggers)
 - Error rate > <threshold>% sustained for > 5 minutes.
 - p95 latency regresses by > 50% vs the baseline captured before release.
 - Any health endpoint returns non-200 for > 2 consecutive checks.
-- Any critical journey from journey-mapping fails its synthetic check.
+- Any approved critical product flow fails its documented acceptance checks.
 
 ### Decision points
 - At T+15 min: confirm baseline is stable; report status to channel.
@@ -107,7 +112,8 @@ If a retrospective is scheduled, fill in:
 
 ## Hard rules
 
-- Never recommend "monitor everything" — choose the dashboards that the release-harness-monitoring-audit found OR explicitly mark the gap.
+- Choose dashboards from available audit evidence or verified project configuration;
+  if neither supplies them, mark the gap. Never recommend "monitor everything".
 - Tripwire thresholds default to: 1% error rate, 50% p95 regression. Override only when the project has documented SLOs (search `docs/` for `SLO`, `error_budget`, `latency_objective`).
 - Owners must be real people or rotations. If release-harness-monitoring-audit shows no on-call wiring, mark `<unassigned>` and emit a fix-plan item.
 - Never silently lengthen Window 1 beyond 30 minutes — that's the active-watch contract.
@@ -118,12 +124,17 @@ If a retrospective is scheduled, fill in:
 
 ## Output
 
-- `./.quality-run/results/<ts>/release/post-deploy-window.md`
-- Optional: appends to `./.quality-run/results/<ts>/release/fix-plan.json` when ownership or instrumentation gaps are surfaced.
+- `results/<ts>/release/post-deploy-window.md`
+- Optional: appends to `results/<ts>/release/fix-plan.json` when ownership or instrumentation gaps are surfaced.
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record evidence-linked proposals.
+Missing tools/inputs are gaps, not passes. Monitoring/deployment commands are
+draft plans requiring separate authorization. Only the deterministic CLI
+adjudicates; readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 
@@ -132,7 +143,8 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 
 ### Hard rules
 
-- Never recommend "monitor everything" — list only what `release-harness-monitoring-audit` found, or explicitly mark the gap.
+- List only checks grounded in audit evidence or verified project configuration;
+  absent audit reports do not require another agent, but missing facts remain gaps.
 - Tripwire defaults: 1% error rate, 50% p95 regression. Override only when documented SLOs exist.
 - Owners must be real people or rotations. If `release-harness-monitoring-audit` shows no on-call wiring, mark `<unassigned>` and add a fix-plan item.
 - Window 1 is 30 minutes. Do not silently extend it.

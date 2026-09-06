@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReleaseHarnessRuntimeObservations",
+  "type": "object",
+  "required": ["schema_version", "started_at", "execution_mode", "startup"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "started_at": { "type": "string" },
+    "execution_mode": { "enum": ["CERTIFICATION", "DEVELOPMENT"] },
+    "startup": {
+      "type": "object",
+      "required": ["phase", "blocked", "health"],
+      "properties": {
+        "phase": { "enum": ["not_applicable", "compose_up", "health", "ready"] },
+        "blocked": { "type": "boolean" },
+        "health": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["service_id", "healthy", "probe_type", "host", "port", "attempts"],
+            "properties": {
+              "service_id": { "type": "string" },
+              "healthy": { "type": "boolean" },
+              "probe_type": { "enum": ["http", "tcp"] },
+              "host": { "type": "string" },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "attempts": { "type": "integer", "minimum": 0 },
+              "status": { "type": "integer" },
+              "error_code": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "kind": { "enum": ["configuration", "runtime"] },
+            "code": { "type": ["string", "null"] },
+            "exit_code": { "type": ["integer", "null"] },
+            "message": { "type": "string" }
+          }
+        },
+        "diagnostics": {
+          "type": "object",
+          "properties": {
+            "errors": { "type": "array", "items": { "type": "string" } },
+            "logs": { "type": "string", "maxLength": 65536 },
+            "logs_truncated": { "type": "boolean" },
+            "logs_omitted": { "type": "boolean", "description": "Arbitrary process logs are intentionally excluded because partial output cannot be safely redacted." },
+            "containers": {
+              "type": "array", "maxItems": 50,
+              "items": {
+                "type": "object",
+                "required": ["service_id", "running", "ports"],
+                "properties": {
+                  "service_id": { "type": "string" },
+                  "running": { "type": "boolean" },
+                  "oom_killed": { "type": "boolean" },
+                  "error": { "type": "string" },
+                  "ports": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": ["array", "null"],
+                      "items": {
+                        "type": "object",
+                        "required": ["HostIp", "HostPort"],
+                        "properties": { "HostIp": { "type": "string" }, "HostPort": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

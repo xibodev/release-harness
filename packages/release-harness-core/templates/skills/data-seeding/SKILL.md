@@ -8,8 +8,9 @@ description: >-
 compatibility: >-
   Detects and uses the system's own seeding entrypoint (Rails seeds, Django
   fixtures/factories, Prisma seed, Sequelize seeders, raw SQL, custom
-  npm/pnpm/poetry/uv scripts, MongoDB seed scripts, etc.). Python 3.8+ for
-  the inference + generator scripts.
+  npm/pnpm/poetry/uv scripts, MongoDB seed scripts, etc.). Requires the
+  project's seed runtime and an authorized disposable local database.
+  No inference or generator scripts ship with this playbook.
 allowed-tools:
   - Read
   - Grep
@@ -19,22 +20,41 @@ allowed-tools:
 
 # Data Seeding for UAT
 
-Empty databases lie. An app with zero users, zero projects, and zero history looks deceptively healthy — pagination, search, filtering, empty states, foreign keys, and N+1 hotspots all stay hidden until there is real volume in the system. This skill makes the UAT environment feel inhabited so the rest of the gate (journeys, crawler, vision) can actually find what users will find.
+An empty database can hide pagination, search, filtering, foreign-key and N+1 defects. Seed realistic synthetic data so product journeys and optional screenshot review can exercise those cases.
+
+All assessment paths below are relative to an agreed private assessment root
+outside sealed runs, the source repository and published documentation.
 
 ## When to run
 
-- AFTER `docker-uat` reports all services healthy AND sealed-network probes passed.
-- BEFORE `headless-e2e`, `full-site-crawler`, or `headed-e2e`.
-- Reads `results/<ts>/uat/env.json`. If `env.json.mode != "local-docker"`, **refuse to run** and write `results/<ts>/seed/seed.json` with `{aborted: true, reason: "release-harness-data-seeding is local-docker only; staging is read-only"}`.
+- After the operator identifies an authorized disposable local Docker stack and
+  its health and container-network isolation have been independently verified.
+  Before product journeys run. `run-local` manages and tears down its own stack;
+  configure project-owned startup seeding for that lifecycle, or use a separately
+  authorized persistent local test stack. Do not assume a stack is still running.
+- Record target identity, Compose project/service, disposable database, approved
+  seed command and safety checks in the assessment's `results/<ts>/seed/detection.json`.
+  Existing environment reports can supply evidence, but no external toolkit's
+  `env.json` or persona-inference command is required.
 
 ## Hard rules
 
-- **Mode lock:** runs only when `env.json.mode == "local-docker"` AND `env.json.network_internal == true` AND `env.json.egress_blocked == true`. Sealed network is a precondition.
-- **Use the system's own seed path.** Never bypass the app's validation / hashing / event hooks by writing directly to the DB unless the system has no seed entrypoint at all (rare). Bypassed seeds produce corrupt foreign keys, unhashed passwords, missing audit rows, and skipped soft-delete defaults — all of which look like UAT bugs later.
-- **No fabricated metric values, PII, or copyrighted content.** Use `Faker` with a fixed seed for determinism. Names, emails, addresses, company names, project names, descriptions — all synthesized, none scraped from real datasets.
-- **No external network calls.** Faker locally only. No `unsplash.com` / `picsum.photos` / `loremflickr.com` image fetches — use bundled placeholders or generate solid-color SVGs. The sealed network would block them anyway, but failing seed runs are noise.
-- **Idempotent.** Re-running the seed against an already-seeded DB must either no-op or wipe-and-replay cleanly (configurable via `--mode replace|append|noop-if-present`). Never produce duplicate primary keys.
-- **Deterministic.** Same `--seed N` value → same generated dataset. Required for reproducing bugs.
+- **Mode lock:** refuse if local disposable target identity, write authorization
+  or container egress isolation cannot be verified. Browser policy alone does
+  not prove container isolation.
+- **Use the system's own seed path.** Never bypass validation, hashing or event
+  hooks with direct DB writes. If no seed entrypoint exists, propose one for
+  review and stop before mutation.
+- **Synthetic fixtures only.** Use the project's existing deterministic fixture
+  generator; Faker is an optional separately installed integration, not a
+  prerequisite. Do not import real PII or present synthetic values as business metrics.
+- **No external network calls.** Use bundled placeholders or locally generated
+  SVGs instead of remote images. Verify container isolation; browser policy
+  alone cannot prevent a seed process from reaching external services.
+- **Idempotent.** Use the project's documented repeat-safe behavior; do not
+  assume it supports `--mode` or authorize data deletion by default.
+- **Deterministic.** Use the project's supported fixed-seed mechanism and record
+  the value. Do not assume its entrypoint accepts `--seed N`.
 - **No real credentials, no real tokens, no real API keys.** Every secret-shaped field gets a clearly fake value (`uat-token-<uuid>`, `sk_test_uat_<hash>`).
 
 ## Step 1 — System detection
@@ -91,9 +111,13 @@ Persist `results/<ts>/seed/entities.json`.
 
 ## Step 3 — Volume plan
 
-Sizing depends on the system's *category* and the persona variant count. Read `artefacts/personas.json` to know how many persona instances need to be backed by real seeded users.
+Sizing depends on the system's category and tested roles. Derive the required
+users from product stories and scenario fixtures; an existing persona file is
+optional input, not a prerequisite.
 
-Default volume tables (override via wizard Q `seed-scale` recorded in `run-config.json`: `minimal | realistic (default) | dense`):
+Choose `minimal`, `realistic` or `dense` with the operator based on scenario needs
+and local resource limits. The tables below are examples, not CLI settings.
+Record approved quantities in the assessment's `seed/volume-plan.json`.
 
 ### Generic SaaS (multi-tenant)
 
@@ -183,7 +207,10 @@ Record which edge cases were applied per entity in `results/<ts>/seed/edge-cases
 
 ## Step 5 — Persona-instance binding
 
-Read `artefacts/personas.json`. Every persona instance MUST be backed by a real seeded user (so login + journey execution use real credentials, not fabricated ones).
+Read project-owned personas/user stories and scenario fixture requirements.
+An existing `artefacts/personas.json` is optional input. Derive a small persona
+binding plan from those sources for review; ask only for non-derivable roles or
+permissions. Every tested persona must bind to a real local seeded user.
 
 For each persona instance:
 
@@ -206,13 +233,17 @@ For each persona instance:
 }
 ```
 
-Passwords go to `results/<ts>/seed/.env.passwords` (gitignored; written as `UAT_PASSWORD_<key>=<value>` lines). Never echo the raw passwords in any other report file.
+Synthetic local passwords go to the private assessment's `results/<ts>/seed/.env.passwords`
+(written as `UAT_PASSWORD_<key>=<value>` lines). Restrict access; gitignore alone
+does not protect a file from publication. Never echo passwords in other reports.
 
 ## Step 6 — Seed execution
 
 1. Generate the seed payload using the system's preferred format (Rails factories, Django fixtures, Prisma seed script, raw SQL — match what the system uses).
 2. Write the generated seed files into a transient `tmp/uat-seed/` directory inside the relevant service container. NEVER overwrite the project's own `db/seeds.rb` / `prisma/seed.ts` / etc.
-3. Invoke the canonical seed command with `--mode replace` (default) using file redirection per the PowerShell-pitfalls memory:
+3. Invoke only the approved project seed command with its documented arguments.
+   The following are product-owned examples, not bundled scripts or commands
+   to run blindly. Resolve actual service names, paths and runtime first:
 
    ```bash
    # Inside the app container
@@ -220,9 +251,13 @@ Passwords go to `results/<ts>/seed/.env.passwords` (gitignored; written as `UAT_
    ```
 
    ```powershell
-   # From host
-   docker compose -f docker-compose.test.yml exec -T app sh -c "bundle exec rails runner tmp/uat-seed/run.rb" > seed.log 2>&1
+   # From host: PRIVATE_ASSESSMENT_ROOT must be an approved directory outside the checkout.
+   $seedLog = Join-Path $env:PRIVATE_ASSESSMENT_ROOT 'seed.log'
+   docker compose -f docker-compose.test.yml exec -T app sh -c "bundle exec rails runner tmp/uat-seed/run.rb" > $seedLog 2>&1
    ```
+
+   Restrict raw log access. Retain only reviewed, secret-safe diagnostics in the
+   assessment report; do not add raw seed logs to the product repository.
 
 4. Verify by counting rows for each top-level entity:
 
@@ -242,23 +277,37 @@ Write to `results/<ts>/seed/`:
 - `edge-cases.json` — edge-case coverage per entity.
 - `persona-bindings.json` — persona instance → seeded user mapping.
 - `.env.passwords` — UAT_PASSWORD_* env vars (gitignored).
-- `seed.log` — stdout/stderr of the seed invocation.
+- `seed.log` — secret-safe diagnostics of the seed invocation only.
 - `verification.json` — row counts after seeding.
 - `seed.json` — top-level summary: `{ran: true, scale: "realistic", entities_seeded: 12, rows_total: 1247, persona_instances_bound: 8, duration_seconds: 14.2}`.
 - `fix-plan.json` — any findings (categories: `missing-seed-entrypoint`, `seed-row-count-mismatch`, `unicode-column-rejected`, `pagination-boundary-undetectable`, `persona-binding-unfulfilled`).
 
 ## Failure modes & handling
 
-- **Seed entrypoint crashes** — capture full stderr, halt the run, emit `fix-plan.json` finding. Do NOT attempt direct DB writes as a fallback.
-- **Unique-constraint collision on re-run** — `--mode replace` should have wiped first. If it didn't, the system has a bug in its own seed cleanup; report it.
-- **Migrations not run** — the seed entrypoint will fail with "relation does not exist". Run migrations first (`rails db:migrate`, `python manage.py migrate`, `npx prisma migrate deploy`).
+- **Seed entrypoint crashes**: retain only secret-safe diagnostics, halt and
+  report a finding. Do not fall back to direct DB writes or assume full stderr
+  is safe to retain.
+- **Unique-constraint collision on re-run**: compare documented idempotency
+  behavior with the observation; do not assume a destructive replace mode.
+- **Migrations not run**: report the missing prerequisite and propose the
+  project's migration command for separate authorization against the verified
+  disposable target. Do not infer permission from a seeding request.
 - **Foreign-key violation** — generator created child before parent. Fix by topologically sorting entities before generation; record the ordering in `entities.json`.
 - **Soft-delete column not detected** — produces 0% soft-deleted rows. Surface as low-severity `edge-case-coverage-gap` finding.
-- **No persona file present yet** — STOP. Seeding is downstream of `persona-inference`; the orchestrator invoked things out of order.
+- **No persona file**: derive bindings from project stories/scenarios for
+  approval; if insufficient, request the missing requirements rather than
+  invoking an unshipped persona-inference tool.
 
 ## Gotchas
 
 - Some apps eagerly send welcome emails on user creation. If mailhog is part of the sealed stack, those emails land in mailhog and are harmless. If the app routes via SendGrid/Mailgun client *without* a sealed mock, the seed run will hang or error — surface as a `sealed-uat-violation` finding and halt.
-- Background workers (Sidekiq, Celery, BullMQ) may pick up seeded entities and run jobs that mutate other tables. Run the seed with workers paused (`docker compose pause worker`), then unpause after verification.
+- Background workers may consume seeded entities. Include any scoped pause and
+  restoration in the approved plan; do not pause arbitrary running services.
 - ORMs with read-replicas will report stale counts during verification. Force a read against the primary.
 - Multi-tenant apps with row-level security may refuse seed writes if the seed runner lacks tenant context. Use the system's documented "system user" or "seed user" identity.
+
+All paths above are product-owned inputs, proposed fixture examples or assessment
+outputs, not supporting files shipped by this skill. Write reports outside
+sealed runs. Tool/target gaps must be reported; no package installation or
+database/worker mutation is implied without authorization. Seed verification
+does not certify a release: only the deterministic CLI adjudicates its verdict.

@@ -1,6 +1,6 @@
 ---
 name: release-harness-security-audit
-description: Production-grade security audit covering secrets management, authentication/authorization, data protection, API security, and HTTP security headers. Inspired by the OWASP Top 10 and the Production Ready Checklist's Security section. Produces a fix-plan that integrates with the suite's consolidator. Use when asked to "run security audit", "check for secrets", "scan for OWASP issues", "validate security headers", or before a release.
+description: Evidence-based security review of secrets, authentication, authorization, data protection, APIs and HTTP headers. Produces findings for human review and release-harness-fix-planner. Use for security audits, OWASP checks or pre-release review.
 compatibility: Works with any source repo. Optional integrations `npm audit`, `pip-audit`, `gitleaks`, `trufflehog`, `osv-scanner` if installed.
 allowed-tools:
   - Read
@@ -11,7 +11,12 @@ allowed-tools:
 
 ## Purpose
 
-Run a focused, evidence-based security audit covering the issues that most often block projection. The goal is a fix-plan — not a vague "looks risky" verdict.
+Run a focused, evidence-based security audit of production code and configuration.
+The goal is a fix-plan, not a certification of security or compliance. Patterns
+are leads: verify reachability and context before assigning severity.
+
+All report paths below are relative to an agreed private assessment root outside
+sealed runs, the source repository and published documentation.
 
 ## Required inputs
 
@@ -33,7 +38,7 @@ Run a focused, evidence-based security audit covering the issues that most often
 - Detect auth framework signals: `passport`, `next-auth`, `clerk`, `auth0`, `@azure/msal`, `firebase/auth`, `ASP.NET Identity`, `devise`, `django.contrib.auth`.
 - Check password hashing: presence of `bcrypt`, `argon2`, `scrypt`. Flag any custom `crypto.createHash('md5'|'sha1')` used on passwords.
 - Find token expiration: `expiresIn`, `JWT_EXPIRES`, `Set-Cookie` `Max-Age` settings. Flag tokens with no expiry or > 30 days.
-- CORS check: search for `Access-Control-Allow-Origin: \*` or `cors({origin: true})` in projection code paths.
+- CORS check: search for `Access-Control-Allow-Origin: \*` or `cors({origin: true})` in production code paths.
 - Rate limiting on auth endpoints: search for `express-rate-limit`, `rate-limiter-flexible`, or framework equivalents wired to login routes.
 
 ### 3. Data protection
@@ -66,27 +71,34 @@ Look for `helmet`, `next-safe`, `secure_headers`, `django-csp`, ASP.NET middlewa
 
 ### 6. Dependencies
 
-- If `package.json` / `requirements.txt` / `pyproject.toml` / `go.mod` / `Cargo.toml` exists, try the native vulnerability tool: `npm audit --json`, `pip-audit -f json`, `osv-scanner`. Capture only `high` and `critical` advisories.
+- Identify the native vulnerability tool for the lockfile, such as `npm audit`,
+  `pip-audit` or `osv-scanner`. Follow the offline-assessment rule below before
+  execution; availability alone does not authorize network access. Record
+  advisory database freshness and high/critical findings.
 - Do not block on `low`/`moderate` unless they're auth-related.
 
 ### 7. Production hardening
 
-- Debug mode disabled: search for `DEBUG = True`, `app.use(errorhandler())` in projection paths, `NODE_ENV !== 'projection'` checks.
+- Verify debug handlers such as `DEBUG = True` or `app.use(errorhandler())` are
+  disabled in production. For Node.js, inspect `NODE_ENV` guards against the
+  actual `production` value and deployment configuration. A guard such as
+  `NODE_ENV !== 'production'` can correctly restrict debug behavior to development;
+  the expression alone is not a vulnerability.
 - Server fingerprint stripped: search for `X-Powered-By`, default server banners.
 
 ## Output
 
 ### Reports
 
-- `./.quality-run/results/<ts>/security/security-report.md` — human-readable, grouped by section above.
-- `./.quality-run/results/<ts>/security/findings.json` — machine-readable raw findings with file + line + category.
-- `./.quality-run/results/<ts>/security/fix-plan.json` — shared Fix Plan Schema (see suite README).
+- `results/<ts>/security/security-report.md` — human-readable, grouped by section above.
+- `results/<ts>/security/findings.json` — machine-readable raw findings with file + line + category.
+- `results/<ts>/security/fix-plan.json` with the finding fields below.
 
 ### Fix-plan item conventions
 
 - `category`: always `security`.
 - `severity` mapping:
-  - `critical`: exposed credential in tracked source, missing auth on a sensitive route, raw SQL concatenation in projection code, dependency CVE rated critical.
+  - `critical`: exposed credential in tracked source, missing auth on a sensitive route, exploitable SQL injection in production code, applicable dependency CVE rated critical.
   - `high`: missing CSRF on state-changing endpoint, missing rate-limit on login, missing CSP header on web app, dep CVE rated high.
   - `medium`: missing security header, missing input validator, weak token expiry, debug flag in non-prod path.
   - `low`: missing `.env.example`, missing `Permissions-Policy`, low-impact informational findings.
@@ -100,12 +112,19 @@ Look for `helmet`, `next-safe`, `secure_headers`, `django-csp`, ASP.NET middlewa
 
 ## Gates
 
-- If any `critical` finding is detected, surface it at the top of the report before the consolidator runs.
+- Surface critical findings immediately. Merge duplicate observations by affected
+  files and root cause while preserving evidence links; no consolidator is required.
 - If `npm audit`/equivalent reports unresolved critical advisories, flag the release as blocked in the fix-plan.
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 
@@ -117,8 +136,15 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 - Never include actual secret values in any output file. Reference by file + line + pattern name only.
 - Never mutate the working tree. Read-only scanning only.
 - If a vulnerability scanner is missing on PATH, record the gap; do not skip silently.
-- **Sealed UAT — no internet.** Vuln scanners must use an offline DB: `osv-scanner --offline-vulnerabilities <dir>`, `npm audit --offline` against the cached lockfile, `pip-audit --no-deps`. If no cached DB is present under `artefacts/security-db/`, emit one `deferred-test` fix-plan item per missing DB (`category: "deferred-test"`, `severity: "info"`, `evidence.reason: "requires-internet"`, `evidence.what_to_run_offline: "populate artefacts/security-db/<scanner> with the offline DB or run the scanner outside the sealed run"`). Do not call out to any public service. Do not fabricate a result.
+- **Offline assessment:** verify the installed scanner's documented offline
+  mode and usable advisory database before execution. A lockfile/cache or
+  `--no-deps` is not proof of an offline vulnerability scan. If an offline scan
+  is unavailable, emit a `deferred-test` finding with tool/version, missing input
+  and proposed authorized follow-up; continue source review. Do not call public
+  services, install scanners or fabricate results. Browser policy does not
+  constrain scanner network access.
 
 ### Gates
 
-- Stop and surface any `critical` finding (exposed credential, missing auth on sensitive route, unresolved critical CVE) before the consolidator runs.
+- Stop and surface any `critical` finding (exposed credential, missing auth on a
+  sensitive route, applicable unresolved critical CVE) for human review.

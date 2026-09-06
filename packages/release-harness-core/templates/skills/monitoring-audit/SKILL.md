@@ -1,6 +1,6 @@
 ---
 name: release-harness-monitoring-audit
-description: Validates that the application is observable in projection — error tracking, performance APM, health endpoints, structured logging, alerting, and on-call paths. Inspired by the Production Ready Checklist's Monitoring & Logging section. Produces a fix-plan compatible with the suite's consolidator. Use when asked to "audit monitoring", "check observability", "validate alerting", "is this app observable", or before a release.
+description: Reviews production observability configuration including error tracking, APM, health endpoints, logging, alerting and on-call paths. Produces evidence-linked findings for human review and release-harness-fix-planner. Runtime delivery of telemetry requires separate verification.
 compatibility: Works with any source repo. No runtime required; scans config and code.
 allowed-tools:
   - Read
@@ -11,7 +11,10 @@ allowed-tools:
 
 ## Purpose
 
-You cannot release what you cannot see. This skill verifies the project is wired to observe itself in projection — and produces a fix-plan for every gap.
+Review how the project is wired to observe itself in production and record gaps.
+Source configuration is not proof that telemetry or alerts reach their targets.
+All report paths below are relative to an agreed private assessment root outside
+sealed runs, the source repository and published documentation.
 
 ## Audit areas
 
@@ -52,7 +55,7 @@ Verify:
 ### 4. Structured logging
 
 - Detect logger: `winston`, `pino`, `bunyan`, `serilog`, `structlog`, `log4j2`, ASP.NET `ILogger`.
-- Confirm logs are JSON-formatted in projection paths.
+- Confirm logs are JSON-formatted in production paths.
 - Confirm log level is configurable via env and defaults to `info` (not `debug`) in prod.
 - Confirm correlation IDs / request IDs are attached to every log entry on the request path.
 - Confirm sensitive fields are redacted (cross-check with release-harness-security-audit findings).
@@ -85,13 +88,14 @@ Verify:
 
 ## Output
 
-- `./.quality-run/results/<ts>/monitoring/monitoring-report.md`
-- `./.quality-run/results/<ts>/monitoring/findings.json`
-- `./.quality-run/results/<ts>/monitoring/fix-plan.json`
+- `results/<ts>/monitoring/monitoring-report.md`
+- `results/<ts>/monitoring/findings.json`
+- `results/<ts>/monitoring/fix-plan.json`
 
 ### Fix-plan conventions
 
-- `category`: prefer `coverage-gap` for missing observability wiring (since the consolidator's enum is `design|performance|test-failure|security|coverage-gap|rendering`).
+- `category`: use `coverage-gap` for missing observability wiring. This is an
+  assessment label, not a CLI schema enum or an external-tool requirement.
 - `severity`:
   - `critical`: no error tracking wired at all, no health endpoint, no on-call path documented.
   - `high`: APM missing, no structured logging, missing alert for high error rate, missing alert for service down.
@@ -107,11 +111,18 @@ Verify:
 ## Gates
 
 - Stop and surface `critical` findings before consolidation.
-- If no error tracking AND no health endpoint exist, recommend NO-GO to release-readiness regardless of other findings.
+- If no error tracking AND no health endpoint exist, record an advisory deployment
+  blocker for human review with `release-harness-release-decider`.
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 
@@ -127,4 +138,5 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 ### Gates
 
 - Stop and surface `critical` findings (no error tracking, no health endpoint, no on-call path) before consolidation.
-- If no error tracking AND no health endpoint exist, recommend NO-GO to `release-readiness` regardless of other findings.
+- Include absent error tracking and health checks as advisory blockers in the
+  readiness report, separately from the deterministic CLI verdict.

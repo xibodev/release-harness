@@ -545,9 +545,11 @@ function startMockHttpServer(port, handler) {
 // AC-09: Scoped Runtime Cleanup (Docker + Workspace Ownership Assertions)
 // ----------------------------------------------------------------------------
 {
-  const testEvidenceRoot = path.join(os.tmpdir(), 'rh-cleanup-root');
-  const runA = path.join(testEvidenceRoot, 'workspaces', 'run-A');
-  const runB = path.join(testEvidenceRoot, 'workspaces', 'run-B');
+  const testEvidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-cleanup-root-'));
+  const runIdA = `cleanup-a-${crypto.randomUUID()}`;
+  const runIdB = `cleanup-b-${crypto.randomUUID()}`;
+  const runA = path.join(testEvidenceRoot, 'workspaces', runIdA);
+  const runB = path.join(testEvidenceRoot, 'workspaces', runIdB);
 
   fs.mkdirSync(runA, { recursive: true });
   fs.mkdirSync(runB, { recursive: true });
@@ -558,28 +560,27 @@ function startMockHttpServer(port, handler) {
   let containerAId = null;
   let containerBId = null;
   try {
-    containerAId = execSync('docker run -d --label com.xibodev.release-harness=true --label com.xibodev.release-harness.run-id=run-A traefik/whoami:v1.11', { encoding: 'utf8' }).trim();
-    containerBId = execSync('docker run -d --label com.xibodev.release-harness=true --label com.xibodev.release-harness.run-id=run-B traefik/whoami:v1.11', { encoding: 'utf8' }).trim();
-  } catch {
-    // Docker offline fallback
-  }
+    containerAId = execSync(`docker run -d --label com.xibodev.release-harness=true --label com.xibodev.release-harness.run-id=${runIdA} traefik/whoami:v1.11`, { encoding: 'utf8' }).trim();
+    containerBId = execSync(`docker run -d --label com.xibodev.release-harness=true --label com.xibodev.release-harness.run-id=${runIdB} traefik/whoami:v1.11`, { encoding: 'utf8' }).trim();
 
-  // Clean specifically run-A
-  await runCli(['clean', '--run-id', 'run-A', '--evidence-dir', testEvidenceRoot]);
+    // Clean only this invocation's A resource.
+    assert.strictEqual(await runCli(['clean', '--run-id', runIdA, '--evidence-dir', testEvidenceRoot]), 0);
 
-  // Assert workspace A is removed and B is preserved
-  assert.ok(!fs.existsSync(runA), 'Targeted run-A workspace must be deleted');
-  assert.ok(fs.existsSync(runB), 'Unrelated run-B workspace must be strictly preserved');
+    // Assert workspace A is removed and B is preserved
+    assert.ok(!fs.existsSync(runA), 'Targeted run-A workspace must be deleted');
+    assert.ok(fs.existsSync(runB), 'Unrelated run-B workspace must be strictly preserved');
 
-  // Assert Docker container A is removed and container B is preserved
-  if (containerAId && containerBId) {
+    // Assert Docker container A is removed and container B is preserved
     const runningContainers = execSync('docker ps -q', { encoding: 'utf8' });
     assert.ok(!runningContainers.includes(containerAId.slice(0, 12)), 'Container A must be removed by clean --run-id run-A');
     assert.ok(runningContainers.includes(containerBId.slice(0, 12)), 'Container B must remain running');
-    execSync(`docker rm -f ${containerBId}`, { stdio: ['ignore', 'pipe', 'ignore'] });
+  } finally {
+    for (const id of [containerAId, containerBId].filter(Boolean)) {
+      execSync(`docker rm -f ${id}`, { stdio: ['ignore', 'pipe', 'pipe'] });
+    }
+    fs.rmSync(testEvidenceRoot, { recursive: true, force: true });
   }
 
-  fs.rmSync(testEvidenceRoot, { recursive: true, force: true });
   recordPass('AC-09', 'Scoped Runtime Resource Isolation & Namespaced Teardown', 'INTEGRATION');
 }
 

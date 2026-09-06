@@ -20,7 +20,9 @@ Run an architecture-aware, threat-model-driven security review that produces act
 ## Required inputs
 
 - Working tree of the repo.
-- Optional but recommended: `artefacts/threat-model.md` (the agent `security-sentinel` interactively produces this — see its handoff). If absent, this skill will still run but will mark architecture-level findings as `evidence.confidence: low` and recommend the agent regenerate.
+- Optional: a product-owned threat model. If absent, map assets, entrypoints,
+  data flows and trust boundaries from source; ask the owner to confirm unknowns.
+  Keep uncertain architecture findings at `evidence.confidence: low`.
 - Optional: previous `results/<ts>/security/security-report.md` for delta scoping.
 
 ## Relationship to `release-harness-security-audit`
@@ -39,13 +41,23 @@ Run an architecture-aware, threat-model-driven security review that produces act
 | Compliance overlay (PCI-DSS, GDPR, SOC 2) | No | Yes |
 | DevSecOps maturity (SAST/DAST/SCA in CI) | No | Yes |
 
-The two skills MUST be run together for fintech-grade reviews. `security-sentinel` (the agent) does this automatically and the consolidator deduplicates overlap.
+For a combined review, follow both playbooks and merge duplicate findings by
+affected files and root cause, preserving all evidence links. No orchestrating
+agent or consolidation service is required. This review is advisory, not an
+independent security certification or proof of regulatory compliance.
+
+All report paths below are relative to an agreed private assessment root outside
+sealed runs, the source repository and published documentation. Keep threat models
+and sensitive review findings there; publish only separately reviewed material.
 
 ## Audit dimensions (the 13)
 
 ### 1. Threat model and architecture
 
-Before reading implementation, the reviewer must understand the asset map and trust boundaries. If `artefacts/threat-model.md` exists, ingest it; otherwise produce a stub from code signals and mark `evidence.confidence: low`.
+Start with any available product threat model, then trace the asset map and trust
+boundaries through implementation. If absent, draft that map from the signals
+below and identify questions for owner confirmation; do not assume a generator
+or another agent will supply it.
 
 **What to evaluate**
 
@@ -131,7 +143,7 @@ Before reading implementation, the reviewer must understand the asset map and tr
 
 **Signals to grep**
 
-- `http://` literals in projection source (non-test, non-localhost).
+- `http://` literals in production source (non-test, non-localhost).
 - Plaintext PII columns in migrations: `national_id VARCHAR`, `card_number VARCHAR`, `ssn VARCHAR`, `bank_account VARCHAR` without `bytea` / encryption wrapper.
 - Logger calls with `req.body`, `password`, `token`, `apiKey`, `ssn`, `pan`, `cvv`, `iban`, `account_number` (use regex `logger\.(info|warn|debug)\(.*\b(req\.body|password|token|api_?key|ssn|pan|cvv|iban|account_number)\b`).
 - `GET /reset?token=` (token in URL — should be POST body).
@@ -305,7 +317,7 @@ Before reading implementation, the reviewer must understand the asset map and tr
 
 **Fix-plan items**
 
-- `severity: critical` for unresolved critical CVE in projection dependency.
+- `severity: critical` for an applicable unresolved critical CVE in a production dependency.
 - `severity: high` for missing lockfile, no CI vuln scan, suspicious install scripts.
 - `severity: medium` for outdated deps with no auto-update tooling.
 
@@ -346,7 +358,7 @@ For each detected compliance regime (inferred from repo signals — payment term
 - SCA in CI (vuln scanners — see section 11).
 - DAST or interactive scan (`zap`, `burp`) at least pre-release on staging.
 - Required security review on PRs (CODEOWNERS for security-sensitive paths).
-- Threat-model artifact in repo updated on architecture changes.
+- Product-owned threat model updated on architecture changes in an agreed private location.
 - Pre-commit hooks: `gitleaks`, `detect-secrets`, lint, format.
 - Branch protection: required reviews, signed commits where possible.
 
@@ -361,7 +373,8 @@ For each detected compliance regime (inferred from repo signals — payment term
 
 - `severity: high` for no SAST or SCA in CI, no CODEOWNERS on security-sensitive paths.
 - `severity: medium` for no pre-commit hooks, no signed commits, no DAST.
-- `severity: low` for missing threat-model artifact (deferred — agent regenerates from interview).
+- Record a missing threat model as an assessment gap; propose an asset and
+  trust-boundary review with the owner instead of promising automatic generation.
 
 ## Mental model (what the reviewer asks)
 
@@ -382,9 +395,9 @@ Each dimension's fix-plan items are framed against these four questions in `evid
 
 ### Reports
 
-- `./.quality-run/results/<ts>/security/fintech-review.md` — human report, grouped by the 13 dimensions, with executive summary at top.
-- `./.quality-run/results/<ts>/security/fintech-findings.json` — machine-readable raw findings (file, line, dimension, signal, attacker_question).
-- `./.quality-run/results/<ts>/security/fintech-fix-plan.json` — shared Fix Plan Schema (see suite README).
+- `results/<ts>/security/fintech-review.md` — human report, grouped by the 13 dimensions, with executive summary at top.
+- `results/<ts>/security/fintech-findings.json` — machine-readable raw findings (file, line, dimension, signal, attacker_question).
+- `results/<ts>/security/fintech-fix-plan.json` using the finding fields in this playbook.
 
 ### Fix-plan item conventions
 
@@ -410,12 +423,19 @@ When a check requires the public internet (live CVE DB, external SSL/TLS probe, 
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Required input
 
 - Working tree of the repo.
-- Optional: `artefacts/threat-model.md` from `security-sentinel` (the orchestrating agent). If present, ingest it; if absent, run with `evidence.confidence: low` on architecture-level items.
+- Optional: a product-owned threat model. Derive an initial asset/trust-boundary
+  map when absent and flag unconfirmed assumptions for owner review.
 
 ### Outputs this skill produces
 
@@ -427,11 +447,19 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 - Never include actual secret values in any output file.
 - Never mutate the working tree. Read-only scanning only.
 - If a scanner is missing on PATH, record the gap; do not skip silently.
-- Coordinate with `release-harness-security-audit` — when the same finding is produced by both skills, the consolidator dedupes by `affected_files + title`. This skill should produce DEEPER framing (architectural root-cause, compliance overlay) so the merged entry is richer.
-- **Sealed UAT — no internet.** Same rule as `release-harness-security-audit`. Vuln-DB and external probe steps require offline DBs (`osv-scanner --offline-vulnerabilities <dir>`, cached `npm audit`, `pip-audit --no-deps`). If no cached DB is present under `artefacts/security-db/`, emit one `deferred-test` fix-plan item per missing DB. Do not call out to any public service.
-- **Worktree-only.** No `git fetch`, no `git pull`, no remote refs. If the review wants a delta against a baseline, require the local ref (the agent provides it from `release/baseline.json`).
+- Compare with `release-harness-security-audit` findings when available. Merge
+  overlapping observations manually by affected files and root cause, retaining
+  distinct evidence, architectural context and applicable compliance questions.
+- **Offline assessment:** follow `release-harness-security-audit`: verify the
+  installed scanner's documented offline mode and actual advisory database.
+  A cache or `--no-deps` does not prove offline operation. Otherwise record the
+  dynamic check as deferred and continue source review; do not install tools,
+  contact public services or infer compliance from an unperformed scan.
+- **Local review only.** No `git fetch` or `git pull`. For a delta, resolve an
+  approved local ref to a SHA and record it; an existing assessment baseline is
+  optional input, not a required agent-generated file.
 
 ### Gates
 
-- Stop and surface every `critical` finding before the consolidator runs.
+- Stop and surface every `critical` finding for human review immediately.
 - If the compliance overlay (section 12) detects PCI-DSS signals AND finds a `critical` item in section 4 (data protection), mark the release as blocked in the fix-plan via a top-level `evidence.release_blocking: true` flag for `release-harness-release-decider` to honor.

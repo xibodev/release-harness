@@ -16,7 +16,7 @@
     </a>
     <nav class="site-nav" aria-label="Primary navigation" data-od-id="landing-navigation">
       <a class="nav-current" href="index.html" aria-current="page">Overview</a>
-      <a href="docs.html#onboarding-project">Onboard</a>
+      <a href="docs.html#installation">Start here</a>
       <a href="docs.html">Documentation</a>
     </nav>
     <button id="theme-toggle-btn" class="toggle-btn" type="button" aria-label="Switch to dark theme" data-od-id="theme-toggle">DARK</button>
@@ -27,60 +27,60 @@
       <div class="hero-copy">
         <p class="eyebrow">DETERMINISTIC RELEASE ADJUDICATION</p>
         <h1 data-od-id="landing-title">A release cannot be talked into green.</h1>
-        <p class="hero-lede">Release-Harness is a portable, non-polluting test harness and release adjudication engine. It computes verdicts by pure functions from sealed evidence.</p>
+        <p class="hero-lede">Release-Harness runs project-owned quality gates and local UAT. Define your contracts, exercise your product, and inspect a deterministic verdict from sealed evidence.</p>
         <div class="hero-actions" data-od-id="landing-actions">
-          <a class="button-primary" href="docs.html" data-od-id="read-documentation">Read the documentation <span aria-hidden="true">→</span></a>
-          <a class="button-link" href="docs.html#onboarding-project" data-od-id="onboard-project">Onboard a project</a>
+          <a class="button-primary" href="docs.html#installation" data-od-id="read-documentation">Start manually <span aria-hidden="true">→</span></a>
+          <a class="button-link" href="docs.html#ai-agent-onboarding" data-od-id="onboard-project">Use an AI agent</a>
         </div>
       </div>
       <div class="hero-terminal" data-od-id="verdict-terminal">
-        <div class="terminal-chrome"><span>release-harness / adjudicator</span><span>sealed evidence</span></div>
-        <pre aria-label="Release-Harness verdict output"><code><span class="t-cyan">$ npx release-harness run-local</span>
-Materializing detached source workspace...
-Executing declarative scenarios...
-Sealing evidence directory...
-Evaluating deterministic gate verdict...
+        <div class="terminal-chrome"><span>Example commands</span><span>after configuration</span></div>
+        <pre aria-label="Example gate commands"><code><span class="t-muted"># Validate contracts and configured checks</span>
+<span class="t-cyan">npx release-harness check-pr</span>
 
-<span class="t-green t-bold">=== Verdict: PASS (Integrity: COMPLETE, Exit: 0) ===</span></code></pre>
+<span class="t-muted"># Run local UAT; keep evidence outside the repo</span>
+<span class="t-cyan">npx release-harness run-local --evidence-dir ../rh-evidence</span>
+
+<span class="t-muted"># Inspect runs/&lt;run-id&gt;/verdict.json</span></code></pre>
       </div>
     </section>
 
     <section class="release-notice" data-od-id="release-notice">
-      <div class="notice-mark">v1.2.0</div>
+      <div class="notice-mark">VERSIONS</div>
       <div>
-        <h2>UPGRADING FROM 1.1.0 — READ FIRST</h2>
-        <p>v1.2.0 corrects behaviour that was previously wrong. <strong>A run that was green on 1.1.0 may legitimately fail on 1.2.0.</strong> Each of these is a correction, not a regression.</p>
+        <h2>Use documentation that matches your package.</h2>
+        <p>This site follows current source. Skill discovery and runtime hardening marked <strong>unreleased</strong> are not in npm 1.2.0. Match released packages to their version-tagged documentation.</p>
       </div>
-      <a href="docs.html#installation" data-od-id="read-upgrade-notice">Read upgrade details</a>
+      <a href="docs.html#upgrades" data-od-id="read-upgrade-notice">Versions &amp; upgrades</a>
     </section>
 
     <section class="landing-section trust-section" data-od-id="trust-model">
       <div class="section-label">THE TRUST MODEL</div>
       <div class="section-intro">
         <h2>Intelligence can investigate. Only evidence can decide.</h2>
-        <p>Release-Harness pairs an <strong>AI Intelligence Layer</strong> with a <strong>Deterministic Core Engine</strong> — pure Node.js/Playwright/Docker with zero prompts and zero hallucinations.</p>
+        <p>The Node.js core uses Docker, Playwright, and project-owned probes to collect evidence. Optional AI playbooks help prepare contracts and investigate failures; they do not decide the gate.</p>
       </div>
       <ol class="evidence-chain" data-od-id="evidence-chain">
-        <li><span>01</span><strong>Project source</strong><small>.git tree (immutable)</small></li>
-        <li><span>02</span><strong>Materializer</strong><small>Isolated scratchpad</small></li>
+        <li><span>01</span><strong>Project contracts</strong><small>Topology, origins, scenarios</small></li>
+        <li><span>02</span><strong>Materializer</strong><small>Detached source workspace</small></li>
         <li><span>03</span><strong>Compose &amp; Playwright</strong><small>Origins + Egress Filter</small></li>
         <li><span>04</span><strong>Sealer &amp; verdict</strong><small>SHA-256 Manifest</small></li>
       </ol>
-      <p class="boundary-note">An AI agent cannot prompt or talk a release into being green. If an agent modifies an evidence file or injects fake results, the SHA-256 evidence manifest checksum mismatch triggers an immediate <code>EVIDENCE_INVALID (Exit 4)</code>.</p>
+      <p class="boundary-note">Evidence hashes detect changes relative to the seal, not a compromised execution host. Browser filtering is not container-wide isolation. <a href="docs.html#architecture-pipeline">Read the architecture and trust boundaries</a>.</p>
     </section>
 
     <section class="landing-section verdict-section" data-od-id="verdict-register">
       <div class="section-label">VERDICT REGISTER</div>
       <div class="section-intro">
         <h2>Five exit codes. No ambiguous green.</h2>
-        <p>The evaluator derives the outcome from what happened, not from a report of what happened.</p>
+        <p>The evaluator derives the outcome from recorded evidence and declared policy. A pass covers that gate, not checks you never declared.</p>
       </div>
       <div class="verdict-grid">
-        <article class="verdict-row verdict-pass" data-od-id="landing-exit-0"><span class="verdict-code">0</span><div><strong>PASS</strong><p>All required &amp; conditional scenarios passed with verified side effects.</p></div><span>Ready for promotion / deployment.</span></article>
-        <article class="verdict-row verdict-fail" data-od-id="landing-exit-1"><span class="verdict-code">1</span><div><strong>FAIL</strong><p>One or more required scenarios failed due to product bugs or missing dependencies.</p></div><span>Patch code.</span></article>
-        <article class="verdict-row verdict-unproven" data-od-id="landing-exit-2"><span class="verdict-code">2</span><div><strong>UNPROVEN</strong><p>Preconditions unmet, active waivers present, or dirty git tree with <code>--allow-dirty</code>.</p></div><span>Stage missing fixtures or commit changes.</span></article>
-        <article class="verdict-row verdict-error" data-od-id="landing-exit-3"><span class="verdict-code">3</span><div><strong>HARNESS_ERROR</strong><p>Malformed scenario, missing runtime environment, or Docker Compose crash.</p></div><span>Verify prerequisites and Compose configuration.</span></article>
-        <article class="verdict-row verdict-invalid" data-od-id="landing-exit-4"><span class="verdict-code">4</span><div><strong>EVIDENCE_INVALID</strong><p>Evidence file tampering, injected logs, or SHA-256 checksum mismatch.</p></div><span>Clean corrupted workspace.</span></article>
+        <article class="verdict-row verdict-pass" data-od-id="landing-exit-0"><span class="verdict-code">0</span><div><strong>PASS</strong><p>The declared gate passed with verified evidence.</p></div><span>Not a deployment or a production guarantee.</span></article>
+        <article class="verdict-row verdict-fail" data-od-id="landing-exit-1"><span class="verdict-code">1</span><div><strong>FAIL</strong><p>Observed failure or early rejection without a verdict.</p></div><span>Inspect causes; fix product defects or acquire missing fixtures.</span></article>
+        <article class="verdict-row verdict-unproven" data-od-id="landing-exit-2"><span class="verdict-code">2</span><div><strong>UNPROVEN</strong><p>Unmet conditions, waivers, or dirty development.</p></div><span>Resolve underlying failures before clean certification.</span></article>
+        <article class="verdict-row verdict-error" data-od-id="landing-exit-3"><span class="verdict-code">3</span><div><strong>HARNESS_ERROR</strong><p>Contract, environment, probe or startup fault.</p></div><span>Inspect startup evidence. UNKNOWN is unresolved attribution, not a product bug.</span></article>
+        <article class="verdict-row verdict-invalid" data-od-id="landing-exit-4"><span class="verdict-code">4</span><div><strong>EVIDENCE_INVALID</strong><p>Evidence tampering or checksum mismatch.</p></div><span>Preserve the run and investigate; no blind cleanup or resealing.</span></article>
       </div>
       <a class="button-link" href="docs.html#core-invariants" data-od-id="read-exit-code-reference">Read exit-code reference</a>
     </section>
@@ -90,16 +90,26 @@ Evaluating deterministic gate verdict...
       <div class="start-grid">
         <div>
           <h2>Bring the harness into your project.</h2>
-          <p>Install the package into your project as a development dependency, verify the host, then scaffold project-owned contracts.</p>
+          <p>Start with contracts and a smoke scenario for your real application. Use the CLI yourself or add AI assistance later. No AI host is required.</p>
         </div>
         <div class="install-panel">
           <div class="code-header"><span>TERMINAL</span><button class="copy-btn" type="button" data-od-id="copy-install">COPY</button></div>
-          <pre id="install-command"><code>npm install -D @xibodev/release-harness
+          <pre id="install-command"><code>npm install -D @xibodev/release-harness playwright
+npx playwright install chromium
 npx release-harness doctor
-npx release-harness init</code></pre>
-          <a href="docs.html#onboarding-project">Follow the onboarding guide <span aria-hidden="true">→</span></a>
+npx release-harness init --contracts-only</code></pre>
+          <a href="docs.html#onboarding-project">Configure your product <span aria-hidden="true">→</span></a>
         </div>
       </div>
+    </section>
+    <section class="landing-section" id="phase-delegation">
+      <h2>Choose your next step.</h2>
+      <ul class="next-links">
+        <li><a href="docs.html#ai-agent-onboarding">AI-assisted use</a><span>Prepare contracts and investigate failures with reviewed playbooks.</span></li>
+        <li><a href="docs.html#ci-usage">CI integration</a><span>Run checks on clean source and retain private evidence.</span></li>
+        <li><a href="docs.html#roadmap-levels">Capabilities &amp; roadmap</a><span>Separate implemented local gates from planned ephemeral and canary modes.</span></li>
+        <li><a href="docs.html#contributing">Contribute</a><span>Improve the engine, integrations, examples, or documentation.</span></li>
+      </ul>
     </section>
   </main>
 

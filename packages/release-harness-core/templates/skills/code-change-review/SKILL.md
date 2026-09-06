@@ -11,7 +11,10 @@ allowed-tools:
 
 ## Purpose
 
-Use this skill to build a release-focused diff review rather than a line-by-line code critique. The goal is to explain what changed, what could break, what needs follow-up, and what should block a pre-projection rollout.
+Use this skill to build a release-focused diff review rather than a line-by-line code critique. Explain what changed, what could break and what needs follow-up before a production rollout.
+
+All report paths below are relative to an agreed private assessment root outside
+sealed runs, the source repository and published documentation.
 
 ## Baseline Detection
 
@@ -161,7 +164,9 @@ Inspect for:
 - auth flow changes in login, logout, session refresh, or permission checks
 - new environment variables that are not documented or defaulted safely
 
-Use `references/security-quick-scan.md` as the checklist and severity rubric.
+Use the checks above. Explain exploitability and impact with file/line or test
+evidence; uncertain matches are hypotheses. Critical means demonstrated severe
+compromise or credential exposure; high means a supported defect needing repair.
 
 ## Output
 
@@ -218,7 +223,7 @@ Recommended shape:
 - Exclude generated output unless it signals a dependency or build change.
 - Treat monorepo shared packages as fan-out risk.
 - Flag new env vars without defaults as deployment blockers.
-- Flag migrations that assume data shape already changed in projection.
+- Flag migrations that assume data shape already changed in production.
 
 ## Gotchas
 
@@ -230,7 +235,13 @@ Recommended shape:
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 
@@ -240,9 +251,12 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 ### Hard rules
 
 - Baseline = newest meaningful release tag. If no tag exists, ASK the operator for an explicit baseline (tag, branch, SHA, or date window). Do not guess.
-- Record the chosen baseline in the report so `release-harness-test-coverage-audit` and `release-readiness` can reuse it.
+- Record the chosen baseline in the report so `release-harness-test-coverage-audit`
+  and `release-harness-release-decider` can reuse it.
 - Categorize every changed file into exactly one primary bucket (backend / frontend / config / tests / docs).
-- **Worktree-only (no fetch, no remote).** Forbidden commands: `git fetch`, `git pull`, `git remote update`, any network-touching git operation. Forbidden references: any ref under `origin/`, `upstream/`, or any other remote namespace. The baseline MUST resolve to a LOCAL ref (sha, local tag, or local branch). If the requested baseline does not exist locally, STOP and ask the operator — do not fetch. Default baseline when none is specified: `git merge-base HEAD $(git config init.defaultBranch || echo main)` against the LOCAL branch only.
+- **Worktree-only (no fetch, no remote).** Resolve the approved baseline to a
+  local SHA/tag/branch. If unavailable or ambiguous, stop and ask rather than
+  fetching or silently selecting a different baseline.
 - Write `results/<ts>/release/baseline.json` recording `{ "ref": "<sha>", "resolved_via": "local-tag|local-branch|sha|HEAD~N", "remote_used": false }`. If `remote_used` would be `true`, halt.
 
 ### Gates

@@ -1,6 +1,6 @@
 ---
 name: release-harness-test-coverage-audit
-description: Maps code changes to existing test coverage, identifies untested new code paths, and cross-references with E2E test results from e2e-playwright-test if available. Produces a gap analysis showing which user journeys are uncovered by recent changes, with fix-plan entries recommending specific tests to write. Use when asked to "check coverage", "what's untested", "coverage gaps", or "test audit".
+description: Maps code changes to tests and available project-owned E2E results, identifies uncovered paths and recommends focused regression tests. Use for changed-code coverage audits and pre-release test review. No external test-runner agent is required.
 compatibility: Works with any Node.js project. Enhanced with Jest/Vitest coverage reports if available.
 allowed-tools:
   - Read
@@ -13,6 +13,9 @@ allowed-tools:
 
 Use this skill after `release-harness-code-change-review` or alongside it. The goal is to measure confidence in changed code, not to report a generic repository-wide coverage percentage.
 
+All report paths below are relative to an agreed private assessment root outside
+sealed runs, the source repository and published documentation.
+
 ## Coverage Discovery
 
 1. Detect existing coverage tooling:
@@ -20,7 +23,10 @@ Use this skill after `release-harness-code-change-review` or alongside it. The g
    - Vitest
    - `c8`
    - `nyc` / Istanbul
-2. If coverage config or scripts exist, run the project-native coverage command and parse the generated report.
+2. If coverage scripts exist, inspect their effects first. Run the project-native
+   command only within the authorized scope and parse its actual report. Missing
+   tools, unsafe database/Docker effects or remote access mean a deferred dynamic
+   check; continue static mapping instead of installing or fabricating results.
 3. If no coverage tool exists, fall back to static analysis:
    - inspect test file naming conventions
    - map changed source files to nearby tests
@@ -54,7 +60,9 @@ When exact symbol matching is difficult, use scenario-level descriptions rather 
 
 ## E2E Cross-Reference
 
-If `headless-report.json` or `headed-uat-report.json` exists:
+Use the identified harness run's scenario results and declared scenarios, or
+project-owned E2E reports when available. External reports are optional; verify
+their source revision, target and run identity before comparing them:
 
 - map changed routes, pages, or journeys to E2E coverage
 - identify changed pages with no journey coverage
@@ -169,7 +177,13 @@ Include coverage percentage before/after only when tooling produced trustworthy 
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 
@@ -179,7 +193,9 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 ### Hard rules
 
 - When `results/<ts>/release/changes.json` exists (from `release-harness-code-change-review`), reuse it instead of re-deriving the changed-file list.
-- When `results/<ts>/e2e/headless/headless-report.json` or `results/<ts>/e2e/headed/headed-uat-report.json` exists in the SAME current run, MUST cross-reference E2E coverage against changed routes and pages.
+- Cross-reference current E2E observations against changed routes and pages when
+  available. Missing or stale reports are explicit gaps; do not require a
+  particular external toolkit's report name or substitute an older passing run.
 - Record the audit method (executed coverage / static mapping / hybrid) explicitly in the report.
 
 ### Gates

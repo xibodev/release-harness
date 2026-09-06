@@ -34,6 +34,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate public documentation
+        run: npm run test:docs
+
+      - name: Build public site allowlist
+        run: npm run build:site
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 

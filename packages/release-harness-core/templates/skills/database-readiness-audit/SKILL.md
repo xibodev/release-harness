@@ -1,6 +1,6 @@
 ---
 name: release-harness-database-readiness-audit
-description: Audits database projection-readiness — schema integrity, migration safety, backup posture, replication/failover awareness, and RTO/RPO documentation. Inspired by the Production Ready Checklist's Database section. Produces a fix-plan compatible with the suite's consolidator. Use when asked to "audit database", "check migrations", "validate backups", "is the DB projection-ready", or before a release.
+description: Reviews database production readiness through schema integrity, migration safety, backup configuration, failover and recovery objectives. Produces evidence-linked findings for human review and release-harness-fix-planner. Does not connect to databases or execute migrations.
 compatibility: Works with any source repo that contains migration files or database client config.
 allowed-tools:
   - Read
@@ -12,6 +12,10 @@ allowed-tools:
 ## Purpose
 
 Database readiness is one of the most common silent release blockers. This skill makes those gaps explicit and produces a fix-plan that the release-harness-release-decider can weight.
+
+All report paths below are relative to an agreed private assessment root outside
+sealed runs, the source repository and published documentation. Configuration
+review does not prove that a backup, restore or failover actually succeeded.
 
 ## Audit areas
 
@@ -46,7 +50,7 @@ Database readiness is one of the most common silent release blockers. This skill
 
 - Search `docs/`, `runbooks/`, `RUNBOOK*.md` for explicit RTO (recovery time objective) and RPO (recovery point objective) values.
 - Flag absence — releasing without documented RTO/RPO is a release-blocking gap.
-- If values are present, sanity-check them against the backup frequency (RPO cannot be smaller than the backup interval).
+- Assess RPO against the complete recovery mechanism and verified recovery-point lag. Continuous WAL/binlog archiving or equivalent point-in-time recovery can support an RPO shorter than the full-backup interval; verify retention and restoration, not backup frequency alone.
 
 ### 5. Replication & failover
 
@@ -60,13 +64,13 @@ Database readiness is one of the most common silent release blockers. This skill
 - Detect slow-query log enablement (`log_min_duration_statement` for Postgres, MySQL slow log).
 - Detect connection pool monitoring exports.
 - Detect disk-space alerts (cross-reference with release-harness-monitoring-audit).
-- Verify projection credentials are NOT in source (cross-reference with release-harness-security-audit).
+- Verify production credentials are NOT in source (cross-reference with release-harness-security-audit).
 
 ## Output
 
-- `./.quality-run/results/<ts>/database/database-report.md`
-- `./.quality-run/results/<ts>/database/findings.json`
-- `./.quality-run/results/<ts>/database/fix-plan.json`
+- `results/<ts>/database/database-report.md`
+- `results/<ts>/database/findings.json`
+- `results/<ts>/database/fix-plan.json`
 
 ### Fix-plan conventions
 
@@ -86,11 +90,18 @@ Database readiness is one of the most common silent release blockers. This skill
 ## Gates
 
 - Stop and surface `critical` findings (destructive migration without rollback, missing backups) before consolidation.
-- If RTO/RPO are not documented AND a release is being prepared, recommend NO-GO to `release-readiness` until they are documented.
+- If RTO/RPO are missing, record an advisory deployment blocker for
+  `release-harness-release-decider` and ask the owner to define recovery objectives.
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 
@@ -106,4 +117,5 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 ### Gates
 
 - Stop and surface `critical` findings (destructive migration without rollback, no backup config detected) before consolidation.
-- If RTO/RPO are undocumented AND a release is being prepared, recommend NO-GO to `release-readiness` until they are.
+- Include missing recovery objectives in the advisory readiness report; they do
+  not change the deterministic CLI verdict.

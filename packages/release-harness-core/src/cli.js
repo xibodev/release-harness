@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
+import { parse as parseYaml } from 'yaml';
 import { SourceMaterializer } from './materializer.js';
 import { EvidenceSealer } from './sealer.js';
 import { SecretRedactor } from './redactor.js';
@@ -36,6 +37,10 @@ export async function runCli(argv = process.argv.slice(2)) {
 
   if (command === 'init') {
     return handleInit(argv.slice(1));
+  }
+
+  if (command === 'skills') {
+    return handleSkills(argv.slice(1));
   }
 
   if (command === 'evaluate') {
@@ -71,8 +76,9 @@ Deterministic quality-gate adjudication and test execution engine.
 Commands:
   doctor        Check host prerequisites, toolchain, and project contracts
   init          Scaffold project-owned .release-harness/ contracts (use --with-agents for AI agents)
+  skills        Inspect packaged skills without writing files (list or info <name>)
   check-pr      Run Level 1 PR Integration Gate (contracts, toolchain, and configured PR commands)
-  run-local     Run Level 2 Local Release UAT Gate (sealed Compose, scenarios, probes)
+  run-local     Run Level 2 Local Release UAT Gate (scoped Compose, scenarios, probes)
   evaluate      Pure-function deterministic adjudication of existing evidence
   clean         Clean up run workspaces and lingering scoped test containers
 
@@ -201,6 +207,122 @@ export function detectCollisions(destDir, names) {
  */
 export const SKILL_NAMESPACE = 'release-harness-';
 
+export const SKILL_TARGETS = [
+  { label: 'Claude Code', relativeDir: '.claude/skills' },
+  { label: 'Agent Skills', relativeDir: '.agents/skills' },
+  { label: 'opencode', relativeDir: '.opencode/skills' },
+];
+
+const bundledSkillsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/skills');
+
+function skillMetadata(content, expectedName) {
+  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content);
+  if (!frontmatter) throw new Error('missing YAML frontmatter');
+  const metadata = parseYaml(frontmatter[1]);
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new Error('frontmatter must be a mapping');
+  }
+  if (metadata.name !== expectedName) {
+    throw new Error(`frontmatter name must match ${expectedName}`);
+  }
+  if (typeof metadata.description !== 'string' || !metadata.description.trim() ||
+      /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(metadata.description)) {
+    throw new Error('description must be nonempty text without control characters');
+  }
+  return { name: expectedName, description: metadata.description.replace(/\s+/g, ' ').trim() };
+}
+
+// An explicit directory keeps malformed-package tests independent of installed assets.
+export function readBundledSkills(skillsDir = bundledSkillsDir) {
+  const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+  const skills = [];
+  for (const entry of entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
+    if (entry.isSymbolicLink()) throw new Error(`bundled skill entry ${entry.name} must not be a symlink`);
+    if (!entry.isDirectory()) continue;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.name) || entry.name.startsWith(SKILL_NAMESPACE)) {
+      throw new Error(`invalid bundled skill directory ${JSON.stringify(entry.name)}; expected a bare lowercase slug`);
+    }
+    const skillFile = path.join(skillsDir, entry.name, 'SKILL.md');
+    try {
+      const stat = fs.lstatSync(skillFile);
+      if (!stat.isFile()) throw new Error('SKILL.md must be a regular file, not a symlink');
+      skills.push(skillMetadata(fs.readFileSync(skillFile, 'utf8'), `${SKILL_NAMESPACE}${entry.name}`));
+    } catch (err) {
+      throw new Error(`bundled skill ${entry.name}: ${err.message}`);
+    }
+  }
+  if (!skills.length) throw new Error('the installed skill bundle is empty');
+  return skills;
+}
+
+export function skillScaffoldStatus(target, name, cwd = process.cwd()) {
+  if (!SKILL_TARGETS.some((candidate) => candidate.relativeDir === target.relativeDir) ||
+      !/^release-harness-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
+    throw new Error('invalid skill target or name');
+  }
+  const skillFile = path.join(cwd, target.relativeDir, name, 'SKILL.md');
+  try {
+    if (!fs.lstatSync(skillFile).isFile()) return 'invalid scaffold';
+    const relative = path.relative(fs.realpathSync(cwd), fs.realpathSync(skillFile));
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return 'invalid scaffold';
+    skillMetadata(fs.readFileSync(skillFile, 'utf8'), name);
+    return 'scaffolded';
+  } catch (err) {
+    return err.code === 'ENOENT' ? 'not scaffolded' : 'invalid scaffold';
+  }
+}
+
+function handleSkills(args) {
+  const action = args[0] || 'list';
+  if (['--help', '-h', 'help'].includes(action) && args.length === 1) {
+    console.log(`Usage: release-harness skills [list]\n       release-harness skills info <name>\n\nInfo accepts bare names (project-cartographer) or canonical names (${SKILL_NAMESPACE}project-cartographer).\nDiscovery reads packaged metadata and local scaffold files; it never installs or modifies them.`);
+    return 0;
+  }
+  if (!['list', 'info'].includes(action) || (action === 'list' && args.length > 1) ||
+      (action === 'info' && args.length !== 2)) {
+    console.error('Error: expected skills [list] or skills info <name>. Run "release-harness skills --help".');
+    return 3;
+  }
+  try {
+    const skills = readBundledSkills();
+    if (action === 'info') {
+      const name = args[1].startsWith(SKILL_NAMESPACE) ? args[1] : `${SKILL_NAMESPACE}${args[1]}`;
+      const skill = skills.find((candidate) => candidate.name === name);
+      if (!skill) {
+        console.error(`Error: unknown bundled skill ${JSON.stringify(args[1])}. Run "release-harness skills list".`);
+        return 3;
+      }
+      console.log(`Skill: ${skill.name}\nCapability: ${skill.description}\nScaffold targets:`);
+      for (const target of SKILL_TARGETS) {
+        console.log(`  ${target.label.padEnd(13)} ${target.relativeDir}/${skill.name}/SKILL.md (${skillScaffoldStatus(target, skill.name)})`);
+      }
+    } else {
+      console.log(`Release-Harness Cognitive Skills (${skills.length} bundled)\nScaffold targets:`);
+      for (const target of SKILL_TARGETS) {
+        const statuses = skills.map((skill) => skillScaffoldStatus(target, skill.name));
+        console.log(`  ${target.label.padEnd(13)} ${target.relativeDir}/ (${statuses.filter((status) => status === 'scaffolded').length}/${skills.length} scaffolded; ${statuses.filter((status) => status === 'invalid scaffold').length} invalid)`);
+      }
+      console.log('\nCapabilities:');
+      for (const skill of skills) console.log(`  ${skill.name}\n    ${skill.description}`);
+    }
+    console.log('\nScaffold all skills: npx release-harness init --with-agents');
+    console.log('Scaffold status checks files, not the active host registry. Reload your host if skills are not visible.');
+    console.log('Invalid scaffold: inspect its SKILL.md metadata/path and repair only that file; do not overwrite project contracts.');
+    return 0;
+  } catch (err) {
+    console.error(`Error: unable to inspect bundled skills: ${err.message}`);
+    console.error('Reinstall the package if its templates are missing or malformed; no files were changed.');
+    return 3;
+  }
+}
+
+function printSkillScaffoldingTip() {
+  const count = countBundledSkills();
+  console.log(`\nTip: Run "npx release-harness init --with-agents" to scaffold ${count ?? 'the bundled'} cognitive skills.`);
+  console.log(`Use ${SKILL_NAMESPACE}project-cartographer and ${SKILL_NAMESPACE}scenario-compiler for artifact-first adoption.`);
+  console.log('Preview capabilities without writing files: npx release-harness skills list');
+}
+
 /**
  * Number of skills in the shipped bundle, or null when the templates cannot be
  * read. Counted rather than hard-coded so the figure quoted to the operator
@@ -224,8 +346,9 @@ export function countBundledSkills() {
 function reportSkillCollisions(destDir, tmplSkillsDir, label, force = false) {
   const collisions = detectCollisions(destDir, namespacedEntryNames(tmplSkillsDir, SKILL_NAMESPACE));
   if (collisions.length === 0) return collisions;
-  const fate = force ? 'overwritten (--force)' : 'preserved; pass --force to overwrite';
+  const fate = force ? 'overwrite requested' : 'preserved; merge or update only the affected skill files';
   console.log(`  ! ${collisions.length} skill name(s) already present in ${label} — ${fate}:`);
+  console.log('    Warning: --force/--overwrite resets project contracts as well as agent and skill files; it is not a targeted upgrade.');
   for (const c of collisions) console.log(`      ${c}`);
   return collisions;
 }
@@ -252,6 +375,10 @@ function copyDirectoryRecursive(src, dest, force = false, dryRun = false, namesp
 }
 
 async function handleDoctor(args) {
+  if (args.length) {
+    console.error('Error: doctor accepts no arguments. Use "release-harness skills list" to inspect skills.');
+    return 3;
+  }
   console.log(`Release-Harness v${HARNESS_VERSION} Diagnostics & Prerequisites\n`);
   const cwd = process.cwd();
   let allGood = true;
@@ -356,6 +483,7 @@ async function handleDoctor(args) {
   }
 
   console.log(`\nStatus: ${allGood ? 'Ready.' : 'Action items found (see above).'}`);
+  printSkillScaffoldingTip();
   return allGood ? 0 : 1;
 }
 
@@ -384,12 +512,46 @@ async function handleInit(args) {
   console.log(`Scaffolding project-owned Release-Harness contracts${withAgents ? ' and multi-runtime AI agents' : ''}...`);
   if (dryRun) console.log('Notice: Dry-run enabled. No files will be written.\n');
 
-  if (!dryRun) {
-    fs.mkdirSync(scenariosDir, { recursive: true });
-    fs.mkdirSync(fixturesDir, { recursive: true });
+  let pkgName;
+  let existingConfig;
+  const templatesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates');
+  let agentTemplates;
+  const adoptionAssets = {};
+  try {
+    // Preserve project identity even in a renamed directory or a partial scaffold.
+    for (const name of ['harness.config.json', 'topology.json']) {
+      const file = path.join(harnessDir, name);
+      if (!fs.existsSync(file)) continue;
+      const existing = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (name === 'harness.config.json') existingConfig = existing;
+      if (typeof existing?.product_slug !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(existing.product_slug)) {
+        throw new Error(`${name} has an invalid product_slug; repair the existing contracts together before init`);
+      }
+      if (pkgName && pkgName !== existing.product_slug) {
+        throw new Error('Existing harness.config.json and topology.json have conflicting product_slug values');
+      }
+      pkgName = existing.product_slug;
+    }
+    pkgName ??= path.basename(cwd).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!pkgName) throw new Error('Directory name cannot produce a non-empty alphanumeric product_slug');
+    if (withAgents) {
+      const { renderAgentTemplates } = await import('./agent-templates.js');
+      agentTemplates = renderAgentTemplates(fs.readFileSync(path.join(templatesDir, 'agents', 'release-conductor.md'), 'utf8'));
+      readBundledSkills(path.join(templatesDir, 'skills'));
+      for (const asset of ['AI-ADOPTION.md', 'agents/AGENTS.md', 'agents/.cursorrules', 'agents/copilot-instructions.md']) {
+        const file = path.join(templatesDir, asset);
+        if (!fs.lstatSync(file).isFile()) throw new Error(`Required adoption asset ${asset} must be a regular file`);
+        const content = fs.readFileSync(file, 'utf8');
+        if (!content.trim() || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(content)) {
+          throw new Error(`Required adoption asset ${asset} must contain nonempty text without control characters`);
+        }
+        adoptionAssets[asset] = content;
+      }
+    }
+  } catch (error) {
+    console.error(`Error: Cannot initialize Release-Harness: ${error.message}`);
+    return 3;
   }
-
-  const pkgName = path.basename(cwd).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'project';
 
   // 1. Write .release-harness contracts (Non-destructive by default)
   const writeFileSafe = (targetPath, content, label) => {
@@ -407,15 +569,14 @@ async function handleInit(args) {
     harness_version: HARNESS_VERSION,
     port_block: { start: 31000, range: 50 },
     timeouts: { health_check_seconds: 60, scenario_timeout_ms: 30000, run_timeout_seconds: 300 },
-    network_policy: { mode: 'sealed', allowed_egress: [] },
   };
-  writeFileSafe(path.join(harnessDir, 'harness.config.json'), JSON.stringify(harnessConfig, null, 2) + '\n', '.release-harness/harness.config.json');
 
   const topology = {
     $schema: 'https://json.xibo.dev/schemas/release-harness/topology-v1.json',
     schema_version: '1.0.0',
     product_slug: pkgName,
     topology_type: 'monorepo',
+    network_policy: existingConfig?.network_policy ?? { mode: 'sealed', allowed_egress: [] },
     nodes: [
       {
         id: 'web',
@@ -426,7 +587,6 @@ async function handleInit(args) {
       },
     ],
   };
-  writeFileSafe(path.join(harnessDir, 'topology.json'), JSON.stringify(topology, null, 2) + '\n', '.release-harness/topology.json');
 
   const origins = [
     {
@@ -439,7 +599,6 @@ async function handleInit(args) {
       evidence: ['package.json'],
     },
   ];
-  writeFileSafe(path.join(harnessDir, 'origins.json'), JSON.stringify(origins, null, 2) + '\n', '.release-harness/origins.json');
 
   const smokeScenario = {
     id: 'SMOKE-001',
@@ -452,6 +611,26 @@ async function handleInit(args) {
       { action: 'assert', target: 'text:Welcome' },
     ],
   };
+  try {
+    const { validateAgainstSchema } = await import('./validator.js');
+    const { Schemas } = await import('../../release-harness-schemas/index.js');
+    for (const [schema, document, label] of [
+      [Schemas.HarnessConfigV1, harnessConfig, 'Generated harness config'],
+      [Schemas.TopologyV1, topology, 'Generated topology'],
+      [Schemas.OriginsV1, origins, 'Generated origins'],
+      [Schemas.ScenarioV1, smokeScenario, 'Generated smoke scenario'],
+    ]) validateAgainstSchema(schema, document, label);
+  } catch (error) {
+    console.error(`Error: Cannot initialize Release-Harness: ${error.message}`);
+    return 3;
+  }
+  if (!dryRun) {
+    fs.mkdirSync(scenariosDir, { recursive: true });
+    fs.mkdirSync(fixturesDir, { recursive: true });
+  }
+  writeFileSafe(path.join(harnessDir, 'harness.config.json'), JSON.stringify(harnessConfig, null, 2) + '\n', '.release-harness/harness.config.json');
+  writeFileSafe(path.join(harnessDir, 'topology.json'), JSON.stringify(topology, null, 2) + '\n', '.release-harness/topology.json');
+  writeFileSafe(path.join(harnessDir, 'origins.json'), JSON.stringify(origins, null, 2) + '\n', '.release-harness/origins.json');
   writeFileSafe(path.join(scenariosDir, 'smoke.json'), JSON.stringify(smokeScenario, null, 2) + '\n', '.release-harness/scenarios/smoke.json');
 
   const readmeContent = `# Release Harness Configuration
@@ -479,40 +658,17 @@ npx release-harness run-local
   // Whether a project has an AGENTS.md says nothing about whether it wants
   // this bundle, so the flag alone decides.
   if (withAgents) {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const templatesDir = path.resolve(__dirname, '../templates');
-
-    // The bundle ships as a package asset. If it is missing the install is
-    // broken, and returning 0 for a scaffold that never happened is the precise
-    // failure --with-agents exists to prevent.
-    if (!fs.existsSync(templatesDir)) {
-      console.error(`Error: agent templates are missing from the installed package (expected at ${templatesDir}).`);
-      console.error('Reinstall @xibodev/release-harness-core, or omit --with-agents to scaffold contracts only.');
-      return 3;
-    }
-
-    const tmplAgentsDir = path.join(templatesDir, 'agents');
     const tmplSkillsDir = path.join(templatesDir, 'skills');
 
     // AGENTS.md & .cursorrules
-    if (fs.existsSync(path.join(tmplAgentsDir, 'AGENTS.md'))) {
-      writeFileSafe(path.join(cwd, 'AGENTS.md'), fs.readFileSync(path.join(tmplAgentsDir, 'AGENTS.md'), 'utf8'), 'AGENTS.md');
-    }
-    if (fs.existsSync(path.join(tmplAgentsDir, '.cursorrules'))) {
-      writeFileSafe(path.join(cwd, '.cursorrules'), fs.readFileSync(path.join(tmplAgentsDir, '.cursorrules'), 'utf8'), '.cursorrules');
-    }
+    writeFileSafe(path.join(cwd, 'AGENTS.md'), adoptionAssets['agents/AGENTS.md'], 'AGENTS.md');
+    writeFileSafe(path.join(cwd, '.cursorrules'), adoptionAssets['agents/.cursorrules'], '.cursorrules');
 
     // The adoption guide for the agent doing the integration. It states the
     // beats that are invisible from the outside -- chiefly that this bundle
     // ships with init rather than npm install, so an agent that looked for the
     // skills first and found nothing does not conclude they do not exist.
-    if (fs.existsSync(path.join(templatesDir, 'AI-ADOPTION.md'))) {
-      writeFileSafe(
-        path.join(cwd, 'AI-ADOPTION.md'),
-        fs.readFileSync(path.join(templatesDir, 'AI-ADOPTION.md'), 'utf8'),
-        'AI-ADOPTION.md'
-      );
-    }
+    writeFileSafe(path.join(cwd, 'AI-ADOPTION.md'), adoptionAssets['AI-ADOPTION.md'], 'AI-ADOPTION.md');
 
     // Claude Code: .claude/agents & .claude/skills
     const claudeAgentsDir = path.join(cwd, '.claude', 'agents');
@@ -521,11 +677,14 @@ npx release-harness run-local
       fs.mkdirSync(claudeAgentsDir, { recursive: true });
       fs.mkdirSync(claudeSkillsDir, { recursive: true });
     }
-    if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
-      writeFileSafe(path.join(claudeAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.claude/agents/release-conductor.md');
-    }
+    writeFileSafe(path.join(claudeAgentsDir, 'release-conductor.md'), agentTemplates.claude, '.claude/agents/release-conductor.md');
     reportSkillCollisions(claudeSkillsDir, tmplSkillsDir, '.claude/skills', force);
     copyDirectoryRecursive(tmplSkillsDir, claudeSkillsDir, force, dryRun, SKILL_NAMESPACE);
+
+    const sharedSkillsDir = path.join(cwd, '.agents', 'skills');
+    if (!dryRun) fs.mkdirSync(sharedSkillsDir, { recursive: true });
+    reportSkillCollisions(sharedSkillsDir, tmplSkillsDir, '.agents/skills', force);
+    copyDirectoryRecursive(tmplSkillsDir, sharedSkillsDir, force, dryRun, SKILL_NAMESPACE);
 
     // opencode: .opencode/agents & .opencode/skills
     const opencodeAgentsDir = path.join(cwd, '.opencode', 'agents');
@@ -534,35 +693,25 @@ npx release-harness run-local
       fs.mkdirSync(opencodeAgentsDir, { recursive: true });
       fs.mkdirSync(opencodeSkillsDir, { recursive: true });
     }
-    if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
-      writeFileSafe(path.join(opencodeAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.opencode/agents/release-conductor.md');
-    }
+    writeFileSafe(path.join(opencodeAgentsDir, 'release-conductor.md'), agentTemplates.opencode, '.opencode/agents/release-conductor.md');
     reportSkillCollisions(opencodeSkillsDir, tmplSkillsDir, '.opencode/skills', force);
     copyDirectoryRecursive(tmplSkillsDir, opencodeSkillsDir, force, dryRun, SKILL_NAMESPACE);
 
     // GitHub Copilot: .github/agents & .github/copilot-instructions.md
     const ghAgentsDir = path.join(cwd, '.github', 'agents');
     if (!dryRun) fs.mkdirSync(ghAgentsDir, { recursive: true });
-    if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'))) {
-      writeFileSafe(path.join(ghAgentsDir, 'release-conductor.agent.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.agent.md'), 'utf8'), '.github/agents/release-conductor.agent.md');
-    }
-    if (fs.existsSync(path.join(tmplAgentsDir, 'copilot-instructions.md'))) {
-      writeFileSafe(path.join(cwd, '.github', 'copilot-instructions.md'), fs.readFileSync(path.join(tmplAgentsDir, 'copilot-instructions.md'), 'utf8'), '.github/copilot-instructions.md');
-    }
+    writeFileSafe(path.join(ghAgentsDir, 'release-conductor.agent.md'), agentTemplates.github, '.github/agents/release-conductor.agent.md');
+    writeFileSafe(path.join(cwd, '.github', 'copilot-instructions.md'), adoptionAssets['agents/copilot-instructions.md'], '.github/copilot-instructions.md');
 
     // Copilot CLI: .copilot/agents
     const copilotAgentsDir = path.join(cwd, '.copilot', 'agents');
     if (!dryRun) fs.mkdirSync(copilotAgentsDir, { recursive: true });
-    if (fs.existsSync(path.join(tmplAgentsDir, 'release-conductor.md'))) {
-      writeFileSafe(path.join(copilotAgentsDir, 'release-conductor.md'), fs.readFileSync(path.join(tmplAgentsDir, 'release-conductor.md'), 'utf8'), '.copilot/agents/release-conductor.md');
-    }
+    writeFileSafe(path.join(copilotAgentsDir, 'release-conductor.md'), agentTemplates.copilot, '.copilot/agents/release-conductor.md');
+    if (!dryRun) console.log('\n  Restart or reload your AI host session to discover newly scaffolded agents and skills. Disk presence is not host registration; see AI-ADOPTION.md.');
   } else {
     // With the implicit trigger removed, the bundle would otherwise be
     // undiscoverable, so name the flag that produces it.
-    const skillCount = countBundledSkills();
-    console.log('\n  Contracts written. To scaffold the AI agent bundle'
-      + ` (release-conductor${skillCount === null ? '' : ` + ${skillCount} skills`}):`);
-    console.log('    npx release-harness init --with-agents');
+    printSkillScaffoldingTip();
   }
 
   console.log('\nInitialization complete. Run "npx release-harness doctor" to verify.');
@@ -714,6 +863,7 @@ async function handleCheckPr(args) {
 }
 
 async function handleRunLocal(args) {
+  const { resolveNetworkPolicy, validateHealthProbe } = await import('./validator.js');
   /**
    * Report what materialization actually did. Every diagnostic the enumerator
    * and the copier produce reached no operator before this: `.stats` was
@@ -788,9 +938,11 @@ async function handleRunLocal(args) {
     return 3;
   }
 
+  let harnessConfig = {};
   if (fs.existsSync(configFile)) {
     try {
-      validateHarnessConfig(JSON.parse(fs.readFileSync(configFile, 'utf8')));
+      harnessConfig = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+      validateHarnessConfig(harnessConfig);
     } catch (configErr) {
       console.error(`Invalid harness.config.json: ${configErr.message}`);
       if (configErr instanceof ValidationError) {
@@ -802,6 +954,18 @@ async function handleRunLocal(args) {
       return 3;
     }
   }
+
+  let effectiveNetworkPolicy;
+  const services = [...(topology.nodes || []), ...(topology.repositories || []).flatMap((r) => r.services || [])];
+  try {
+    effectiveNetworkPolicy = resolveNetworkPolicy(topology, harnessConfig);
+    for (const service of services) if (service.health_probe) validateHealthProbe(service.health_probe, portOffset);
+  } catch (err) {
+    console.error(`Harness configuration error: ${err.message}`);
+    return 3;
+  }
+  if (!effectiveNetworkPolicy) console.warn('Warning: no network_policy declared; preserving legacy open network behavior. Declare topology.network_policy to enforce egress restrictions.');
+  else if (!topology.network_policy) console.warn('Warning: using legacy harness.config.json network_policy; topology.json is the canonical location.');
 
   const productSlug = topology.product_slug || 'project';
   const evidenceRoot = resolveEvidenceRoot(flags, productSlug);
@@ -818,7 +982,6 @@ async function handleRunLocal(args) {
 
   let composeRunner = null;
   const rawResults = [];
-  const harnessErrors = [];
   let sourceInfo = null;
   let artifacts = [];
 
@@ -875,6 +1038,11 @@ async function handleRunLocal(args) {
     // so an unresolvable status is refused rather than certified.
     const dirtySources = sourceInfos.filter((s) => !s.isClean);
     const isDevelopmentMode = dirtySources.length > 0 && Boolean(flags['allow-dirty']);
+    const runtime = {
+      schema_version: '1.0.0', started_at: runStartedAt,
+      execution_mode: isDevelopmentMode ? 'DEVELOPMENT' : 'CERTIFICATION',
+      startup: { phase: 'not_applicable', blocked: false, health: [] },
+    };
     if (dirtySources.length > 0 && !flags['allow-dirty']) {
       for (const s of dirtySources) {
         const which = s.repo_id ? `repository "${s.repo_id}"` : 'source';
@@ -922,61 +1090,56 @@ async function handleRunLocal(args) {
         portOffset,
       });
 
-      const upRes = await composeRunner.up();
-      artifacts = upRes.artifacts;
-      console.log(`   Containers started (Captured ${artifacts.length} OCI artifact digests)`);
-
-      const services = topology.nodes || [];
-      if (services.length > 0) {
-        console.log('4. Probing service healthchecks...');
-        await composeRunner.healthCheckServices(services, 60);
-        console.log('   All declared services healthy');
+      try {
+        runtime.startup.phase = 'compose_up';
+        const upRes = await composeRunner.up();
+        artifacts = upRes.artifacts;
+        console.log(`   Containers started (Captured ${artifacts.length} OCI artifact digests)`);
+        runtime.startup.phase = 'health';
+        runtime.startup.health = await composeRunner.healthCheckServices(services, harnessConfig.timeouts?.health_check_seconds ?? 60);
+        runtime.startup.blocked = runtime.startup.health.some((h) => !h.healthy);
+        if (!runtime.startup.blocked) runtime.startup.phase = 'ready';
+      } catch (err) {
+        runtime.startup.blocked = true;
+        runtime.startup.error = { kind: err instanceof ValidationError ? 'configuration' : 'runtime', code: ['ENOENT', 'EACCES', 'EPERM', 'ETIMEDOUT'].includes(err.code) ? err.code : null, exit_code: Number.isInteger(err.exit_code) ? err.exit_code : null, message: 'Startup failed; arbitrary process output omitted from evidence' };
+      }
+      if (runtime.startup.blocked) {
+        try { runtime.startup.diagnostics = composeRunner.collectDiagnostics(); }
+        catch { runtime.startup.diagnostics = { containers: [], errors: ['CONTAINER_DIAGNOSTICS_UNAVAILABLE'], logs_omitted: true }; }
+        delete runtime.startup.diagnostics.logs;
+        delete runtime.startup.diagnostics.logs_truncated;
+        runtime.startup.diagnostics.logs_omitted = true;
+        console.error('Startup/readiness failed. Capturing evidence before cleanup; scenarios will not execute.');
       }
     }
 
     // 5. Execute Scenarios with Topology/Origin-driven routing & network monitoring
-    console.log('5. Executing declarative scenarios with Playwright & origin routing...');
+    console.log(runtime.startup.blocked ? '5. Scenario execution blocked by startup failure.' : '5. Executing declarative scenarios with Playwright & origin routing...');
     const scenarioRunner = new ScenarioRunner({
       origins,
       topology,
-      networkPolicy: topology.network_policy || null,
+      networkPolicy: effectiveNetworkPolicy,
       evidenceDir: runEvidenceDir,
       workspaceDir: workSourceDir,
       portOffset,
     });
 
-    for (const sc of scenarios) {
+    for (const sc of runtime.startup.blocked ? [] : scenarios) {
       const res = await scenarioRunner.runScenario(sc);
       rawResults.push(res);
-
-      // A probe that reported a harness fault escalates the whole run to
-      // HARNESS_ERROR (exit 3) rather than failing the product. Nothing wrote
-      // to `harnessErrors` before this, so exit 3 was unreachable from the CLI
-      // and a harness gap was reported as the adopter's bug.
-      for (const obs of res.side_effect_observations || []) {
-        if (obs.is_harness_error) {
-          harnessErrors.push({
-            cause: obs.cause || 'HARNESS_CONFIGURATION',
-            message: `[${sc.id}] ${obs.observed_result}`,
-            scenario_id: sc.id,
-          });
-        }
-      }
 
       const mark = res.failed ? '✗' : '✓';
       console.log(`   ${mark} [${sc.id}] ${sc.name} → ${res.target_base_url} (${res.duration_ms}ms)`);
     }
 
-    // Collect network violations from scenarios
-    const collectedNetworkViolations = rawResults.flatMap((r) => r.network_violations || []);
-
     // Write execution logs into evidence directory (Redacted prior to sealing)
-    const logContent = redactor.redactText(`Run ${runId} completed scenario sweep at ${runStartedAt}\n`);
+    const logContent = redactor.redactText(`Run ${runId}: ${runtime.startup.blocked ? 'startup blocked scenario execution' : 'completed scenario sweep'}; started at ${runStartedAt}\n`);
     sealer.writeEvidence('execution.log', logContent);
 
     // Persist complete raw results into evidence directory before sealing
     const rawResultsBytes = JSON.stringify(redactor.redactObject(rawResults), null, 2) + '\n';
     sealer.writeEvidence('raw-results.json', rawResultsBytes);
+    sealer.writeEvidence('runtime-observations.json', JSON.stringify(redactor.redactObject(runtime), null, 2) + '\n');
 
     // 6. Seal Evidence with Policy Snapshot for deterministic replay
     console.log('6. Sealing evidence directory...');
@@ -986,7 +1149,8 @@ async function handleRunLocal(args) {
       topology,
       origins,
       scenarios,
-      network_policy: topology.network_policy || null,
+      network_policy: effectiveNetworkPolicy,
+      runtime_observations_version: '1.0.0',
       waivers: [],
     };
     const waiversFile = path.join(harnessDir, 'waivers.json');
@@ -1005,31 +1169,8 @@ async function handleRunLocal(args) {
     const verdict = evaluateRun({
       runId,
       evidenceDir: runEvidenceDir,
-      scenarios,
-      rawResults,
-      origins,
-      networkViolations: collectedNetworkViolations,
-      startedAt: runStartedAt,
       evaluationTime: flags.time || sealRes.manifest.sealed_at,
-      harnessErrors,
     });
-
-    if (isDevelopmentMode) {
-      verdict.certification_status = 'UNPROVEN';
-      verdict.certification_eligible = false;
-      verdict.execution_mode = 'DEVELOPMENT';
-      // A dirty tree makes a run non-certifiable; it does not make a harness
-      // fault or tampered evidence disappear. Downgrading those to 2 here would
-      // hide the very exit 3 the harness-error routing exists to produce, so an
-      // integrity failure keeps its own exit code and only a would-be
-      // pass/fail becomes UNPROVEN.
-      if (verdict.run_integrity === 'COMPLETE') {
-        verdict.exit_code = 2;
-      }
-      if (!verdict.causes.includes('HARNESS_CONFIGURATION')) {
-        verdict.causes.push('HARNESS_CONFIGURATION');
-      }
-    }
 
     const verdictPath = path.join(runDir, 'verdict.json');
     const verdictBytes = JSON.stringify(verdict, null, 2) + '\n';
@@ -1062,7 +1203,7 @@ async function handleRunLocal(args) {
       artifacts,
       toolchain: detectToolchain(),
       config_hashes: {
-        harness_config_sha256: crypto.createHash('sha256').update(fs.readFileSync(path.join(harnessDir, 'harness.config.json'), 'utf8')).digest('hex'),
+        harness_config_sha256: crypto.createHash('sha256').update(fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf8') : '{}').digest('hex'),
         topology_sha256: crypto.createHash('sha256').update(fs.readFileSync(topologyFile, 'utf8')).digest('hex'),
         scenarios_manifest_sha256: crypto.createHash('sha256').update(JSON.stringify(scenarios)).digest('hex'),
       },
@@ -1076,14 +1217,20 @@ async function handleRunLocal(args) {
 
     return verdict.exit_code;
   } catch (err) {
-    console.error(`Run Local failed with runtime error: ${err.message}`);
+    console.error(`Run Local failed with runtime error; no complete sealed verdict is guaranteed: ${redactor.redactText(err.message)}`);
     return 3;
   } finally {
+    let cleaned = true;
     if (composeRunner) {
       console.log('Cleaning up Docker Compose containers...');
-      composeRunner.teardown();
+      cleaned = composeRunner.teardown();
     }
-    materializer.cleanup();
+    if (cleaned !== false) {
+      try { materializer.cleanup(); }
+      catch (err) { console.error(`Workspace cleanup warning: ${redactor.redactText(err.message)}`); }
+    } else {
+      console.error(`Workspace retained at ${workspaceDir}: Compose cleanup failed; retry scoped cleanup before removing it.`);
+    }
   }
 }
 

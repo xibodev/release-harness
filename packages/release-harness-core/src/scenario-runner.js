@@ -4,6 +4,8 @@ import os from 'node:os';
 import { createRequire } from 'node:module';
 import process from 'node:process';
 import { verifySideEffect } from './probes.js';
+import { validateNetworkPolicy } from './validator.js';
+import { installNetworkGuard } from './network-guard.js';
 
 const require = createRequire(import.meta.url);
 
@@ -39,11 +41,29 @@ const SUPPORTED_ACTIONS = new Set([
   'screenshot',
 ]);
 
+export function networkDecision(target, policy, localUrls = []) {
+  const url = new URL(target);
+  if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) throw new Error(`Unsupported network protocol ${url.protocol}`);
+  const host = url.hostname.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '');
+  const port = Number(url.port || (['https:', 'wss:'].includes(url.protocol) ? 443 : 80));
+  if (!policy || policy.mode === 'open') return { host, port, allowed: true, matched_rule: 'open network mode' };
+  const local = localUrls.some((value) => {
+    const endpoint = new URL(value);
+    const scheme = (protocol) => protocol === 'ws:' ? 'http:' : protocol === 'wss:' ? 'https:' : protocol;
+    return scheme(endpoint.protocol) === scheme(url.protocol)
+      && endpoint.hostname.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '') === host
+      && Number(endpoint.port || (endpoint.protocol === 'https:' ? 443 : 80)) === port;
+  });
+  const rule = (policy.allowed_egress || []).find((r) => r.host.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '') === host && r.port === port);
+  return { host, port, allowed: local || Boolean(rule), matched_rule: local ? 'declared origin' : rule ? (rule.declared_in || rule.purpose || 'allowed_rule') : 'none' };
+}
+
 /**
  * Real Playwright Scenario Compiler and Execution Engine with Deep Observability.
  */
 export class ScenarioRunner {
   constructor({ origins = [], topology = null, networkPolicy = null, evidenceDir, workspaceDir, customExtensions = {}, portOffset = 0 }) {
+    if (networkPolicy) validateNetworkPolicy(networkPolicy);
     this.origins = origins;
     this.topology = topology;
     this.networkPolicy = networkPolicy;
@@ -148,6 +168,7 @@ export class ScenarioRunner {
         unproven: false,
         duration_ms: Date.now() - start,
         cause: 'HARNESS_CONFIGURATION',
+        is_harness_error: true,
         disposition: 'CONDITION_UNMET',
         error_message: err.message,
       };
@@ -182,6 +203,7 @@ export class ScenarioRunner {
         if (!this.extensions[extName]) {
           rawResult.failed = true;
           rawResult.cause = 'HARNESS_CONFIGURATION';
+          rawResult.is_harness_error = true;
           rawResult.error_message = `Scenario step ${i + 1} requires unregistered extension "${extName}"`;
           rawResult.duration_ms = Date.now() - start;
           return rawResult;
@@ -189,6 +211,7 @@ export class ScenarioRunner {
       } else if (!SUPPORTED_ACTIONS.has(step.action)) {
         rawResult.failed = true;
         rawResult.cause = 'HARNESS_CONFIGURATION';
+        rawResult.is_harness_error = true;
         rawResult.error_message = `Scenario step ${i + 1} specifies unsupported action "${step.action}"`;
         rawResult.duration_ms = Date.now() - start;
         return rawResult;
@@ -198,6 +221,7 @@ export class ScenarioRunner {
     if (!this.playwright) {
       rawResult.failed = true;
       rawResult.cause = 'HARNESS_ENVIRONMENT';
+      rawResult.is_harness_error = true;
       rawResult.error_message = 'Playwright browser automation engine is not installed or available.';
       rawResult.duration_ms = Date.now() - start;
       return rawResult;
@@ -206,43 +230,74 @@ export class ScenarioRunner {
     let browser = null;
     let context = null;
     let page = null;
+    let networkGuard = null;
+    let setupComplete = false;
     let lastHttpStatus = 0;
     let lastResponseBody = '';
 
     try {
-      browser = await this.playwright.chromium.launch({ headless: true });
-      context = await browser.newContext({ baseURL: baseUrl, ignoreHTTPSErrors: true });
-      page = await context.newPage();
+
+      const localUrls = [baseUrl];
+      for (const origin of this.origins) {
+        try { localUrls.push(this.resolveOriginUrl(origin.origin_id)); } catch { /* Unresolved origins are reported when executed. */ }
+      }
+
+      if (this.networkPolicy?.mode === 'sealed') {
+        networkGuard = await installNetworkGuard(
+          url => networkDecision(url, this.networkPolicy, localUrls),
+          (url, { host, port, allowed, matched_rule }) => {
+            rawResult.network_observations.push({ url, host, port, decision: allowed ? 'ALLOWED' : 'DENIED', matched_rule });
+            if (!allowed) rawResult.network_violations.push({ host, port, url, attributed_to: 'product' });
+          },
+          err => {
+            rawResult.failed = true;
+            rawResult.is_harness_error = true;
+            rawResult.cause = 'HARNESS_ENVIRONMENT';
+            rawResult.error_message = `Chromium network guard failed: ${err.message}`;
+            void context?.close().catch(() => {});
+          });
+      }
+
+      browser = await this.playwright.chromium.launch({ headless: true, ...(networkGuard ? {
+        proxy: networkGuard.proxy,
+        args: ['--disable-quic', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'],
+      } : {}) });
+      context = await browser.newContext({ baseURL: baseUrl, ignoreHTTPSErrors: true, serviceWorkers: 'block' });
+
+      if (context.routeWebSocket) {
+        await context.routeWebSocket('**/*', (socket) => {
+          try {
+            const { host, port, allowed, matched_rule } = networkDecision(socket.url(), this.networkPolicy, localUrls);
+            rawResult.network_observations.push({ url: socket.url(), host, port, decision: allowed ? 'ALLOWED' : 'DENIED', matched_rule });
+            if (allowed) return socket.connectToServer();
+            rawResult.network_violations.push({ host, port, url: socket.url(), attributed_to: 'product' });
+            return socket.close();
+          } catch (err) {
+            rawResult.failed = true;
+            rawResult.is_harness_error = true;
+            rawResult.cause = 'HARNESS_CONFIGURATION';
+            rawResult.error_message = `WebSocket could not be classified: ${err.message}`;
+            return socket.close();
+          }
+        });
+      }
 
       // Track all network observations (both allowed rules and violations)
-      await page.route('**/*', (route) => {
+      if (!networkGuard) await context.route('**/*', async (route) => {
         try {
-          const reqUrl = new URL(route.request().url());
-          const port = parseInt(reqUrl.port || (reqUrl.protocol === 'https:' ? '443' : '80'), 10);
-          const isLocal = ['localhost', '127.0.0.1', '::1'].includes(reqUrl.hostname) || reqUrl.hostname.endsWith('.local') || reqUrl.hostname.endsWith('.internal');
-
-          let allowed = isLocal;
-          let matchedRule = isLocal ? { purpose: 'local origin' } : null;
-
-          if (!isLocal && this.networkPolicy && this.networkPolicy.mode === 'sealed') {
-            matchedRule = (this.networkPolicy.allowed_egress || []).find((e) => e.host === reqUrl.hostname);
-            allowed = Boolean(matchedRule);
-          } else if (!isLocal && (!this.networkPolicy || this.networkPolicy.mode === 'open')) {
-            allowed = true;
-            matchedRule = { purpose: 'open network mode' };
-          }
+          const { host, port, allowed, matched_rule } = networkDecision(route.request().url(), this.networkPolicy, localUrls);
 
           rawResult.network_observations.push({
             url: route.request().url(),
-            host: reqUrl.hostname,
+            host,
             port,
             decision: allowed ? 'ALLOWED' : 'DENIED',
-            matched_rule: matchedRule ? (matchedRule.declared_in || matchedRule.purpose || 'allowed_rule') : 'none',
+            matched_rule,
           });
 
           if (!allowed) {
             rawResult.network_violations.push({
-              host: reqUrl.hostname,
+              host,
               port,
               attributed_to: 'product',
               url: route.request().url(),
@@ -250,19 +305,18 @@ export class ScenarioRunner {
             return route.abort('blockedbyclient');
           }
 
-          if (!isLocal && allowed) {
-            // Fulfill mock response for external CDN subresource in sealed mode to prevent network latency
-            return route.fulfill({
-              status: 200,
-              contentType: 'application/javascript',
-              body: '// MediaPipe Mock Runtime',
-            });
-          }
-        } catch {
-          // ignore route parsing error
+        } catch (err) {
+          rawResult.is_harness_error = true;
+          rawResult.cause = 'HARNESS_CONFIGURATION';
+          rawResult.failed = true;
+          rawResult.error_message = `Network request could not be classified: ${err.message}`;
+          return route.abort('blockedbyclient');
         }
         return route.continue();
       });
+
+      page = await context.newPage();
+      setupComplete = true;
 
       page.on('response', async (res) => {
         lastHttpStatus = res.status();
@@ -443,11 +497,13 @@ export class ScenarioRunner {
       // A probe that reported its own cause keeps it. Anything else — a
       // Playwright timeout, a failed assertion, a thrown navigation error —
       // is a product failure by default.
-      rawResult.cause = err.harnessCause || 'PRODUCT_BUG';
-      rawResult.is_harness_error = Boolean(err.isHarnessError);
+      rawResult.cause = err.harnessCause || (rawResult.is_harness_error ? rawResult.cause : !setupComplete ? 'HARNESS_ENVIRONMENT' : 'PRODUCT_BUG');
+      rawResult.is_harness_error = Boolean(err.isHarnessError || rawResult.is_harness_error || !setupComplete);
     } finally {
+      networkGuard?.beginClose();
       if (context) await context.close().catch(() => {});
       if (browser) await browser.close().catch(() => {});
+      await networkGuard?.close();
       rawResult.duration_ms = Date.now() - start;
     }
 

@@ -1,7 +1,7 @@
 ---
 name: release-harness-release-decider
-description: Aggregates release-harness-code-change-review and release-harness-test-coverage-audit results into a release readiness assessment. Computes a risk matrix across all change areas, generates a release notes draft (user-facing changelog), produces a pre-prod checklist (migrations, env vars, rollback plan), and delivers a Go/No-Go recommendation with supporting evidence. Use when asked to "release readiness", "go/no-go", "can we release", "pre-prod check", or "generate changelog".
-compatibility: Requires release-harness-code-change-review and release-harness-test-coverage-audit outputs. Python 3.8+ for risk scoring.
+description: Summarizes the deterministic release-harness verdict and review evidence into an advisory readiness report, release notes and rollback checklist. Never computes or overrides gate verdicts.
+compatibility: Requires an identified release-harness run; source-review outputs are optional. Uses host file tools, not a bundled risk-scoring script.
 allowed-tools:
   - Read
   - Grep
@@ -9,192 +9,77 @@ allowed-tools:
   - Bash
 ---
 
-## Purpose
+# Release Readiness Review
 
-Use this skill to turn review evidence into a release decision. It should not re-run every deep inspection from scratch; instead, it should aggregate outputs, score risk, and produce a decision package a release manager can use.
+The deterministic CLI is the sole verdict authority. This skill summarizes its
+result and documents operational blockers; it cannot certify a run, waive a
+failed scenario, or turn a risk score into PASS. No supporting scripts, templates
+or external workflow framework are required.
 
-## Input Aggregation
+## Establish The Evidence
 
-Load available artifacts from:
+1. Obtain the exact evidence root and run ID from the conductor. Read
+   `<root>/runs/<id>/verdict.json`, its sibling `run.manifest.json`, and sealed
+   files under `<root>/runs/<id>/evidence/`. Record source SHA, execution mode,
+   integrity, exit code, scenario summary and causes. Do not substitute an older
+   passing run.
+2. Ask the conductor to use the CLI's documented replay procedure when integrity
+   needs verification. Reading JSON alone does not verify its seal. Do not edit
+   evidence or claim a replay ran unless its output is available.
+3. Inspect retained structured observations for startup failures. Raw startup
+   logs may be omitted for secret safety. If no verdict exists, report its
+   absence and available diagnostics without inventing attribution.
+4. Load available source review, coverage, security, database and monitoring
+   reports from this assessment. Record their paths, source/run identities and
+   limitations. Missing or stale inputs are gaps, not success. Other toolkits'
+   reports are optional, not packaged prerequisites.
 
-- `release-harness-code-change-review`: change inventory and risk annotations
-- `release-harness-test-coverage-audit`: gap analysis and coverage percentages
-- `e2e-playwright-test` results, if available: pass rates, failing journeys, flaky tests
-- `ux-design-review` results, if available: release-facing UX issues
+## Readiness Rules
 
-If an expected input is missing, continue with partial data and explicitly note the confidence reduction.
+- Exit 0 with complete verified evidence and eligible clean-source execution
+  is the CLI's certification, not this skill's calculation. Report it verbatim.
+- Nonzero exit, invalid evidence, dirty development or missing verification
+  blocks a certified-release recommendation. Never offer CONDITIONAL GO to
+  bypass these conditions.
+- Exit 1: distinguish observed `PRODUCT_BUG` from missing approved fixtures.
+- Exit 2: retain underlying failures and unmet conditions; a dirty development
+  pass is not certification.
+- Exit 3: diagnose identified harness faults. `UNKNOWN` remains unresolved,
+  not authorization for speculative product edits.
+- Exit 4: preserve the entire run and investigate, not blind cleanup/resealing.
+- Even after CLI PASS, security, rollback, migration or owner approvals may
+  block deployment. State these as advisory operational blockers separately;
+  never rewrite the CLI verdict.
 
-## Risk Scoring
+## Risk Register And Checklist
 
-Run `scripts/risk-scorer.py` to build a normalized risk matrix.
+Build a qualitative table: area, observation, impact, likelihood, owner and
+action. Every row links to evidence. No numeric scoring algorithm or universal
+coverage threshold ships with this skill. Report only measured percentages,
+including scope and command, and distinguish hypotheses from observations.
 
-The scorer should evaluate at least these areas:
+Draft release notes from an approved local diff/log under Features, Fixes,
+Breaking Changes, Migration Steps and Known Limitations. Confirm the local
+baseline if ambiguous; do not fetch or invent commits.
 
-- backend
-- frontend
-- security
-- infra/config
+For each applicable deployment checklist item record an owner and evidence:
+migration/backup checks, environment variable names (never values), feature
+flags, artifact identity, rollout, rollback command/trigger, monitoring/on-call
+and post-deploy checks. Missing information is `requires-owner-input`, not a
+checked box. Deployment commands are proposals requiring separate authorization.
 
-Risk factors include:
+## Outputs
 
-- change magnitude
-- changed-code test coverage
-- breaking changes
-- security findings
-- dependency or config changes
+Use host file tools to write outside sealed runs and published documentation,
+for example under an agreed private assessment root's `results/<ts>/release/`:
 
-Interpret the aggregate result as:
+- `go-no-go.md`: exact CLI verdict/provenance, verification, advisory blockers,
+  evidence links, gaps and approvals.
+- `risk-matrix.md`: qualitative register, not a gate score.
+- `release-notes.md` and `preprod-checklist.md`: drafts for human review.
+- `fix-plan.json`: findings with `id`, `cause`, `evidence`, `finding`,
+  `affected_files`, and `proposed_change` for `release-harness-fix-planner`.
 
-- Low: `1-3`
-- Medium: `4-6`
-- High: `7-8`
-- Critical: `9-10`
-
-Include both the numeric score and the reasoning behind it.
-
-## Release Notes Generation
-
-Use `references/changelog-template.md`.
-
-Build a user-facing changelog by:
-
-1. parsing git log for conventional commits such as `feat:`, `fix:`, and `breaking:`
-2. grouping entries under:
-   - ✨ New Features
-   - 🐛 Bug Fixes
-   - 💥 Breaking Changes
-   - 🔧 Improvements
-3. falling back to diff-based summaries when conventional commits are absent
-4. adding migration notes for breaking changes
-
-Avoid internal-only wording when a user-facing explanation is possible.
-
-## Pre-Prod Checklist
-
-Use `references/release-checklist.md` as the master checklist.
-
-Minimum checklist topics:
-
-- database migrations ready and tested
-- new environment variables documented and set in staging
-- feature flags configured
-- rollback plan documented
-- monitoring and alerting updated
-- API documentation updated
-- cache invalidation evaluated
-- CDN or asset purge evaluated
-
-Auto-check items that can be verified programmatically. Leave uncertain items unchecked and explain the evidence needed.
-
-## Go/No-Go Recommendation
-
-Use these decision rules.
-
-### GO ✅
-
-Recommend **GO** when all are true:
-
-- overall risk is at most Medium
-- changed-code test coverage is at least 80% or equivalent strong evidence exists
-- no critical security findings remain
-- no untested breaking changes remain
-
-### CONDITIONAL GO ⚠️
-
-Recommend **CONDITIONAL GO** when release is plausible but dependent on explicit follow-up actions.
-
-Examples:
-
-- one or two high-risk gaps have a clear mitigation
-- docs or env var setup is incomplete but can be fixed before rollout
-- E2E failures are isolated and unrelated, but need owner sign-off
-
-List the exact actions required before release.
-
-### NO-GO ❌
-
-Recommend **NO-GO** when any of these hold:
-
-- critical risk score
-- major untested changes in sensitive paths
-- unresolved security findings
-- breaking changes without migration or rollback plan
-
-Support the recommendation with evidence from all loaded inputs.
-
-## Output
-
-Produce four deliverables.
-
-### 1. Release readiness report
-
-A markdown report containing:
-
-- executive summary
-- inputs loaded and confidence level
-- risk matrix by area
-- blocking findings
-- recommendation with rationale
-
-### 2. Release notes draft
-
-Markdown changelog suitable for user or stakeholder review.
-
-### 3. Completed pre-prod checklist
-
-Use checked items only when evidence exists.
-
-### 4. Aggregated `fix-plan.json`
-
-Merge actionable items from all source skills and deduplicate similar entries.
-
-Recommended entry shape:
-
-```json
-[
-  {
-    "id": "release-env-vars-staging",
-    "category": "release-readiness",
-    "severity": "high",
-    "summary": "Document and set new env vars in staging before pre-prod deployment",
-    "source": ["release-harness-code-change-review", "release-readiness"],
-    "blocking": true
-  }
-]
-```
-
-## Confidence Rules
-
-- Lower confidence when a required input is missing or stale.
-- Note when coverage numbers are inferred rather than measured.
-- Separate release blockers from post-release follow-ups.
-- Prefer evidence over intuition in the final recommendation.
-
-## Pipeline Contract
-
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
-
-### Required inputs
-
-- `results/<ts>/release/changes.json` from `release-harness-code-change-review`.
-- `results/<ts>/release/coverage.json` from `release-harness-test-coverage-audit`.
-- When available: `results/<ts>/e2e/headless/headless-report.json`, `results/<ts>/e2e/headed/headed-uat-report.json`, `results/<ts>/ux/fix-plan.json`.
-
-### Outputs this skill produces
-
-- **Artefacts:** none.
-- **Results:** `results/<ts>/release/risk-matrix.md`, `results/<ts>/release/release-notes.md`, `results/<ts>/release/preprod-checklist.md`, `results/<ts>/release/go-no-go.md`, appends to `results/<ts>/release/fix-plan.json`.
-
-### Hard rules
-
-- The Go / No-Go MUST cite at least one piece of evidence from each loaded input. Unsourced verdicts are not acceptable.
-- If a required input is missing, continue with partial data but explicitly mark the confidence reduction in `go-no-go.md`.
-- Release notes must be user-facing wording — no internal-only jargon.
-- **Worktree-only (no fetch, no remote).** Require `results/<ts>/release/baseline.json` to exist and `remote_used == false`. If either is missing or `remote_used == true`, halt and refuse to issue a Go/No-Go. Never re-derive the baseline by hitting a remote.
-- The pre-prod checklist MUST list the deploy commands the operator will run — it MUST NOT execute `git push`, `gh pr create`, `az repos pr create`, or any other remote-mutating command.
-
-### Gates
-
-- Never issue an unconditional GO when any `critical`-severity item from any source `fix-plan.json` is still open.
-- Refuse to issue GO without an explicit rollback plan recorded in `preprod-checklist.md`.
-- Refuse to issue GO if `baseline.json` is missing or `remote_used == true`.
+These are product-owned assessment outputs, not shipped support files. If the
+host cannot write files, return the content for the conductor to persist and
+report that limitation. No source mutation, commit, push, PR or deploy is implied.

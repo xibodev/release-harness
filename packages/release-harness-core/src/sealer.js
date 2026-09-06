@@ -76,10 +76,12 @@ export class EvidenceSealer {
   scanFiles() {
     const files = [];
     if (!fs.existsSync(this.evidenceDir)) return files;
+    if (!fs.lstatSync(this.evidenceDir).isDirectory()) throw new Error('Evidence root must be a regular directory, not a link');
 
     const walk = (dir) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+        if (entry.isSymbolicLink()) throw new Error('Symbolic links are forbidden in sealed evidence');
         if (entry.isDirectory()) {
           walk(full);
         } else if (entry.isFile()) {
@@ -148,6 +150,7 @@ export class EvidenceSealer {
 
     let manifest;
     try {
+      if (!fs.lstatSync(manifestPath).isFile()) throw new Error('Manifest must be a regular file');
       manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     } catch (err) {
       return { ok: false, error: `Invalid evidence.manifest.json: ${err.message}` };
@@ -157,7 +160,9 @@ export class EvidenceSealer {
       return { ok: false, error: 'evidence.manifest.json missing "files" array' };
     }
 
-    const currentFiles = this.scanFiles();
+    let currentFiles;
+    try { currentFiles = this.scanFiles(); }
+    catch (err) { return { ok: false, error: err.message }; }
     const currentMap = new Map(currentFiles.map((f) => [f.path, f]));
     const manifestMap = new Map(manifest.files.map((f) => [f.path, f]));
 
@@ -194,5 +199,18 @@ export class EvidenceSealer {
     const manifestSha256 = crypto.createHash('sha256').update(manifestContent).digest('hex');
 
     return { ok: true, manifest, manifestSha256 };
+  }
+
+  readVerifiedJson(relPath, manifest) {
+    const target = path.join(this.evidenceDir, relPath);
+    const entries = manifest.files.filter((f) => f.path === relPath);
+    if (entries.length !== 1 || !fs.lstatSync(target).isFile()) throw new Error(`${relPath} must be a regular manifest-covered file`);
+    const fd = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    try {
+      if (!fs.fstatSync(fd).isFile()) throw new Error(`${relPath} is not a regular file`);
+      const bytes = fs.readFileSync(fd);
+      if (bytes.length !== entries[0].bytes || crypto.createHash('sha256').update(bytes).digest('hex') !== entries[0].sha256) throw new Error(`${relPath} changed after integrity verification`);
+      return JSON.parse(bytes.toString('utf8'));
+    } finally { fs.closeSync(fd); }
   }
 }

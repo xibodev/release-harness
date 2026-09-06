@@ -7,7 +7,7 @@ description: >-
   empty-state messaging, focus rings, brand drift, contrast smell-test). Emits a
   per-screenshot scorecard plus fix-plan items for every failed check. Use when
   asked to "review the screenshots", "vision audit", "is the UI actually right",
-  or as the second pass inside headed-e2e.
+  or after a product-owned browser test captures screenshots.
 compatibility: Requires a multimodal model with image-input capability (Claude 3.5+, GPT-4V, Gemini 1.5+). Reads images via the host's vision tool (e.g. VS Code Copilot's view_image, Claude Code's image input).
 allowed-tools:
   - Read
@@ -19,18 +19,24 @@ allowed-tools:
 
 Use this skill to do what a human reviewer would do: open each screenshot, look at it, and write down what's wrong. Pixel-presence is not proof of UI quality. A test can be green and the screen can still be broken (empty state with no copy, primary CTA off-screen, modal stacking incorrectly, text overlapping a background image, focus ring invisible against a dark surface).
 
-This skill is the *only* place in the suite where the model is required to look at images. Every other skill describes what to capture; this one judges what was captured.
+This playbook requires actual image input. Its scores and pass/fail/unproven
+labels describe an advisory visual review only, never the deterministic harness
+verdict. A missing vision tool means unperformed checks, not inferred success.
 
 ## When To Use
 
-- After `headed-e2e` finishes a journey and the screenshot folder is populated.
-- After `full-site-crawler` finishes a route sweep.
-- After `ux-design-review` produces viewport captures.
+- After `release-harness run-local` or a project-owned browser test captures a journey.
+- After an explicitly configured optional browser/crawler integration supplies
+  screenshots and their expected states. No external capture agent is required.
 - As a manual gate when the operator says "look at the screenshots and tell me what's broken".
 
 ## Inputs
 
 Required:
+
+Keep review manifests, scorecards and reports under an agreed private assessment
+root outside sealed runs, the source repository and published documentation.
+Paths below are relative to that root; reference sealed images without modifying them.
 
 - A directory of PNG/JPEG screenshots, each with a deterministic filename like `<journey>_step<N>_<persona>_<viewport>_<browser>.png`.
 - A manifest JSON describing each screenshot's *intent*: what step it captures, what the operator should see, what the journey expected.
@@ -40,6 +46,7 @@ Required:
   "screenshots": [
     {
       "path": "results/2026-05-24_140230/e2e/headed/screenshots/checkout_step03_buyer_1440x900_chromium.png",
+      "origin_id": "buyer-web",
       "journey_id": "journey-checkout",
       "persona_id": "persona-buyer",
       "step_index": 3,
@@ -57,12 +64,12 @@ Required:
 
 If the manifest is missing, this skill MUST refuse to run — judging a screenshot without knowing what it should show is guessing.
 
-### External brand contract (REQUIRED)
+### Product Brand Expectations
 
 This skill loads an **external brand contract** — it does NOT infer brand
 identity from the screenshots or from any persona's opinion. The
 contract is supplied by the operator / project context (e.g.
-`docs/project/brand-contract.json`, referenced from the origin contract)
+an approved brand specification referenced by the review manifest)
 and declares, per origin, the identity that MUST and MUST NOT appear:
 
 ```json
@@ -93,6 +100,11 @@ and declares, per origin, the identity that MUST and MUST NOT appear:
   non-matching canary means vision grading is unreliable — the run is
   marked `unproven` (see Gates), not green.
 
+This inline JSON is a product-owned visual-review format, not the CLI's
+`brand-contract-v1.json` schema. If starting with a harness brand contract,
+derive a separate review index linking its declared expectations and assets;
+do not replace the CLI contract with this example or modify sealed evidence.
+
 If the brand contract is absent, this skill refuses to certify brand
 coherence: dimensions 10 (brand coherence) and the identity checks are
 recorded as `unproven` rather than `pass`.
@@ -111,7 +123,7 @@ Each screenshot is scored 0-100 across these dimensions. Anything below the per-
 | 6 | **Empty-state handling** | If a list/grid/table is empty, an explicit empty-state message is shown. No silent blank rectangles. | 85 |
 | 7 | **Focus ring presence** | If the screenshot was captured after a keyboard interaction (Tab, Enter), the focused element has a visible focus ring with adequate contrast against its background. | 85 |
 | 8 | **Modal/overlay stacking** | If a modal/drawer/toast is present, it sits above the page content with a visible scrim/backdrop and no z-index bleed. The underlying page is not interactive. | 90 |
-| 9 | **Contrast smell-test** | No obvious WCAG-violating text on background. (Coarse heuristic — the `ux-design-review` skill does the precise WCAG audit; this catches the egregious cases.) | 80 |
+| 9 | **Contrast smell-test** | No obvious low-contrast text. This visual heuristic is not a WCAG audit; precise ratios require computed foreground/background colors and separate accessible-name/keyboard checks. | 80 |
 | 10 | **Brand coherence** | The screenshot uses the project's documented color palette and typography. No system-default styling (browser default buttons, Times New Roman) leaking through. | 80 |
 | 11 | **Mobile gesture target sizing** (mobile viewports only) | Every interactive control's tap target is ≥ 44×44 px. No two interactive controls overlap. | 90 |
 | 12 | **Error/loading state correctness** | If the journey expected an error or loading state, the correct visual is shown (inline validation, toast, spinner with label). No silent failures or spinners-forever. | 90 |
@@ -204,35 +216,44 @@ For each screenshot in the manifest:
 - **No fabricated findings.** Every fix-plan item MUST reference a real screenshot path that exists on disk.
 - **Failures are not retried.** If a screenshot scores poorly, that's the verdict for this run. The fix lives in `fix-plan.json`, not in re-running this skill with different prompts.
 
-## Performance Considerations
+## Review Scope
 
-Vision analysis is slow (1-5 s per screenshot depending on model and image size). For runs with hundreds of screenshots:
-
-- Process serially. Parallel image input often degrades model accuracy.
-- Stream output to `summary.md` as each screenshot completes so progress is visible.
-- If the manifest exceeds 200 screenshots, ASK the operator whether to:
-  - analyze all (recommended for release gates),
-  - analyze failures + sampled 20% of passes (cheap mode),
-  - analyze only failures (fastest, but misses "green test, broken UI" cases).
-
-The orchestrator (`uat-runner` agent) controls the mode; this skill obeys.
+Agree the screenshot set with the operator before review. If only a sample is
+authorized, record the selection rule and every omission in `coverage.json`;
+label the review partial rather than claiming complete coverage. No coordinating
+agent is required. Use the host's file tool to persist progress if available.
 
 ## Failure Modes To Surface
 
-- **Manifest missing fields.** If `expected_assertions` is empty for a step, this skill cannot score dimension 5. Emit a `manifest-gap` fix-plan item for the journey-mapping skill to fix.
+- **Manifest missing fields.** If `expected_assertions` is empty, record a
+  `manifest-gap`. Derive expectations from approved scenarios or ask the product
+  owner to clarify intent before scoring dimension 5.
 - **Image unreadable.** Corrupted PNG, missing file, wrong format. Emit a `tooling-error` fix-plan item and continue.
 - **All screenshots passing / near-zero-interaction evidence is UNPROVEN, not green.** Suspiciously clean evidence — every screenshot passing all 12 dimensions, OR a manifest whose screenshots show near-zero interaction (no error state ever captured, no empty state, no focus sweep, no populated data, all frames on the same URL) — does NOT certify the UI. Mark the affected origin `verdict: "unproven"` in `coverage-by-origin.json`, add a `suspicious-evidence` fix-plan item, and require real interaction/state evidence before it can be graded green. Treat an all-pass with a failing/absent canary as `unproven` for the whole run.
-- **Synthetic and persona judgment is non-authoritative.** Assertions synthesized by `full-site-crawler` (page-metadata-derived) and any persona's stated preference are inputs, not authority. Brand identity is decided ONLY by the external brand contract; a screenshot cannot pass brand-identity checks because a synthetic assertion or persona "liked it".
+- **Synthetic and persona judgment is non-authoritative.** Automatically derived
+  page-metadata assertions and persona preferences are inputs, not authority.
+  Compare brand identity only with the product's approved brand contract.
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Only the deterministic CLI adjudicates;
+visual scores, `unproven` labels and recommendations here are advisory and never
+override its verdict. Image inspection requires a vision-capable host/tool;
+if unavailable, report the unperformed checks instead of inventing observations.
 
 ### Required input
 
-- A manifest JSON listing the screenshots to analyze, with `expected_assertions` and an `origin_id` per screenshot. Produced by `headed-e2e`, `full-site-crawler`, or `ux-design-review`.
+- A product-owned manifest listing screenshots, `expected_assertions` and
+  `origin_id`. The conductor may derive this review index outside sealed evidence
+  from the run's raw results, screenshot paths and declared scenarios. Unavailable
+  expectations are explicit gaps; external screenshot toolkits are optional.
 - The screenshot files themselves at the paths the manifest references.
-- An external **brand contract** (e.g. `docs/project/brand-contract.json`) declaring per-origin `required_identity`, `forbidden_identity`, and a deterministic `canary`. Without it, brand-identity checks are recorded `unproven`, not `pass`.
+- Product-owned brand expectations and a reference canary in the review format
+  above. Without them, brand checks are recorded `unproven`, not `pass`.
 
 ### Outputs this skill produces
 
@@ -252,6 +273,9 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 ### Gates
 
 - Mark an origin/run `unproven` (do NOT report green) when the brand-contract canary result disagrees with its `expected_verdict`, or when evidence is suspiciously all-pass / near-zero-interaction. Emit a `suspicious-evidence` / `canary-mismatch` fix-plan item.
-- Fail the run for any origin whose screenshots show a `forbidden_identity` element or omit a `required_identity` element from the brand contract.
-- Stop and warn if more than 30% of analyzed screenshots fail dimension 5 (journey-intent match). That indicates the journey itself is misaligned with reality, not a UI regression. Hand back to `journey-mapping`.
+- Record an advisory blocking finding for forbidden/missing brand identity;
+  never alter the deterministic run verdict based on visual judgment.
+- If more than 30% of analyzed screenshots fail dimension 5, pause and compare
+  the manifest with approved scenarios and actual captures. Diagnose whether
+  intent, capture timing or product behavior is wrong; do not assume the cause.
 - Stop and warn if dimension 1 (visual integrity) fails on more than 10% of screenshots. That indicates the UAT environment is unstable (resource starvation, missing assets) and analysis is unreliable.
