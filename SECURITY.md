@@ -40,8 +40,9 @@ rather than editing or resealing it to obtain a different verdict.
 
 ## Browser Network Boundary
 
-The destination-filtering proxy behavior described here is **unreleased**; do not
-assume these transport protections from npm `1.2.0`. See [CHANGELOG.md](CHANGELOG.md).
+The destination-filtering proxy behavior described here is part of **2.0.0
+(Unreleased)**, not yet published; do not assume these transport protections from
+npm `1.2.0`. See [CHANGELOG.md](CHANGELOG.md).
 
 In sealed mode, harness-managed Chromium HTTP and WebSocket traffic uses a
 destination-filtering proxy. HTTPS/WSS tunnels are checked by destination host,

@@ -75,7 +75,7 @@ console.log(`  • Version: ${versionOut}`);
 // Asserted against the published package version, not a literal: the defect this
 // catches is a bumped package.json with a stale HARNESS_VERSION, which would seal
 // the wrong engine version into every run manifest.
-assert.ok(versionOut.includes(corePkgVersion), `Version must report the published core version ${corePkgVersion} (got "${versionOut}")`);
+assert.strictEqual(versionOut, `@xibodev/release-harness v${corePkgVersion}`, 'Installed CLI must report the exact core version');
 
 // 4b. Help test
 const helpOut = execSync(`${npxCmd} release-harness --help`, { cwd: consumerRepoDir, encoding: 'utf8' });

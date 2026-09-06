@@ -20,8 +20,9 @@ tests for changed behavior. For suspected vulnerabilities, follow
 
 ## Setup And Validation
 
-Use Node.js 20 and npm for the CI-tested baseline. Package metadata currently
-declares Node.js `>=18`; do not infer a tested support matrix from that range.
+Use Node.js 20 and npm for the CI-tested baseline. The unreleased 2.0.0 packages
+require Node.js `>=20`; published 1.2.0 metadata declared `>=18`. Do not infer a
+tested support matrix for every newer runtime from the open-ended engine range.
 
 The full gate requires Git, Docker with Compose and a running daemon, Playwright
 Chromium with its OS dependencies, `tar` on PATH, and OpenSSL 1.1.1 or newer.
@@ -44,7 +45,7 @@ The independent consumer test installs packed tarballs and the Chromium version
 matching its freshly resolved Playwright dependency, so allow npm/browser download
 access and enough temporary disk space.
 
-`npm test` runs schemas, core regressions, neutral fixtures, smoke acceptance, and
+`npm test` runs release metadata checks, docs, schemas, core regressions, neutral fixtures, smoke acceptance, and
 fresh-package installability. For focused feedback, run `npm run test:schemas`,
 `test:core`, `test:neutral`, `test:smoke`, or `test:install`; passing a subset is not
 the full gate. Report commands run, failures, and skipped coverage in your PR.
