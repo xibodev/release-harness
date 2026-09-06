@@ -6,7 +6,9 @@ allowed-tools: [Read, Grep, Glob, Write]
 
 # Scenario Compiler
 
-Compiles user journeys into deterministic JSON/YAML scenarios for Release-Harness.
+Compiles user journeys into declarative JSON scenarios for Release-Harness.
+Use existing requirements and confirmed flows; no prescribed product-document
+filenames or external journey-mapping tool are required.
 
 ## Scenario Schema Verbs
 - `navigate`: `{ "action": "navigate", "target": "/path" }`
@@ -105,26 +107,29 @@ must implement and review; it is not a bundled skill support file.
 }
 ```
 
-The harness runs the command from the materialized workspace with no shell in
-between, compares the exit code to `expect_exit_code`, and seals stdout and
+The harness runs the command from the materialized workspace with `shell: false`,
+compares the exit code to `expect_exit_code` (default 0), and seals stdout and
 stderr as evidence under `evidence/probes/`. `params.timeoutMs` overrides the
 60-second default. The harness holds no opinion about what the command checks --
-that judgment is yours.
+that judgment is yours. `shell: false` is not a sandbox: the process can access
+the host filesystem and network with its inherited permissions. Inspect the
+command, arguments and output for safety before authorizing execution.
 
-**The exit code is the whole verdict.** There is no `expect_stdout_contains`:
+**The exit-code comparison decides the probe assertion.** There is no `expect_stdout_contains`:
 stdout and stderr are captured as evidence for a human to read, never matched
 against. Every condition you care about must be expressed as an exit code by
 your own script.
 
 **Rules for custom probes:**
 
-- **Commit the script.** The command must live in the repository at the
-  declared path. A command generated at run time would let the thing being
-  certified author its own assertion, which is the one thing certification
-  cannot allow.
-- **Exit 0 means the assertion held.** Any other exit code fails the scenario as
-  a product failure. Write diagnostics to stderr -- they are captured in
-  evidence and shown to the operator.
+- **Prefer a reviewed, versioned project script.** Commit it only with approval
+  so the assertion can be reviewed independently of the output being tested.
+  Repository containment is a recommendation, not an enforced command boundary;
+  the harness can also execute an installed command or absolute path.
+- **Choose the expected exit code explicitly.** A matching `expect_exit_code`
+  passes the probe assertion; a mismatch fails it. Startup or timeout errors
+  require harness diagnostics, not an assumed product defect. Keep stdout and
+  stderr secret-safe because they are retained as evidence.
 - **Assert the deliverable, not the mechanism.** Check that the `.mp4` is valid
   H.264 of the expected duration, not that ffmpeg was invoked. A probe that
   asserts a tool ran certifies nothing about what it produced.

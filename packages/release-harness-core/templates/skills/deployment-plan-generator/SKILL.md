@@ -1,6 +1,6 @@
 ---
 name: release-harness-deployment-plan-generator
-description: Generates a release-ready Deployment Plan, Rollback Procedure, and Post-Deployment Verification document, populated with project-specific signals (services, migrations, env vars, feature flags, owners). Inspired by the Production Ready Checklist's Deployment + Templates sections. Output is human-editable Markdown that a release manager can use as-is. Use when asked to "generate deployment plan", "draft rollback procedure", "write post-deploy verification", or as part of release-readiness.
+description: Drafts deployment, rollback and post-deployment verification plans from project-specific services, migrations, configuration and owners. All commands and thresholds require review; this playbook does not deploy. Use for deployment planning and readiness review.
 compatibility: Works with any source repo. Reads release-harness-code-change-review, release-harness-database-readiness-audit, and release-harness-monitoring-audit outputs if present.
 allowed-tools:
   - Read
@@ -11,19 +11,22 @@ allowed-tools:
 
 ## Purpose
 
-Most releases fail in execution, not in code. This skill produces the operational documents that make release execution boring — which is the goal.
+Draft concrete deployment and recovery steps from the product's actual tooling.
+All report paths below are relative to an agreed private assessment root outside
+sealed runs, the source repository and published documentation. Resolve missing
+inputs from source and the owner, not an assumed external agent or workflow.
 
 ## Required inputs
 
-- `./.quality-run/results/<ts>/release/changes.json` from `release-harness-code-change-review` (preferred). If absent, derive a minimal change list from the git baseline.
-- Optional: `./.quality-run/results/<ts>/database/database-report.md` for migration hooks.
-- Optional: `./.quality-run/results/<ts>/monitoring/monitoring-report.md` for verification steps.
+- `results/<ts>/release/changes.json` from `release-harness-code-change-review` (preferred). If absent, derive a minimal change list from an approved local git baseline.
+- Optional: `results/<ts>/database/database-report.md` for migration hooks.
+- Optional: `results/<ts>/monitoring/monitoring-report.md` for verification steps.
 
 ## What it produces
 
 ### 1. Deployment Plan
 
-Generate `./.quality-run/results/<ts>/release/deployment-plan.md` using the structure below, populated with the project's actual values:
+Generate `results/<ts>/release/deployment-plan.md` using the structure below, populated with the project's actual values:
 
 ```markdown
 # Deployment Plan — <release-name or date>
@@ -31,7 +34,7 @@ Generate `./.quality-run/results/<ts>/release/deployment-plan.md` using the stru
 ## Deployment Information
 - **Deployment Window:** <suggest a low-traffic window if telemetry hints exist, otherwise leave placeholder>
 - **Expected Duration:** <estimate from change scope: small / medium / large>
-- **Risk Level:** <derived from release-readiness risk matrix if present, else medium>
+- **Risk Level:** <evidence-linked qualitative assessment, or requires-owner-input>
 - **Strategy:** <blue-green | canary | rolling | recreate — chosen from infra signals>
 
 ## What's Being Deployed
@@ -54,7 +57,7 @@ Generate `./.quality-run/results/<ts>/release/deployment-plan.md` using the stru
 3. Deploy app via `<pipeline>` to `<environment>`.
 4. Toggle feature flags `<flag-list>` if applicable.
 5. Validate health endpoints (`<endpoint-list>`) return 200.
-6. Run smoke check journey from journey-mapping (if present).
+6. Run the approved product smoke command against the verified target, covering critical user flows.
 
 ## Verification
 - See post-deploy-verification.md.
@@ -67,7 +70,7 @@ Generate `./.quality-run/results/<ts>/release/deployment-plan.md` using the stru
 
 ### 2. Rollback Procedure
 
-Generate `./.quality-run/results/<ts>/release/rollback-procedure.md`:
+Generate `results/<ts>/release/rollback-procedure.md`:
 
 ```markdown
 # Rollback Procedure — <release-name>
@@ -75,14 +78,14 @@ Generate `./.quality-run/results/<ts>/release/rollback-procedure.md`:
 ## When to Rollback
 - Error rate exceeds <threshold-from-monitoring-audit-or-default-1%> for > 5 minutes.
 - p95 latency regresses by > 50% vs baseline.
-- A critical user journey from journey-mapping fails health checks.
+- An approved critical product flow fails its documented acceptance checks.
 - Manual trigger by on-call engineer.
 
 ## Pre-Rollback
 - [ ] Alert the on-call channel.
 - [ ] Notify stakeholders.
 - [ ] Capture the failing state (logs, screenshots, dashboards) before reverting.
-- [ ] Confirm approval (one-person rule unless documented otherwise).
+- [ ] Confirm approval under the product's deployment authorization policy.
 
 ## Rollback Steps
 <derived per deployment strategy:>
@@ -105,13 +108,13 @@ Generate `./.quality-run/results/<ts>/release/rollback-procedure.md`:
 
 ### 3. Post-Deployment Verification
 
-Generate `./.quality-run/results/<ts>/release/post-deploy-verification.md`:
+Generate `results/<ts>/release/post-deploy-verification.md`:
 
 ```markdown
 # Post-Deployment Verification — <release-name>
 
 ## Date: <iso-date>
-## Deployed By: <git author of release tag, else placeholder>
+## Deployed By: <verified deployment actor, else requires-owner-input>
 ## Version: <release tag>
 
 ## Infrastructure Checks
@@ -124,7 +127,7 @@ Generate `./.quality-run/results/<ts>/release/post-deploy-verification.md`:
 ## Application Checks
 - [ ] Landing page loads (HTTP 200, no console errors).
 - [ ] Authentication flow completes for a test user.
-- [ ] Each critical journey from journeys.json executes end-to-end.
+- [ ] Each approved critical product flow executes end-to-end on the authorized target.
 - [ ] APIs respond with expected schema (spot-check 3 endpoints).
 - [ ] Logs show no unusual error patterns in the first 10 minutes.
 
@@ -154,7 +157,11 @@ Generate `./.quality-run/results/<ts>/release/post-deploy-verification.md`:
 
 - Always emit all three documents, even when sections must be marked `TODO` because the source repo did not provide signals. An empty checkbox is more useful than a missing document.
 - Never silently invent SLA thresholds. If no SLA is documented, mark the threshold as a default with a note.
-- Cross-reference outputs from `release-harness-monitoring-audit`, `release-harness-database-readiness-audit`, `release-harness-code-change-review`, and `journey-mapping` when present. Do not duplicate findings — link them.
+- Cross-reference available `release-harness-monitoring-audit`,
+  `release-harness-database-readiness-audit` and `release-harness-code-change-review`
+  findings, plus approved product scenarios. Link findings rather than duplicating
+  them. A local harness PASS is not proof of a live deployment; live-target checks
+  need separately reviewed product commands and authorization.
 - Never include real secrets, env values, or credentials in the generated documents. Use placeholders.
 
 ## Gates
@@ -164,16 +171,16 @@ Generate `./.quality-run/results/<ts>/release/post-deploy-verification.md`:
 
 ## Output (machine-readable companion)
 
-- `./.quality-run/results/<ts>/release/deployment-plan.md`
-- `./.quality-run/results/<ts>/release/rollback-procedure.md`
-- `./.quality-run/results/<ts>/release/post-deploy-verification.md`
-- Optional: `./.quality-run/results/<ts>/release/fix-plan.json` (appends items for gaps surfaced during generation).
+- `results/<ts>/release/deployment-plan.md`
+- `results/<ts>/release/rollback-procedure.md`
+- `results/<ts>/release/post-deploy-verification.md`
+- Optional: `results/<ts>/release/fix-plan.json` (appends items for gaps surfaced during generation).
 
 ## Pipeline Contract
 
 This playbook is self-contained. Paths below are product-owned assessment inputs
-and outputs under an agreed root (for example `./.quality-run/`), outside this
-skill and sealed runs. Use host file tools to record evidence-linked proposals.
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record evidence-linked proposals.
 Missing tools/inputs are gaps, not passes. Deployment commands are draft plans,
 not permission to execute them. Only the deterministic CLI adjudicates;
 readiness recommendations cannot override its verdict.
@@ -188,7 +195,8 @@ readiness recommendations cannot override its verdict.
 - Always emit all three documents — `TODO` placeholders are better than missing files.
 - Never invent SLA thresholds; mark defaults explicitly.
 - Never include real secrets / env values / credentials in generated documents. Use placeholders.
-- Cross-reference (not duplicate) findings from `release-harness-monitoring-audit`, `release-harness-database-readiness-audit`, `release-harness-code-change-review`, and `journey-mapping`.
+- Cross-reference available audit findings and approved product scenarios;
+  external journey tools and report formats are optional integrations only.
 
 ### Gates
 

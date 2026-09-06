@@ -29,9 +29,9 @@ Do not infer or override its outcome.
 
 ## Write
 
-Choose a new note outside sealed runs. A suggested product-owned output is
-`./.quality-run/session/<timestamp>/handoff.md`; choose an agreed external root
-if repository immutability is required. Never overwrite another person's note
+Choose a new note in an agreed private location outside sealed runs, the source
+repository and published documentation, for example
+`<assessment-root>/session/<timestamp>/handoff.md`. Never overwrite another person's note
 or shared pointer without authorization. Use these inline headings:
 
 ```markdown

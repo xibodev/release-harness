@@ -11,7 +11,10 @@ allowed-tools:
 
 ## Purpose
 
-Use this skill to build a release-focused diff review rather than a line-by-line code critique. The goal is to explain what changed, what could break, what needs follow-up, and what should block a pre-projection rollout.
+Use this skill to build a release-focused diff review rather than a line-by-line code critique. Explain what changed, what could break and what needs follow-up before a production rollout.
+
+All report paths below are relative to an agreed private assessment root outside
+sealed runs, the source repository and published documentation.
 
 ## Baseline Detection
 
@@ -220,7 +223,7 @@ Recommended shape:
 - Exclude generated output unless it signals a dependency or build change.
 - Treat monorepo shared packages as fan-out risk.
 - Flag new env vars without defaults as deployment blockers.
-- Flag migrations that assume data shape already changed in projection.
+- Flag migrations that assume data shape already changed in production.
 
 ## Gotchas
 
@@ -233,8 +236,8 @@ Recommended shape:
 ## Pipeline Contract
 
 This playbook is self-contained. Paths below are product-owned assessment inputs
-and outputs under an agreed root (for example `./.quality-run/`), outside this
-skill and sealed runs. Use host file tools to record findings with `id`,
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record findings with `id`,
 `severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
 Missing tools/inputs are gaps, not passes. Do not install tools or mutate
 source/remotes without approval. Only the deterministic CLI adjudicates;
@@ -248,7 +251,8 @@ audit findings and readiness recommendations cannot override its verdict.
 ### Hard rules
 
 - Baseline = newest meaningful release tag. If no tag exists, ASK the operator for an explicit baseline (tag, branch, SHA, or date window). Do not guess.
-- Record the chosen baseline in the report so `release-harness-test-coverage-audit` and `release-readiness` can reuse it.
+- Record the chosen baseline in the report so `release-harness-test-coverage-audit`
+  and `release-harness-release-decider` can reuse it.
 - Categorize every changed file into exactly one primary bucket (backend / frontend / config / tests / docs).
 - **Worktree-only (no fetch, no remote).** Resolve the approved baseline to a
   local SHA/tag/branch. If unavailable or ambiguous, stop and ask rather than

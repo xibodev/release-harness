@@ -153,18 +153,21 @@ try {
     '.copilot/agents/release-conductor.md', '.github/agents/release-conductor.agent.md',
     'packages/release-harness-core/templates/agents/release-conductor.agent.md',
   ]) assert.equal(body(path.join(repoDir, file)), canonical, `${file}: body must match canonical protocol`);
-  for (const relative of ['README.md', 'docs/index.html', 'docs/docs.html', 'packages/release-harness-core/templates/AI-ADOPTION.md']) {
-    const text = fs.readFileSync(path.join(repoDir, relative), 'utf8');
-    assert.ok(text.includes('skills list'), relative);
-    assert.ok(text.includes('release-harness-project-cartographer'), relative);
-    assert.ok(text.includes('release-harness-scenario-compiler'), relative);
-    assert.ok(text.includes('release-harness-fix-planner'), relative);
-    assert.ok(text.includes('release-harness-fix-executor'), relative);
-    assert.match(text, /UNKNOWN/, relative);
-    assert.match(text, /preserve/i, relative);
-    assert.match(text, /playbooks/i, relative);
-    assert.match(text, /(?:logs may be omitted|may omit raw logs|may be retained without raw logs)/i, relative);
-    assert.doesNotMatch(text, /Clean corrupted workspace|Clean workspace and re-run|Clean the run directory with/, relative);
+  const adoption = fs.readFileSync(path.join(coreDir, 'templates/AI-ADOPTION.md'), 'utf8');
+  for (const name of ['project-cartographer', 'scenario-compiler', 'fix-planner', 'fix-executor']) {
+    assert.ok(adoption.includes(`release-harness-${name}`), `AI adoption must describe ${name}`);
+  }
+  assert.match(adoption, /skills list/);
+  assert.match(adoption, /playbooks/i);
+  assert.match(adoption, /diff[\s\S]*approval/i);
+  assert.match(adoption, /UNKNOWN[\s\S]*unresolved/i);
+  assert.match(adoption, /EVIDENCE_INVALID[^\n]*preserve/i);
+  assert.match(adoption, /logs may be omitted/i);
+  assert.match(adoption, /not container-wide[\s\S]*isolation/i);
+  assert.doesNotMatch(adoption, /Clean corrupted workspace|Clean workspace and re-run|Clean the run directory with/);
+  const readme = fs.readFileSync(path.join(repoDir, 'README.md'), 'utf8');
+  for (const target of ['packages/release-harness-core/templates/AI-ADOPTION.md', 'SECURITY.md', 'CONTRIBUTING.md']) {
+    assert.ok(readme.includes(`](${target})`), `README must link to ${target}`);
   }
   console.log('PASS self-contained remediation skills and tracked conductor body parity');
 } finally {

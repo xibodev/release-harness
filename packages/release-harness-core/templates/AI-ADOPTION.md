@@ -1,5 +1,11 @@
 # Adopting Release-Harness
 
+AI assistance is optional. The CLI can be used directly without agent scaffolding
+or a separate operating model. Use the playbooks that fit your product; no fixed
+set of product briefs, persona documents, backlog files or external agents is
+required. Existing requirements, source code and confirmed user journeys are
+valid inputs.
+
 This is the standard integration protocol for AI coding agents. Contracts are
 generated review artifacts: skills derive them from source, the human reviews
 their diff, and the deterministic CLI executes and adjudicates them. Neither a
@@ -79,7 +85,15 @@ with available tools; do not claim a missing host tool was invoked.
 
 ## Evidence And Cause-Based Triage
 
-Choose an external evidence root to keep outputs out of the source repository.
+Choose an agreed private external evidence root to keep outputs out of the source
+repository and published documentation. Keep assessment reports, execution plans
+and session handoffs in an agreed private location outside sealed runs as well.
+Example `results/<ts>/...` paths in playbooks are relative to that assessment
+root, not a required public documentation tree. Review any material separately
+before publishing it; a hidden or gitignored directory alone is not a privacy
+boundary. These assessment formats are agent notes, not CLI configuration or
+automatically ingested evidence.
+
 For `--evidence-dir <root>` and run ID `<id>`, read
 `<root>/runs/<id>/verdict.json`, `<root>/runs/<id>/run.manifest.json`, and sealed
 files under `<root>/runs/<id>/evidence/`, including its `evidence.manifest.json`.

@@ -20,7 +20,10 @@ allowed-tools:
 
 # Data Seeding for UAT
 
-Empty databases lie. An app with zero users, zero projects, and zero history looks deceptively healthy — pagination, search, filtering, empty states, foreign keys, and N+1 hotspots all stay hidden until there is real volume in the system. This skill makes the UAT environment feel inhabited so the rest of the gate (journeys, crawler, vision) can actually find what users will find.
+An empty database can hide pagination, search, filtering, foreign-key and N+1 defects. Seed realistic synthetic data so product journeys and optional screenshot review can exercise those cases.
+
+All assessment paths below are relative to an agreed private assessment root
+outside sealed runs, the source repository and published documentation.
 
 ## When to run
 
@@ -42,11 +45,16 @@ Empty databases lie. An app with zero users, zero projects, and zero history loo
 - **Use the system's own seed path.** Never bypass validation, hashing or event
   hooks with direct DB writes. If no seed entrypoint exists, propose one for
   review and stop before mutation.
-- **No fabricated metric values, PII, or copyrighted content.** Use `Faker` with a fixed seed for determinism. Names, emails, addresses, company names, project names, descriptions — all synthesized, none scraped from real datasets.
-- **No external network calls.** Faker locally only. No `unsplash.com` / `picsum.photos` / `loremflickr.com` image fetches — use bundled placeholders or generate solid-color SVGs. The sealed network would block them anyway, but failing seed runs are noise.
+- **Synthetic fixtures only.** Use the project's existing deterministic fixture
+  generator; Faker is an optional separately installed integration, not a
+  prerequisite. Do not import real PII or present synthetic values as business metrics.
+- **No external network calls.** Use bundled placeholders or locally generated
+  SVGs instead of remote images. Verify container isolation; browser policy
+  alone cannot prevent a seed process from reaching external services.
 - **Idempotent.** Use the project's documented repeat-safe behavior; do not
   assume it supports `--mode` or authorize data deletion by default.
-- **Deterministic.** Same `--seed N` value → same generated dataset. Required for reproducing bugs.
+- **Deterministic.** Use the project's supported fixed-seed mechanism and record
+  the value. Do not assume its entrypoint accepts `--seed N`.
 - **No real credentials, no real tokens, no real API keys.** Every secret-shaped field gets a clearly fake value (`uat-token-<uuid>`, `sk_test_uat_<hash>`).
 
 ## Step 1 — System detection
@@ -103,9 +111,13 @@ Persist `results/<ts>/seed/entities.json`.
 
 ## Step 3 — Volume plan
 
-Sizing depends on the system's *category* and the persona variant count. Read `artefacts/personas.json` to know how many persona instances need to be backed by real seeded users.
+Sizing depends on the system's category and tested roles. Derive the required
+users from product stories and scenario fixtures; an existing persona file is
+optional input, not a prerequisite.
 
-Default volume tables (override via wizard Q `seed-scale` recorded in `run-config.json`: `minimal | realistic (default) | dense`):
+Choose `minimal`, `realistic` or `dense` with the operator based on scenario needs
+and local resource limits. The tables below are examples, not CLI settings.
+Record approved quantities in the assessment's `seed/volume-plan.json`.
 
 ### Generic SaaS (multi-tenant)
 
@@ -221,7 +233,9 @@ For each persona instance:
 }
 ```
 
-Passwords go to `results/<ts>/seed/.env.passwords` (gitignored; written as `UAT_PASSWORD_<key>=<value>` lines). Never echo the raw passwords in any other report file.
+Synthetic local passwords go to the private assessment's `results/<ts>/seed/.env.passwords`
+(written as `UAT_PASSWORD_<key>=<value>` lines). Restrict access; gitignore alone
+does not protect a file from publication. Never echo passwords in other reports.
 
 ## Step 6 — Seed execution
 
@@ -237,9 +251,13 @@ Passwords go to `results/<ts>/seed/.env.passwords` (gitignored; written as `UAT_
    ```
 
    ```powershell
-   # From host
-   docker compose -f docker-compose.test.yml exec -T app sh -c "bundle exec rails runner tmp/uat-seed/run.rb" > seed.log 2>&1
+   # From host: PRIVATE_ASSESSMENT_ROOT must be an approved directory outside the checkout.
+   $seedLog = Join-Path $env:PRIVATE_ASSESSMENT_ROOT 'seed.log'
+   docker compose -f docker-compose.test.yml exec -T app sh -c "bundle exec rails runner tmp/uat-seed/run.rb" > $seedLog 2>&1
    ```
+
+   Restrict raw log access. Retain only reviewed, secret-safe diagnostics in the
+   assessment report; do not add raw seed logs to the product repository.
 
 4. Verify by counting rows for each top-level entity:
 
@@ -259,7 +277,7 @@ Write to `results/<ts>/seed/`:
 - `edge-cases.json` — edge-case coverage per entity.
 - `persona-bindings.json` — persona instance → seeded user mapping.
 - `.env.passwords` — UAT_PASSWORD_* env vars (gitignored).
-- `seed.log` — stdout/stderr of the seed invocation.
+- `seed.log` — secret-safe diagnostics of the seed invocation only.
 - `verification.json` — row counts after seeding.
 - `seed.json` — top-level summary: `{ran: true, scale: "realistic", entities_seeded: 12, rows_total: 1247, persona_instances_bound: 8, duration_seconds: 14.2}`.
 - `fix-plan.json` — any findings (categories: `missing-seed-entrypoint`, `seed-row-count-mismatch`, `unicode-column-rejected`, `pagination-boundary-undetectable`, `persona-binding-unfulfilled`).

@@ -45,8 +45,9 @@ This skill is self-contained and requires no scripts or external pipeline files.
 
 ## Plan And Approval
 
-Create `execution-plan.json` in an agreed writable location outside the sealed
-run (the calling agent may write it using its available file tool). Keep only
+Create `execution-plan.json` in an agreed private writable location outside sealed
+runs and published documentation. This is an agent review note, not CLI config
+(the calling agent may write it using its available file tool). Keep only
 evidence-backed items; sort dependencies before dependents. Each item records:
 
 ```json

@@ -1,6 +1,6 @@
 ---
 name: release-harness-performance-audit
-description: Server-side performance audit covering database query patterns (N+1, missing indexes), caching strategy, API response time SLAs, code hotspots, and load-test readiness. Complements ux-design-review (which handles client-side Core Web Vitals). Inspired by the Production Ready Checklist's Performance section. Produces a fix-plan compatible with the suite's consolidator. Use when asked to "performance audit", "find N+1 queries", "check caching", "validate response SLAs", or before a release.
+description: Reviews database query patterns, caching, API response objectives, code hotspots, frontend bundle configuration and load-test readiness. Produces evidence-linked findings for human review and release-harness-fix-planner. Measurements require separately authorized local tooling.
 compatibility: Works with any source repo. Optional load probes `autocannon`, `k6`, `wrk`; ORM-specific log inspection if the app is running.
 allowed-tools:
   - Read
@@ -11,7 +11,10 @@ allowed-tools:
 
 ## Purpose
 
-Find the performance issues that actually matter at projection scale — backend hotspots, query patterns, missing caches, and missing SLAs — and produce a fix-plan, not vague advice.
+Review performance risks at the product's intended production scale: backend
+hotspots, queries, caches and response objectives. Distinguish measured results
+from source-level hypotheses. All report paths below are relative to an agreed
+private assessment root outside sealed runs, source and published documentation.
 
 ## Audit areas
 
@@ -21,7 +24,7 @@ Find the performance issues that actually matter at projection scale — backend
 - N+1 heuristic: for every model relationship used inside a `for`/`forEach`/`map` loop, flag if there's no `include`/`select_related`/`prefetch_related`/`eager` modifier on the originating query.
 - Missing indexes: parse migration files; for every column referenced in a `WHERE` / `ORDER BY` of a discovered query, check whether an index is declared.
 - Connection pooling: look for pool size config. Flag pools sized below CPU cores or unlimited.
-- Query timeouts: look for `statement_timeout`, `lock_timeout`, ORM-level `maxQueryExecutionTime`. Flag if missing in projection config.
+- Query timeouts: look for `statement_timeout`, `lock_timeout`, ORM-level `maxQueryExecutionTime`. Flag if missing in production config.
 
 ### 2. Caching strategy
 
@@ -47,24 +50,29 @@ Find the performance issues that actually matter at projection scale — backend
 - String concatenation in hot loops in older languages (Java/.NET): flag `String +=` inside loops; recommend `StringBuilder`.
 - Identify large dependencies that are imported but barely used (`lodash` whole-package import when 2 helpers are needed, full `moment` when `date-fns` slice would do).
 
-### 5. Frontend bundle (cross-check with ux-design-review)
+### 5. Frontend bundle
 
 - If a bundler config exists (`webpack`, `vite`, `next.config`, `rollup`), inspect for:
   - missing code splitting on heavy routes,
   - missing `dynamic`/`React.lazy` on heavy components,
   - inclusion of polyfills that target legacy browsers no longer required.
-- Do not duplicate ux-design-review's CWV findings; reference them.
+- If the product supplies a Core Web Vitals report, record its tool, target and
+  measurement scope and link relevant findings. That report is optional; source
+  inspection alone cannot measure Core Web Vitals or certify frontend performance.
 
 ### 6. Load test readiness
 
 - Check whether a load-test config/script exists (`k6/`, `loadtest/`, `bench/`, `*.k6.js`, `Jmeter*.jmx`).
-- If `autocannon`/`k6`/`wrk` is installed AND a local app is running on a known port, optionally run a 30-second smoke probe against the busiest read endpoint. Otherwise emit a fix-plan item recommending the addition of a baseline load test.
+- With an installed load tool and an explicitly authorized, verified disposable
+  local target, propose a bounded read-only smoke workload and duration. Follow
+  the target-isolation rules below before execution. Otherwise record the missing
+  prerequisite and recommend a project-owned baseline test.
 
 ## Output
 
-- `./.quality-run/results/<ts>/performance/performance-report.md`
-- `./.quality-run/results/<ts>/performance/findings.json`
-- `./.quality-run/results/<ts>/performance/fix-plan.json`
+- `results/<ts>/performance/performance-report.md`
+- `results/<ts>/performance/findings.json`
+- `results/<ts>/performance/fix-plan.json`
 
 ### Fix-plan conventions
 
@@ -78,7 +86,8 @@ Find the performance issues that actually matter at projection scale — backend
 ## Hard rules
 
 - Heuristics only — never claim a number unless you measured it. Use language like "likely N+1" until verified.
-- Do not actually run load tests that would touch projection hosts. Localhost / staging only.
+- Never run load tests against production or live staging; only authorized
+  disposable local targets are in scope for this playbook.
 - If the running app or DB is unreachable, mark dynamic checks as `skipped:environment` instead of fabricating results.
 
 ## Gates
@@ -89,8 +98,8 @@ Find the performance issues that actually matter at projection scale — backend
 ## Pipeline Contract
 
 This playbook is self-contained. Paths below are product-owned assessment inputs
-and outputs under an agreed root (for example `./.quality-run/`), outside this
-skill and sealed runs. Use host file tools to record findings with `id`,
+and outputs under the agreed private assessment root, outside this skill,
+sealed runs and published documentation. Use host file tools to record findings with `id`,
 `severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
 Missing tools/inputs are gaps, not passes. Do not install tools or mutate
 source/remotes without approval. Only the deterministic CLI adjudicates;
@@ -104,7 +113,7 @@ audit findings and readiness recommendations cannot override its verdict.
 ### Hard rules
 
 - Heuristics only; never report a number you didn't measure.
-- Never run load tests against projection hosts. Local/staging only.
+- Never run load tests against production or live staging. Disposable local only.
 - Mark dynamic checks `skipped:environment` if the app/DB isn't reachable.
 - Run dynamic probes only against an explicitly authorized disposable local
   target verified from project Compose configuration and runtime state. No

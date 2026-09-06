@@ -17,5 +17,5 @@ Inspect command safety and project tooling first; `check-pr` can run configured
 project commands. A dirty tree may be inspected without discarding it. Do not
 stash, reset, commit or push user changes just to satisfy this check. Missing
 tools or nonzero results are gaps to report; only the deterministic CLI
-adjudicates certification. Findings go in an agreed assessment output outside
-sealed runs, using available host file tools.
+adjudicates certification. Findings go in an agreed private assessment location
+outside sealed runs and published documentation, using available host file tools.

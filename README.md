@@ -3,190 +3,166 @@
 [![CI](https://github.com/xibodev/release-harness/actions/workflows/validate.yml/badge.svg)](https://github.com/xibodev/release-harness/actions/workflows/validate.yml)
 [![npm version](https://img.shields.io/npm/v/@xibodev/release-harness.svg)](https://www.npmjs.com/package/@xibodev/release-harness)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Documentation](https://img.shields.io/badge/Docs-xibodev.github.io%2Frelease--harness-indigo)](https://xibodev.github.io/release-harness/)
 
-A portable, deterministic quality-gate adjudication engine and local UAT release harness for modern software projects.
+Release-Harness runs project-defined quality gates and local Docker UAT, collects
+evidence, and computes deterministic verdicts. Your repository owns the service
+topology, browser scenarios, and side-effect assertions. No AI agent is required.
 
-Consumable by human developers and autonomous AI coding agents as a standard npm development dependency (similar to `playwright`, `pytest`, or `eslint`).
+[Documentation](https://xibodev.github.io/release-harness/) |
+[Upgrading](CHANGELOG.md) | [Contributing](CONTRIBUTING.md) | [Security](SECURITY.md)
 
-📖 **Full Interactive Documentation & Guides:** **[https://xibodev.github.io/release-harness/](https://xibodev.github.io/release-harness/)**
+## Install
 
----
-
-## Features
-
-- **Project-Owned Test Intent**: Projects declare their own topology, served origins, and declarative scenarios under `.release-harness/`.
-- **Deterministic Pure-Function Evaluator**: Cryptographic adjudication derived strictly from sealed evidence with independent SHA-256 integrity verification.
-- **Detached Source Materialization**: Guaranteed zero repository / `.git` pollution during local test runs.
-- **Real Playwright Browser Automation**: Declarative scenarios compiled directly to Playwright Chromium with deep network egress interception, direct-IP blocking, and negative control verification.
-- **Existing Playwright Suite Adapter**: Native runner that executes existing product-owned Playwright suites (`playwright test --reporter=json`) and normalizes test IDs, traces, and attachments without rewriting code.
-- **Fail-Closed Side-Effect Probing**: Verifies out-of-band state changes (MinIO/S3 objects, Redis keys, Mailpit messages) with `/tmp` local path bypass detection, plus project-owned **custom probes** for products whose deliverable is a file.
-- **Autonomous AI Agent Integration**: `init --with-agents` scaffolds 18 cognitive skills and multi-runtime agent personas (`release-conductor`) for Claude Code, GitHub Copilot, opencode, Cursor, and Codex.
-- **38 Neutral Acceptance Fixtures**: Hardened against false certification with strict coverage floors, gate-relative skip policies, and deterministic replay.
-
----
-
-## Installation
-
-Install into your project repository as a development dependency:
+The published npm release is **1.2.0**. This repository also documents unreleased
+changes, identified below and in the [changelog](CHANGELOG.md#unreleased).
 
 ```bash
-npm install -D @xibodev/release-harness
+npm install -D @xibodev/release-harness@1.2.0
+npx playwright install chromium
 ```
 
----
+Use Node.js 20 for the CI-tested baseline. Package metadata currently declares
+Node.js `>=18`; that is not a claim that every declared version is tested. Local
+UAT also needs Git, Docker with Compose, a running Docker daemon, and Chromium's
+OS dependencies. On Linux, `npx playwright install --with-deps chromium` installs
+the browser and system dependencies where you have permission to do so.
 
-## Artifact-First Quick Start
+## Manual Quick Start
 
-### 1. Check host prerequisites
+Run these commands from your product repository.
+
+### 1. Initialize
+
 ```bash
 npx release-harness doctor
+npx release-harness init
 ```
 
-### 2. Initialize project contracts & AI agents
-```bash
-npx release-harness init --with-agents
-```
-This scaffolds:
-- `.release-harness/` (contract specifications: `topology.json`, `origins.json`, `harness.config.json`, `scenarios/smoke.json`)
-- `AGENTS.md`, `AI-ADOPTION.md` & `.cursorrules` in project root
-- Multi-runtime agent instructions (`.claude/`, `.github/`, `.opencode/`, `.copilot/`)
-- 18 specialized AI skill playbooks for discovery, pre-release audits, and bug fixing, scaffolded under `release-harness-*` names in `.claude/skills/`, `.agents/skills/`, and `.opencode/skills/`.
+`doctor` reports prerequisite and contract readiness; missing contracts are
+expected before initialization. Bare `init` writes contracts only and preserves
+existing files. It does not configure or test your application for you.
 
-*(A bare `npx release-harness init` writes contracts only; `--contracts-only` states that explicitly. The two scaffolding flags are mutually exclusive. **The skill bundle ships with `init --with-agents`, not with `npm install`** — it lives inside the package until init copies it out.)*
+### 2. Configure
 
-Preview the bundle without writing files using `npx release-harness skills list`
-or `npx release-harness skills info project-cartographer`. Both bare and prefixed
-names work for `info`; invoke the actual skills by their `release-harness-*` names.
+Replace the generated examples under `.release-harness/` with your project's
+actual configuration:
 
-Hosts may cache their skill catalogs. If the new skills are absent, exit and
-relaunch Claude Code, opencode, or Copilot CLI from this repository. For
-Cursor/Codex, use the host's documented reload or restart. Check the host catalog
-afterward: `skills list` checks disk, not host registration. `/init` is not a
-portable reload command. Preserve a handoff before restarting; if restart is
-unavailable, read the scaffolded `SKILL.md` and follow its procedure directly.
+- `topology.json`: repositories, services, health probes, and network policy.
+- `origins.json`: served application origins and routes.
+- `harness.config.json`: port block, timeouts, and optional `pr_gate.commands`.
+- `scenarios/*.json`: user journeys, assertions, and independent side-effect probes.
 
-### 3. Delegate Contract Derivation
+Provide the Docker Compose setup needed to build and serve your application.
+Review contracts against the [schemas](packages/release-harness-schemas) and
+[usage reference](https://xibodev.github.io/release-harness/docs.html). Generated
+smoke assertions are examples, not evidence of product coverage. Use only
+nonsecret test fixtures; provide runtime secrets through controlled environment
+configuration, never by committing them.
 
-Use these phase prompts rather than asking the human to hand-write schema JSON:
+### 3. Run And Inspect
 
-1. **Cartographer:** "Use release-harness-project-cartographer to derive topology.json and origins.json from real ports, services, and health probes. Present the generated artifact diff for review."
-2. **Compiler:** "Use release-harness-scenario-compiler to compile our user journeys into scenarios with independent side-effect probes. Present the diff for approval."
-3. **Conductor:** "Use release-conductor to run doctor and the local readiness gate with an explicit external evidence root. Report the deterministic verdict and causes."
-4. **Remediation:** "Use release-harness-fix-planner to derive an evidence-linked plan from this run. After approval, use release-harness-fix-executor for targeted fixes without weakening contracts or discarding working changes."
-5. **Decider:** The deterministic CLI alone returns PASS, FAIL, UNPROVEN, HARNESS_ERROR, or EVIDENCE_INVALID. A persona or human review cannot substitute for that result.
-
-### 4. Establish A Local Baseline
-
-While changes are uncommitted, run a non-certifying development gate:
+For uncommitted development, choose an evidence directory outside the repository:
 
 ```bash
-npx release-harness run-local --allow-dirty --evidence-dir <external-root>
+npx release-harness run-local --allow-dirty --evidence-dir ../release-harness-evidence
 ```
 
-Inspect underlying results even when the exit is 2. Resolve failures and unmet
-conditions; after approval and an authorized commit, run clean certification:
+Dirty runs are non-certifying. Inspect failures even when the exit code is `2`.
+Once the intended source and contracts are committed and the tree is clean:
 
 ```bash
-npx release-harness run-local --evidence-dir <external-root>
+npx release-harness run-local --evidence-dir ../release-harness-evidence
 ```
 
-### 5. Integrate CI And Scoped Cleanup
+Read `runs/<id>/verdict.json`, `run.manifest.json`, and `evidence/` beneath that
+root. An early failure can produce a diagnostic without a verdict.
 
-Run `check-pr` on pull requests and `run-local` on release branches. Preserve
-evidence, especially for exit 4; cleanup does not repair invalid evidence.
+| Outcome | Exit | Meaning |
+|---|---|---|
+| `PASS` | `0` | Declared gate requirements met; not deployment approval |
+| `FAIL` | `1` | Gate failure; some early rejections have no verdict |
+| `UNPROVEN` | `2` | Unmet conditions, waivers, or non-certifying development |
+| `HARNESS_ERROR` | `3` | Contract, environment, or harness/probe failure |
+| `EVIDENCE_INVALID` | `4` | Evidence integrity or validation failure |
+
+Dirty mode preserves exits `3` and `4`. Preserve invalid evidence for
+investigation; cleanup is not a repair or a reason to reseal an archive.
+
+## CLI, CI, And Libraries
+
+- `check-pr` validates contracts/toolchain and executes configured PR commands.
+  Configure those commands before treating this as your project's CI gate.
+- `run-local` runs Compose-backed UAT. CI needs the same Docker/browser
+  prerequisites as a local run; retain evidence with restricted artifact access.
+- `evaluate --run-id <id> --evidence-dir <root>/runs/<id>/evidence` reevaluates
+  stored evidence; this command takes the sealed evidence directory itself.
+- `clean --run-id <id> --evidence-dir <root>` targets a run's workspaces and scoped
+  containers. Review retained evidence before cleanup.
+- `multi_repo` topologies materialize each declared repository and record source
+  provenance. All participating repositories and their commands must be trusted.
+- The public package reexports core APIs and `Schemas` for programmatic use.
+  The [Playwright adapter](packages/release-harness-core/src/playwright-adapter.js)
+  executes and normalizes existing suites; it is a library integration, not a
+  standalone CLI command or automatic end-to-end evidence sealing workflow.
+
+Use `npx release-harness --help` for the commands available in your installed
+version.
+
+## Optional AI Assistance
+
+`npx release-harness init --with-agents` adds the packaged `release-conductor`
+persona, namespaced skill playbooks, and `AI-ADOPTION.md`. Ask an agent to derive
+contracts from the application and present their diff for review before running
+the gate. The deterministic CLI, not the agent, decides the verdict.
+
+**Unreleased:** read-only `skills list` / `skills info`, shared `.agents/skills`
+scaffolding, and revised runtime-specific onboarding. These are not commands or
+behaviors to assume from npm `1.2.0`. To inspect them from a source checkout after
+`npm ci`, run:
 
 ```bash
-npx release-harness clean --run-id <id> --evidence-dir <external-root>
+node packages/release-harness-core/bin/release-harness.js skills list
+node packages/release-harness-core/bin/release-harness.js skills info project-cartographer
 ```
 
----
+See the source [adoption guide](packages/release-harness-core/templates/AI-ADOPTION.md)
+for the unreleased workflow. Playbooks require the host's tools; scaffolding does
+not install Docker, browsers, scanners, credentials, or register skills with a
+running host. Reload the host and check its catalog if skills are not discovered.
 
-## Using with AI Coding Agents
-
-**[AI-ADOPTION.md](packages/release-harness-core/templates/AI-ADOPTION.md) is the
-standard integration protocol.** `init --with-agents` copies it into the project.
-
-The 18 skills are playbooks, not installed executables or infrastructure. They
-require the host's file/shell tools; screenshot review additionally needs image
-input. Scaffolding does not install browsers, Docker, databases, scanners or
-credentials. Dynamic probes need separately verified, authorized local targets;
-missing tooling is reported as a deferred check, not a pass. Optional external
-toolkit reports are not prerequisites for basic adoption. Audit risk/visual
-scores remain advisory and cannot override the deterministic CLI verdict.
-
-Tell your AI agent (Claude Code, GitHub Copilot, opencode, Cursor):
+## Architecture And Scope
 
 ```text
-Inspect `npx release-harness skills list`, run doctor and `init --with-agents`, then follow AI-ADOPTION.md. Use `release-harness-project-cartographer` and `release-harness-scenario-compiler` to derive contract artifacts and present their diffs for approval. Preserve unrelated working changes and let the deterministic CLI adjudicate the gate.
+@xibodev/release-harness          Public CLI and library facade
+  @xibodev/release-harness-core   Runners, probes, sealing, evaluator, AI templates
+  @xibodev/release-harness-schemas Versioned JSON contracts
 ```
 
-Or delegate directly using the shipped `release-conductor` persona:
+Implemented capabilities include detached Git source materialization, local
+Compose lifecycle, declarative Chromium scenarios, S3/Redis/Mailpit and custom
+side-effect probes, hash-checked evidence, and deterministic evaluation.
+Unreleased work adds sealed startup diagnostics, stricter replay validation, and
+destination-filtered browser proxy transport; see the changelog for compatibility.
 
-```text
-Use release-conductor to run our release quality gate and drive this branch to green.
-```
+Planned extensions include ephemeral-environment and canary workflows.
+`run-ephemeral` and `verify-canary` are not implemented. No release date or version
+is promised for them.
 
----
+## Limits And Upgrading
 
-## Architecture
-
-```text
-@xibodev/release-harness            (Public Facade CLI)
-        ↓
-@xibodev/release-harness-core       (Deterministic Evaluator, Runner Engine & Adapters)
-        ↓
-@xibodev/release-harness-schemas    (Formal JSON Schemas v1.x)
-```
-
-### Gate Outcomes & Exit Codes
-
-| Status | Exit Code | Description | Action |
-|---|---|---|---|
-| `PASS` | `0` | All required & conditional scenarios passed with verified side effects | Certified for release |
-| `FAIL` | `1` | Failure, or early rejection without a verdict | Inspect causes: fix PRODUCT_BUG, acquire missing fixtures, or follow runtime diagnostics |
-| `UNPROVEN` | `2` | Unmet conditions, waivers, or dirty development | Inspect underlying failures before clean certification |
-| `HARNESS_ERROR` | `3` | Contract/environment/probe or startup failure | Inspect sealed startup evidence and diagnostics; UNKNOWN is unresolved attribution, not proof of a product bug |
-| `EVIDENCE_INVALID` | `4` | Tampering or checksum mismatch | Preserve the run and investigate; do not blindly clean, edit, or reseal evidence |
-
-With `--evidence-dir <root>`, read `<root>/runs/<id>/verdict.json`,
-`run.manifest.json` beside it, and sealed files under `<root>/runs/<id>/evidence/`.
-An early diagnostic may exist without a verdict; report that honestly.
-Startup observations may be retained without raw logs for secret safety; do not
-assume arbitrary build/Compose output was captured or is safe to reproduce.
-Dirty development preserves harness/evidence faults as exits 3/4.
-
-### Migration Notes
-
-Ignored files never reach the detached workspace; nonignored untracked files
-reach dirty development only. Inspect materialization warnings and supply
-configuration through the approved runtime environment; never commit secrets.
-`topology.json.network_policy` is canonical; legacy config policy is supported,
-but conflicting declarations are rejected. Browser egress filtering does not
-prove container-wide network isolation.
-
-Sealed Chromium routes HTTP and WebSocket traffic through a destination-filtering
-proxy and disables non-proxied WebRTC UDP. HTTPS/WSS tunnels are checked by
-destination host, port, and transport, not by decrypted request content, SNI, or
-certificate identity. An allowed service acting as a relay is outside this
-boundary. Blocked WebRTC UDP attempts do not produce individual verdict violations.
-
-Preserve existing contracts on upgrade. If changing `product_slug`, change
-topology and harness config together. Repair host-specific agent frontmatter
-in the individual file, preserving customizations. Do not use blanket
-`init --overwrite`/`--force`: those flags reset project contracts as well.
-
-### Contributor Validation
-
-Run `npm test` for schemas, core regressions, neutral fixtures, smoke acceptance,
-and fresh-package installability. The full gate needs Docker, Playwright Chromium,
-`tar`, and OpenSSL 1.1.1 or newer. Transport tests generate temporary TLS keys and
-remove them afterward; Windows can use OpenSSL from a standard Git installation
-or from PATH. File-symlink tests report skips when the host denies symlink creation;
-run the gate on Linux or a suitably privileged host for that coverage.
-
----
+- `sql_query` is unsupported. Use a trusted custom probe that actually queries and
+  asserts database state; custom probes use exit status, not stdout matching.
+- Ignored files are excluded from detached source. Nonignored untracked files
+  are included only in dirty development; clean runs require committed inputs.
+- Repository commands and Docker access are trusted execution, not a sandbox.
+  Browser network policy is not a container firewall. Hash integrity does not
+  independently authenticate evidence. See the [security model](SECURITY.md).
+- A `PASS` covers the declared scenarios and requirements, not all possible
+  behavior, production readiness, or authorization to deploy.
+- Read [compatibility notes](CHANGELOG.md) before upgrading. Preserve customized
+  contracts and agent files: `init --force` / `--overwrite` resets them, not just
+  outdated instructions.
 
 ## License
 
-MIT © [XiboDev](https://github.com/xibodev)
+[MIT](LICENSE), XiboDev.

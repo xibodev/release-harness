@@ -7,6 +7,8 @@ allowed-tools: [Read, Grep, Glob, Write]
 # Project Cartographer
 
 Discovers the project's service architecture and maps it into formal Release-Harness contracts.
+Use existing product requirements and repository instructions when available;
+no prescribed product-document filenames or separate discovery agent are needed.
 
 ## Steps
 1. Inspect `docker-compose.yml`, `package.json`, `Dockerfile`, and application routes.

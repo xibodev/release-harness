@@ -70,8 +70,8 @@ checked box. Deployment commands are proposals requiring separate authorization.
 
 ## Outputs
 
-Use host file tools to write outside sealed runs, for example under an agreed
-assessment root's `results/<ts>/release/`:
+Use host file tools to write outside sealed runs and published documentation,
+for example under an agreed private assessment root's `results/<ts>/release/`:
 
 - `go-no-go.md`: exact CLI verdict/provenance, verification, advisory blockers,
   evidence links, gaps and approvals.

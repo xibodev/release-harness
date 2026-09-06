@@ -26,7 +26,8 @@ missing validation scripts or a separate workflow framework.
    Do not stash, reset, checkout, auto-commit, or discard unrelated edits.
 3. If an approved edit overlaps a user's change ambiguously, stop that item
    and ask how to reconcile it. Other independent approved items may continue.
-4. Keep execution notes outside the sealed run. Never edit/reseal evidence or
+4. Keep execution notes in an agreed private location outside sealed runs and
+   published documentation. Never edit/reseal evidence or
    rewrite a verdict. Do not expose credentials in reports.
 
 ## Execute And Validate
@@ -73,7 +74,7 @@ the sole verdict authority; an execution report cannot certify a release.
 
 ## Report
 
-Write an execution report outside the sealed run with per-item status
+Write an execution report in that private assessment location with per-item status
 (`applied`, `blocked`, `failed`), changed files, commands and exact results,
 new run ID, deterministic verdict, and remaining conditions. If a commit or
 clean run is not authorized, report successful development validation as
