@@ -226,30 +226,48 @@ test('reference documentation covers commands, evidence, AI and supported bounda
   assert.ok(attributes(html, 'href').some((href) => href.endsWith('/SECURITY.md')));
 });
 
-test('public copy separates released npm from unreleased source and has no stale release narrative', () => {
+test('public release documentation matches package metadata without a registry dependency', () => {
   const version = checkReleaseVersion(repo, '');
   const changelog = read('CHANGELOG.md');
-  const headings = [...changelog.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
-  const candidate = headings.find((heading) => heading === `${version} (Unreleased)`);
-  assert.ok(candidate, 'source version needs a versioned unreleased changelog entry');
-  const published = headings.find((heading) => /^\d+\.\d+\.\d+$/.test(heading));
-  assert.ok(published, 'changelog must identify a released version separately');
-  assert.notEqual(published, version, 'candidate must not be listed as published');
-  for (const name of ['README.md', 'docs/index.html', 'docs/docs.html']) {
-    const text = plain(read(name));
-    assert.ok(text.includes(version), `${name}: package version context`);
-    assert.match(text, /unreleased/i, name);
-    assert.match(text, /not yet published/i, name);
-    assert.ok(text.includes(`npm install -D @xibodev/release-harness@${published}`), `${name}: install the published version`);
-    assert.ok(!text.includes(`npm install -D @xibodev/release-harness@${version}`), `${name}: candidate is not on npm`);
+  // The changelog records publication; package metadata alone cannot prove it.
+  // A future Unreleased section must not be mistaken for the current release.
+  for (const content of [changelog, `## Unreleased\n\n${changelog}`]) {
+    const published = /^## (\d+\.\d+\.\d+)$/m.exec(content)?.[1];
+    assert.equal(published, version, 'current released changelog entry must match packages');
   }
+  const releaseUrl = `https://github.com/xibodev/release-harness/releases/tag/v${version}`;
+  for (const name of ['README.md', 'docs/index.html', 'docs/docs.html']) {
+    const source = read(name);
+    const text = plain(source);
+    assert.ok(source.includes(releaseUrl), `${name}: link to publication evidence`);
+    assert.match(text, /published/i, name);
+    const installs = [...text.matchAll(/npm install -D @xibodev\/release-harness@([^\s]+)/g)].map((match) => match[1]);
+    assert.ok(installs.length > 0, `${name}: versioned install example`);
+    assert.ok(installs.every((installed) => installed === version), `${name}: install the current release`);
+    assert.match(text, /Node\.js.*20/, name);
+    assert.doesNotMatch(text, /release candidate|not yet published/i, name);
+  }
+  for (const name of ['README.md', 'docs/docs.html']) {
+    const text = plain(read(name));
+    assert.ok(text.includes('npx release-harness skills list'), name);
+    assert.ok(text.includes('npx release-harness skills info project-cartographer'), name);
+  }
+  for (const name of ['CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md']) {
+    const text = read(name);
+    assert.ok(text.includes(version), `${name}: current version context`);
+    assert.ok(!text.includes(`${version} (Unreleased)`), `${name}: released version label`);
+    assert.doesNotMatch(text, /unreleased (?:startup|2\.0\.0)|not yet published/i, name);
+  }
+  assert.ok(changelog.includes(releaseUrl), 'changelog links to publication evidence');
+  assert.match(read('docs/docs.html'), /node-version: '20'/, 'CI example uses the tested Node baseline');
   for (const topic of [/Node\.js.*20/, /replay ignores caller-only overrides/i, /health probes/i, /conflicting.*polic/i, /SNI/]) {
     assert.match(plain(changelog), topic, 'breaking migration coverage');
   }
   const html = read('docs/docs.html');
   const skillRow = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].find((match) => plain(match[1]).includes('skills list'));
   assert.ok(skillRow);
-  assert.match(plain(skillRow[1]), /unreleased/i);
+  assert.doesNotMatch(plain(skillRow[1]), /unreleased/i);
+  assert.match(plain(skillRow[1]), /without writing/);
   const roadmap = /<section id="roadmap-levels">([\s\S]*?)<\/section>/.exec(html)?.[1];
   assert.ok(roadmap);
   assert.match(plain(roadmap), /Planned, not enabled/);

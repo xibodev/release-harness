@@ -1,9 +1,10 @@
 # Changelog
 
 User-visible changes and upgrade considerations. The published npm release is
-`1.2.0`; the 2.0.0 release candidate below is not yet published.
+`2.0.0`, released on 2026-09-06. See the
+[GitHub release](https://github.com/xibodev/release-harness/releases/tag/v2.0.0).
 
-## 2.0.0 (Unreleased)
+## 2.0.0
 
 ### Breaking Changes And Migration
 

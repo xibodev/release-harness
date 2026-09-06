@@ -45,15 +45,6 @@
       </div>
     </section>
 
-    <section class="release-notice" data-od-id="release-notice">
-      <div class="notice-mark">VERSIONS</div>
-      <div>
-        <h2>Use documentation that matches your package.</h2>
-        <p>This site follows the <strong>2.0.0 release candidate (unreleased, not yet published)</strong>, which requires Node.js 20+. Skill discovery and runtime hardening are not in the published npm 1.2.0. Match released packages to their version-tagged documentation.</p>
-      </div>
-      <a href="docs.html#upgrades" data-od-id="read-upgrade-notice">Versions &amp; upgrades</a>
-    </section>
-
     <section class="landing-section trust-section" data-od-id="trust-model">
       <div class="section-label">THE TRUST MODEL</div>
       <div class="section-intro">
@@ -91,10 +82,11 @@
         <div>
           <h2>Bring the harness into your project.</h2>
           <p>Start with contracts and a smoke scenario for your real application. Use the CLI yourself or add AI assistance later. No AI host is required.</p>
+          <p>The published release is <a href="https://github.com/xibodev/release-harness/releases/tag/v2.0.0">2.0.0</a> and requires Node.js 20+. Node.js 20 is the CI-tested baseline. Upgrading from 1.2.0? Read <a href="docs.html#upgrades">versions &amp; upgrades</a>.</p>
         </div>
         <div class="install-panel">
           <div class="code-header"><span>TERMINAL</span><button class="copy-btn" type="button" data-od-id="copy-install">COPY</button></div>
-          <pre id="install-command"><code>npm install -D @xibodev/release-harness@1.2.0 playwright
+          <pre id="install-command"><code>npm install -D @xibodev/release-harness@2.0.0 playwright
 npx playwright install chromium
 npx release-harness doctor
 npx release-harness init --contracts-only</code></pre>

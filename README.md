@@ -13,18 +13,18 @@ topology, browser scenarios, and side-effect assertions. No AI agent is required
 
 ## Install
 
-The published npm release is **1.2.0**. This repository prepares **2.0.0
-(Unreleased)**, a release candidate not yet published to npm. See the
-[changelog](CHANGELOG.md#200-unreleased) for breaking changes and migration.
+The published npm release is **2.0.0**. See the
+[release](https://github.com/xibodev/release-harness/releases/tag/v2.0.0) and
+[changelog](CHANGELOG.md#200) for breaking changes and migration from 1.2.0.
 
 ```bash
-npm install -D @xibodev/release-harness@1.2.0
+npm install -D @xibodev/release-harness@2.0.0
 npx playwright install chromium
 ```
 
-Version 2.0.0 requires Node.js `>=20`; the published 1.2.0 metadata declares
+Version 2.0.0 requires Node.js `>=20`; 1.2.0 metadata declared
 `>=18`. Node.js 20 is the CI-tested baseline, not a claim that every newer runtime
-is tested. Upgrade local and CI runtimes before adopting the candidate. Local
+is tested. Upgrade local and CI runtimes before adopting 2.0.0. Local
 UAT also needs Git, Docker with Compose, a running Docker daemon, and Chromium's
 OS dependencies. On Linux, `npx playwright install --with-deps chromium` installs
 the browser and system dependencies where you have permission to do so.
@@ -117,18 +117,17 @@ persona, namespaced skill playbooks, and `AI-ADOPTION.md`. Ask an agent to deriv
 contracts from the application and present their diff for review before running
 the gate. The deterministic CLI, not the agent, decides the verdict.
 
-**Unreleased:** read-only `skills list` / `skills info`, shared `.agents/skills`
-scaffolding, and revised runtime-specific onboarding. These are not commands or
-behaviors to assume from npm `1.2.0`. To inspect them from a source checkout after
-`npm ci`, run:
+Version 2.0.0 includes read-only `skills list` / `skills info`, shared
+`.agents/skills` scaffolding, and runtime-specific onboarding. From your product
+repository with 2.0.0 installed, run:
 
 ```bash
-node packages/release-harness-core/bin/release-harness.js skills list
-node packages/release-harness-core/bin/release-harness.js skills info project-cartographer
+npx release-harness skills list
+npx release-harness skills info project-cartographer
 ```
 
-See the source [adoption guide](packages/release-harness-core/templates/AI-ADOPTION.md)
-for the unreleased workflow. Playbooks require the host's tools; scaffolding does
+See the [adoption guide](packages/release-harness-core/templates/AI-ADOPTION.md)
+for the workflow. Playbooks require the host's tools; scaffolding does
 not install Docker, browsers, scanners, credentials, or register skills with a
 running host. Reload the host and check its catalog if skills are not discovered.
 
@@ -143,7 +142,7 @@ running host. Reload the host and check its catalog if skills are not discovered
 Implemented capabilities include detached Git source materialization, local
 Compose lifecycle, declarative Chromium scenarios, S3/Redis/Mailpit and custom
 side-effect probes, hash-checked evidence, and deterministic evaluation.
-Unreleased work adds sealed startup diagnostics, stricter replay validation, and
+Version 2.0.0 adds sealed startup diagnostics, stricter replay validation, and
 destination-filtered browser proxy transport; see the changelog for compatibility.
 
 Planned extensions include ephemeral-environment and canary workflows.

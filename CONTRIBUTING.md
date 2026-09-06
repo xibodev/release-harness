@@ -20,8 +20,8 @@ tests for changed behavior. For suspected vulnerabilities, follow
 
 ## Setup And Validation
 
-Use Node.js 20 and npm for the CI-tested baseline. The unreleased 2.0.0 packages
-require Node.js `>=20`; published 1.2.0 metadata declared `>=18`. Do not infer a
+Use Node.js 20 and npm for the CI-tested baseline. The released 2.0.0 packages
+require Node.js `>=20`; 1.2.0 metadata declared `>=18`. Do not infer a
 tested support matrix for every newer runtime from the open-ended engine range.
 
 The full gate requires Git, Docker with Compose and a running daemon, Playwright
