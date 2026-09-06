@@ -32,7 +32,7 @@ Avoid secrets in arguments and outputs; use nonsecret fixtures and review all
 artifacts before sharing. Restrict access and retention for evidence and CI logs.
 Hashing does not encrypt data or make it safe to publish.
 
-Unreleased startup diagnostics omit arbitrary build/Compose logs to reduce secret
+Version 2.0.0 startup diagnostics omit arbitrary build/Compose logs to reduce secret
 capture. That does not make other evidence automatically confidential or safe.
 If a secret is exposed, revoke or rotate it; redacting a later copy does not undo
 the disclosure. Preserve original invalid evidence securely for investigation
@@ -40,9 +40,9 @@ rather than editing or resealing it to obtain a different verdict.
 
 ## Browser Network Boundary
 
-The destination-filtering proxy behavior described here is part of **2.0.0
-(Unreleased)**, not yet published; do not assume these transport protections from
-npm `1.2.0`. See [CHANGELOG.md](CHANGELOG.md).
+The destination-filtering proxy behavior described here is included in **2.0.0**;
+do not assume these transport protections from `1.2.0`.
+See [CHANGELOG.md](CHANGELOG.md) for migration guidance.
 
 In sealed mode, harness-managed Chromium HTTP and WebSocket traffic uses a
 destination-filtering proxy. HTTPS/WSS tunnels are checked by destination host,
