@@ -12,6 +12,11 @@ Cross-tool entry point for **Release-Harness** across Claude Code, GitHub Copilo
 - `.copilot/agents/release-conductor.md` — GitHub Copilot CLI variant
 - `.github/agents/release-conductor.agent.md` — GitHub Copilot Workspace / Extensions variant
 - `.opencode/agents/release-conductor.md` — opencode variant
+- `.agents/skills/release-harness-*` — shared namespaced skill bundle after `init --with-agents`
+
+Inspect packaged skills with `npx release-harness skills list` before scaffolding.
+Follow the packaged `AI-ADOPTION.md` protocol: derive contracts, review their diff,
+and triage deterministic verdict causes. Disk scaffold status is not host registration.
 
 ## Principle of Deterministic Core Authority
 

@@ -4,9 +4,9 @@ import { runCli } from '../src/cli.js';
 
 runCli()
   .then((exitCode) => {
-    process.exit(exitCode);
+    process.exitCode = exitCode;
   })
   .catch((err) => {
     console.error('Fatal CLI Error:', err);
-    process.exit(3);
+    process.exitCode = 3;
   });

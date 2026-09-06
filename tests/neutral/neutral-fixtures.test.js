@@ -175,12 +175,25 @@ function recordPass(num, name) {
     origins: [{ origin_id: 'web', type: 'browser_app', auth: 'none', url_source: 'APP_URL', route_families: ['/'], safe_for_live: true, evidence: ['app.tsx'] }],
   });
 
-  // Attempt evaluation with unsealed policy that changes policy to unsupported
-  const verdict = evaluateRun({
+  // Caller overrides cannot change the authoritative sealed policy.
+  const evaluationTime = new Date().toISOString();
+  const original = evaluateRun({ runId: 'f11-run', evidenceDir: tmpEvidenceDir, evaluationTime });
+  const substituted = evaluateRun({
     runId: 'f11-run',
     evidenceDir: tmpEvidenceDir,
+    evaluationTime,
     scenarios: [{ id: 'SCEN-01', name: 'Substituted', origin_id: 'web', tier: 'core', policy: 'unsupported', steps: [{ action: 'navigate' }] }],
   });
+  assert.deepStrictEqual(substituted, original);
+  assert.strictEqual(substituted.scenarios[0].name, 'Original');
+  assert.strictEqual(substituted.scenarios[0].policy, 'required');
+
+  // Changing the snapshot itself after sealing must still invalidate evidence.
+  const snapshotPath = path.join(tmpEvidenceDir, 'policy-snapshot.json');
+  const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+  snapshot.scenarios[0].policy = 'unsupported';
+  fs.writeFileSync(snapshotPath, JSON.stringify(snapshot) + '\n', 'utf8');
+  const verdict = evaluateRun({ runId: 'f11-run', evidenceDir: tmpEvidenceDir });
   assert.strictEqual(verdict.run_integrity, 'EVIDENCE_INVALID');
   assert.strictEqual(verdict.exit_code, 4);
   fs.rmSync(tmpEvidenceDir, { recursive: true, force: true });

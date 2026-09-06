@@ -19,7 +19,9 @@ allowed-tools:
 
 Use this skill to do what a human reviewer would do: open each screenshot, look at it, and write down what's wrong. Pixel-presence is not proof of UI quality. A test can be green and the screen can still be broken (empty state with no copy, primary CTA off-screen, modal stacking incorrectly, text overlapping a background image, focus ring invisible against a dark surface).
 
-This skill is the *only* place in the suite where the model is required to look at images. Every other skill describes what to capture; this one judges what was captured.
+This playbook requires actual image input. Its scores and pass/fail/unproven
+labels describe an advisory visual review only, never the deterministic harness
+verdict. A missing vision tool means unperformed checks, not inferred success.
 
 ## When To Use
 
@@ -226,11 +228,21 @@ The orchestrator (`uat-runner` agent) controls the mode; this skill obeys.
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under an agreed root (for example `./.quality-run/`), outside this
+skill and sealed runs. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Only the deterministic CLI adjudicates;
+visual scores, `unproven` labels and recommendations here are advisory and never
+override its verdict. Image inspection requires a vision-capable host/tool;
+if unavailable, report the unperformed checks instead of inventing observations.
 
 ### Required input
 
-- A manifest JSON listing the screenshots to analyze, with `expected_assertions` and an `origin_id` per screenshot. Produced by `headed-e2e`, `full-site-crawler`, or `ux-design-review`.
+- A product-owned manifest listing screenshots, `expected_assertions` and
+  `origin_id`. The conductor may derive this review index outside sealed evidence
+  from the run's raw results, screenshot paths and declared scenarios. Unavailable
+  expectations are explicit gaps; external screenshot toolkits are optional.
 - The screenshot files themselves at the paths the manifest references.
 - An external **brand contract** (e.g. `docs/project/brand-contract.json`) declaring per-origin `required_identity`, `forbidden_identity`, and a deterministic `canary`. Without it, brand-identity checks are recorded `unproven`, not `pass`.
 
@@ -252,6 +264,7 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 ### Gates
 
 - Mark an origin/run `unproven` (do NOT report green) when the brand-contract canary result disagrees with its `expected_verdict`, or when evidence is suspiciously all-pass / near-zero-interaction. Emit a `suspicious-evidence` / `canary-mismatch` fix-plan item.
-- Fail the run for any origin whose screenshots show a `forbidden_identity` element or omit a `required_identity` element from the brand contract.
+- Record an advisory blocking finding for forbidden/missing brand identity;
+  never alter the deterministic run verdict based on visual judgment.
 - Stop and warn if more than 30% of analyzed screenshots fail dimension 5 (journey-intent match). That indicates the journey itself is misaligned with reality, not a UI regression. Hand back to `journey-mapping`.
 - Stop and warn if dimension 1 (visual integrity) fails on more than 10% of screenshots. That indicates the UAT environment is unstable (resource starvation, missing assets) and analysis is unreliable.

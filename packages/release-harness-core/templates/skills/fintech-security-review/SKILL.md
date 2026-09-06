@@ -384,7 +384,7 @@ Each dimension's fix-plan items are framed against these four questions in `evid
 
 - `./.quality-run/results/<ts>/security/fintech-review.md` — human report, grouped by the 13 dimensions, with executive summary at top.
 - `./.quality-run/results/<ts>/security/fintech-findings.json` — machine-readable raw findings (file, line, dimension, signal, attacker_question).
-- `./.quality-run/results/<ts>/security/fintech-fix-plan.json` — shared Fix Plan Schema (see suite README).
+- `./.quality-run/results/<ts>/security/fintech-fix-plan.json` using the finding fields in this playbook.
 
 ### Fix-plan item conventions
 
@@ -410,7 +410,13 @@ When a check requires the public internet (live CVE DB, external SSL/TLS probe, 
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under an agreed root (for example `./.quality-run/`), outside this
+skill and sealed runs. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Required input
 
@@ -428,7 +434,11 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 - Never mutate the working tree. Read-only scanning only.
 - If a scanner is missing on PATH, record the gap; do not skip silently.
 - Coordinate with `release-harness-security-audit` — when the same finding is produced by both skills, the consolidator dedupes by `affected_files + title`. This skill should produce DEEPER framing (architectural root-cause, compliance overlay) so the merged entry is richer.
-- **Sealed UAT — no internet.** Same rule as `release-harness-security-audit`. Vuln-DB and external probe steps require offline DBs (`osv-scanner --offline-vulnerabilities <dir>`, cached `npm audit`, `pip-audit --no-deps`). If no cached DB is present under `artefacts/security-db/`, emit one `deferred-test` fix-plan item per missing DB. Do not call out to any public service.
+- **Offline assessment:** follow `release-harness-security-audit`: verify the
+  installed scanner's documented offline mode and actual advisory database.
+  A cache or `--no-deps` does not prove offline operation. Otherwise record the
+  dynamic check as deferred and continue source review; do not install tools,
+  contact public services or infer compliance from an unperformed scan.
 - **Worktree-only.** No `git fetch`, no `git pull`, no remote refs. If the review wants a delta against a baseline, require the local ref (the agent provides it from `release/baseline.json`).
 
 ### Gates

@@ -20,13 +20,15 @@
     "timeouts": {
       "type": "object",
       "properties": {
-        "health_check_seconds": { "type": "integer", "default": 60 },
+        "health_check_seconds": { "type": "integer", "minimum": 1, "maximum": 3600, "default": 60 },
         "scenario_timeout_ms": { "type": "integer", "default": 60000 },
         "run_timeout_seconds": { "type": "integer", "default": 600 }
       }
     },
     "network_policy": {
       "type": "object",
+      "description": "Legacy policy location. topology.json is canonical; conflicting declarations are rejected.",
+      "required": ["mode"],
       "properties": {
         "mode": { "type": "string", "enum": ["sealed", "open"], "default": "sealed" },
         "allowed_egress": {
@@ -36,7 +38,7 @@
             "required": ["host", "port"],
             "properties": {
               "host": { "type": "string" },
-              "port": { "type": "integer" },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
               "purpose": { "type": "string" },
               "declared_in": { "type": "string" }
             }

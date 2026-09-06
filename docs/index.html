@@ -77,10 +77,10 @@ Evaluating deterministic gate verdict...
       </div>
       <div class="verdict-grid">
         <article class="verdict-row verdict-pass" data-od-id="landing-exit-0"><span class="verdict-code">0</span><div><strong>PASS</strong><p>All required &amp; conditional scenarios passed with verified side effects.</p></div><span>Ready for promotion / deployment.</span></article>
-        <article class="verdict-row verdict-fail" data-od-id="landing-exit-1"><span class="verdict-code">1</span><div><strong>FAIL</strong><p>One or more required scenarios failed due to product bugs or missing dependencies.</p></div><span>Patch code.</span></article>
-        <article class="verdict-row verdict-unproven" data-od-id="landing-exit-2"><span class="verdict-code">2</span><div><strong>UNPROVEN</strong><p>Preconditions unmet, active waivers present, or dirty git tree with <code>--allow-dirty</code>.</p></div><span>Stage missing fixtures or commit changes.</span></article>
-        <article class="verdict-row verdict-error" data-od-id="landing-exit-3"><span class="verdict-code">3</span><div><strong>HARNESS_ERROR</strong><p>Malformed scenario, missing runtime environment, or Docker Compose crash.</p></div><span>Verify prerequisites and Compose configuration.</span></article>
-        <article class="verdict-row verdict-invalid" data-od-id="landing-exit-4"><span class="verdict-code">4</span><div><strong>EVIDENCE_INVALID</strong><p>Evidence file tampering, injected logs, or SHA-256 checksum mismatch.</p></div><span>Clean corrupted workspace.</span></article>
+        <article class="verdict-row verdict-fail" data-od-id="landing-exit-1"><span class="verdict-code">1</span><div><strong>FAIL</strong><p>Observed failure or early rejection without a verdict.</p></div><span>Inspect causes; fix product defects or acquire missing fixtures.</span></article>
+        <article class="verdict-row verdict-unproven" data-od-id="landing-exit-2"><span class="verdict-code">2</span><div><strong>UNPROVEN</strong><p>Unmet conditions, waivers, or dirty development.</p></div><span>Resolve underlying failures before clean certification.</span></article>
+        <article class="verdict-row verdict-error" data-od-id="landing-exit-3"><span class="verdict-code">3</span><div><strong>HARNESS_ERROR</strong><p>Contract, environment, probe or startup fault.</p></div><span>Inspect startup evidence. UNKNOWN is unresolved attribution, not a product bug.</span></article>
+        <article class="verdict-row verdict-invalid" data-od-id="landing-exit-4"><span class="verdict-code">4</span><div><strong>EVIDENCE_INVALID</strong><p>Evidence tampering or checksum mismatch.</p></div><span>Preserve the run and investigate; no blind cleanup or resealing.</span></article>
       </div>
       <a class="button-link" href="docs.html#core-invariants" data-od-id="read-exit-code-reference">Read exit-code reference</a>
     </section>
@@ -90,16 +90,30 @@ Evaluating deterministic gate verdict...
       <div class="start-grid">
         <div>
           <h2>Bring the harness into your project.</h2>
-          <p>Install the package into your project as a development dependency, verify the host, then scaffold project-owned contracts.</p>
+          <p>Inspect the packaged skills, derive contract artifacts from source, and review their diffs. <code>AI-ADOPTION.md</code> is the standard agent protocol.</p>
         </div>
         <div class="install-panel">
           <div class="code-header"><span>TERMINAL</span><button class="copy-btn" type="button" data-od-id="copy-install">COPY</button></div>
           <pre id="install-command"><code>npm install -D @xibodev/release-harness
 npx release-harness doctor
-npx release-harness init</code></pre>
+npx release-harness skills list
+npx release-harness init --with-agents</code></pre>
           <a href="docs.html#onboarding-project">Follow the onboarding guide <span aria-hidden="true">→</span></a>
         </div>
       </div>
+    </section>
+    <section class="landing-section" id="phase-delegation">
+      <h2>Delegate phases. Review artifacts.</h2>
+      <p>These are playbooks: bring host file/shell tools, image input for screenshot review, and separately verified Docker/browser/database prerequisites. Scaffolding installs none of that infrastructure. Missing tools mean deferred checks, not passes; audit scores never override the deterministic CLI. Startup evidence may omit raw logs for secret safety.</p>
+      <p>After scaffolding, restart Claude Code, opencode or Copilot CLI from the repository if its skill catalog is stale. Use the documented reload/restart for Cursor or Codex. Verify the host catalog: <code>skills list</code> checks disk, not registration; <code>/init</code> is not a portable reload command.</p>
+      <ol>
+        <li><strong>Cartographer:</strong> "Use release-harness-project-cartographer to derive topology and origins from real services, ports and health probes. Present the generated artifact diff for review."</li>
+        <li><strong>Compiler:</strong> "Use release-harness-scenario-compiler to compile our journeys with independent side-effect probes. Present the diff for approval."</li>
+        <li><strong>Conductor:</strong> "Use release-conductor to run doctor and the local readiness gate with an external evidence root. Report the deterministic verdict and causes."</li>
+        <li><strong>Remediation:</strong> "Use release-harness-fix-planner to derive an evidence-linked plan. After approval, use release-harness-fix-executor for targeted fixes without weakening contracts or discarding user changes."</li>
+        <li><strong>Decider:</strong> The deterministic CLI alone adjudicates. Develop with <code>run-local --allow-dirty</code>, inspect underlying failures on exit 2, then obtain authorization to commit and rerun clean for exit 0. Wire <code>check-pr</code> on PRs and <code>run-local</code> on release branches.</li>
+      </ol>
+      <p>Read <code>&lt;root&gt;/runs/&lt;id&gt;/verdict.json</code> and sealed files under <code>&lt;root&gt;/runs/&lt;id&gt;/evidence/</code>, including startup evidence. Browser egress filtering is not container-wide isolation. Preserve existing contracts: pair slug changes and repair host frontmatter selectively, not with blanket <code>init --overwrite</code>.</p>
     </section>
   </main>
 

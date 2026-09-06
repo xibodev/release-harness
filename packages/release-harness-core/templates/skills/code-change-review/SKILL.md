@@ -161,7 +161,9 @@ Inspect for:
 - auth flow changes in login, logout, session refresh, or permission checks
 - new environment variables that are not documented or defaulted safely
 
-Use `references/security-quick-scan.md` as the checklist and severity rubric.
+Use the checks above. Explain exploitability and impact with file/line or test
+evidence; uncertain matches are hypotheses. Critical means demonstrated severe
+compromise or credential exposure; high means a supported defect needing repair.
 
 ## Output
 
@@ -230,7 +232,13 @@ Recommended shape:
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under an agreed root (for example `./.quality-run/`), outside this
+skill and sealed runs. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 
@@ -242,7 +250,9 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 - Baseline = newest meaningful release tag. If no tag exists, ASK the operator for an explicit baseline (tag, branch, SHA, or date window). Do not guess.
 - Record the chosen baseline in the report so `release-harness-test-coverage-audit` and `release-readiness` can reuse it.
 - Categorize every changed file into exactly one primary bucket (backend / frontend / config / tests / docs).
-- **Worktree-only (no fetch, no remote).** Forbidden commands: `git fetch`, `git pull`, `git remote update`, any network-touching git operation. Forbidden references: any ref under `origin/`, `upstream/`, or any other remote namespace. The baseline MUST resolve to a LOCAL ref (sha, local tag, or local branch). If the requested baseline does not exist locally, STOP and ask the operator — do not fetch. Default baseline when none is specified: `git merge-base HEAD $(git config init.defaultBranch || echo main)` against the LOCAL branch only.
+- **Worktree-only (no fetch, no remote).** Resolve the approved baseline to a
+  local SHA/tag/branch. If unavailable or ambiguous, stop and ask rather than
+  fetching or silently selecting a different baseline.
 - Write `results/<ts>/release/baseline.json` recording `{ "ref": "<sha>", "resolved_via": "local-tag|local-branch|sha|HEAD~N", "remote_used": false }`. If `remote_used` would be `true`, halt.
 
 ### Gates

@@ -212,7 +212,7 @@
           <path d="M 780 115 L 780 200 L 100 200 L 100 115" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="5,5"/>
           <rect x="300" y="175" width="280" height="50" rx="6" fill="var(--red-wash)" stroke="var(--red)" stroke-width="2"/>
           <text x="440" y="196" font-weight="bold" fill="var(--red)" text-anchor="middle">AUTONOMOUS FIX LOOP (If Exit != 0)</text>
-          <text x="440" y="212" fill="var(--red)" text-anchor="middle">fix-planner + fix-executor patches code & re-runs</text>
+          <text x="440" y="212" fill="var(--red)" text-anchor="middle">Inspect causes, approve targeted fixes, re-run</text>
         </svg>
       </div>
     </section>
@@ -242,25 +242,25 @@
             <td><code style="color: var(--danger); font-weight: bold;">FAIL</code></td>
             <td><code>1</code></td>
             <td>One or more required scenarios failed due to product bugs or missing dependencies.</td>
-            <td>Invoke <code>fix-planner</code> & <code>fix-executor</code> to patch code.</td>
+            <td>Inspect verdict causes or runtime diagnostics: fix PRODUCT_BUG, acquire missing fixtures, and do not guess attribution.</td>
           </tr>
           <tr class="exit-code exit-2" data-od-id="exit-code-2">
             <td><code style="color: var(--warning); font-weight: bold;">UNPROVEN</code></td>
             <td><code>2</code></td>
             <td>Preconditions unmet, active waivers present, or dirty git tree with <code>--allow-dirty</code>.</td>
-            <td>Stage missing fixtures or commit uncommitted changes.</td>
+            <td>Inspect underlying failures and unmet conditions before an authorized commit and clean certification.</td>
           </tr>
           <tr class="exit-code exit-3" data-od-id="exit-code-3">
             <td><code style="color: var(--danger); font-weight: bold;">HARNESS_ERROR</code></td>
             <td><code>3</code></td>
             <td>Malformed scenario, missing runtime environment, or Docker Compose crash.</td>
-            <td>Verify <code>doctor</code> prerequisites and Compose configuration.</td>
+            <td>Inspect sealed startup evidence and diagnostics. UNKNOWN remains unresolved attribution; do not infer a product defect from exit 3 alone.</td>
           </tr>
           <tr class="exit-code exit-4" data-od-id="exit-code-4">
             <td><code style="color: var(--danger); font-weight: bold;">EVIDENCE_INVALID</code></td>
             <td><code>4</code></td>
             <td>Evidence file tampering, injected logs, or SHA-256 checksum mismatch.</td>
-            <td>Clean corrupted workspace with <code>npx release-harness clean</code>.</td>
+            <td>Preserve the entire run and investigate. Do not blindly clean, edit, or reseal evidence.</td>
           </tr>
         </tbody>
       </table>
@@ -274,7 +274,7 @@
         <div class="callout-title">UPGRADING FROM 1.1.0 — READ FIRST</div>
         <p>v1.2.0 corrects behaviour that was previously wrong. <strong>A run that was green on 1.1.0 may legitimately fail on 1.2.0.</strong> Each of these is a correction, not a regression:</p>
         <ul>
-          <li><strong>Git-ignored files no longer reach the workspace.</strong> Source is now materialized from git, so a build depending on an untracked local file — a <code>.env</code>, an uncommitted fixture — will fail. Materialization names the excluded file so the cause is visible. Commit it, or provide the value through your compose file's environment. That earlier green proved the build worked on a machine where someone had once created that file, not that it worked from committed source.</li>
+          <li><strong>Git-ignored files do not reach the workspace.</strong> Certification excludes untracked files; dirty development includes nonignored untracked files. Inspect <code>git status</code>, <code>git check-ignore</code> and materialization warnings. Commit non-secret assets only when authorized; supply secrets via approved runtime configuration.</li>
           <li><strong><code>sql_query</code> scenarios now exit 3.</strong> The probe never executed any SQL; the previous green was unearned. Use a custom probe.</li>
           <li><strong>Harness faults report exit 3</strong> where they previously reported exit 1 as a product failure. Check any CI that assumed exit 1 meant your code was broken.</li>
           <li><strong><code>--allow-dirty</code> no longer masks integrity failures.</strong> It still yields exit 2 for a would-be pass or fail, but a harness error keeps exit 3 and invalid evidence keeps exit 4.</li>
@@ -293,6 +293,7 @@
       <pre><code>npm install -D @xibodev/release-harness</code></pre>
 
       <h3 id="cli-commands" data-od-id="heading-cli-commands">Supported CLI Commands & Options</h3>
+      <p><code>npx release-harness skills list</code> and <code>skills info &lt;name&gt;</code> inspect packaged capabilities, target paths and scaffold status without writing files. Info accepts bare and <code>release-harness-*</code> names. Invoke skills by the prefixed name.</p>
       <table class="tech-table">
         <thead>
           <tr>
@@ -338,8 +339,8 @@
 
     <!-- Onboarding a Project -->
     <section id="onboarding-project" data-od-id="section-onboarding-project">
-      <h2 id="project-contracts" data-od-id="heading-onboarding-project">Manual Project Onboarding</h2>
-      <p>Follow these 3 steps if you are manually setting up the harness in your project:</p>
+      <h2 id="project-contracts" data-od-id="heading-onboarding-project">Artifact-First Project Onboarding</h2>
+      <p>Skills derive contracts from source; humans review the generated artifact diff instead of hand-authoring JSON. Examples below are schema references, not blank forms.</p>
 
       <h3>Step 1: Run Doctor & Init</h3>
       <div class="code-header">
@@ -347,10 +348,11 @@
         <button class="copy-btn" type="button" data-od-id="copy-button-03">COPY</button>
       </div>
       <pre><code>npx release-harness doctor
-npx release-harness init</code></pre>
+npx release-harness skills list
+npx release-harness init --with-agents</code></pre>
 
-      <h3>Step 2: Declare Service Nodes in <code>topology.json</code></h3>
-      <p>Open <code>.release-harness/topology.json</code> and declare your project service graph:</p>
+      <h3>Step 2: Derive And Review Service Contracts</h3>
+      <p>Use <code>release-harness-project-cartographer</code> to derive topology and origins from actual services, ports and health probes, then review the diff:</p>
       
       <div class="code-header">
         <span>.release-harness/topology.json</span>
@@ -378,8 +380,8 @@ npx release-harness init</code></pre>
   ]
 }</code></pre>
 
-      <h3>Step 3: Define Declarative Playwright Scenarios</h3>
-      <p>Place declarative test scenarios in <code>.release-harness/scenarios/smoke.json</code> (or <code>.yaml</code>):</p>
+      <h3>Step 3: Compile And Review Scenarios</h3>
+      <p>Use <code>release-harness-scenario-compiler</code> to compile journeys and independent side-effect probes; review the diff before accepting the contracts:</p>
 
       <div class="code-header">
         <span>.release-harness/scenarios/smoke.json</span>
@@ -406,7 +408,7 @@ npx release-harness init</code></pre>
     <section id="ai-agent-onboarding" data-od-id="section-ai-agent-onboarding">
       <h2 data-od-id="heading-ai-agent-onboarding">Using with AI Coding Agents</h2>
       <p>
-        Release-Harness is designed from the ground up for high-leverage AI engineering. Instead of micro-managing tool invocations, give your AI agent high-level goals and let it discover and orchestrate the harness autonomously.
+        <strong>AI-ADOPTION.md is the standard integration protocol.</strong> It ships with <code>init --with-agents</code>, not with npm install. Delegate phases and review artifacts; the deterministic CLI alone adjudicates.
       </p>
 
       <div class="callout">
@@ -420,17 +422,13 @@ npx release-harness init</code></pre>
         <span>AI ONBOARDING PROMPT</span>
         <button class="copy-btn" type="button" data-od-id="copy-button-06">COPY</button>
       </div>
-      <pre><code>Analyze @xibodev/release-harness (https://xibodev.github.io/release-harness/) and integrate it into our project for local deterministic quality gating. Run `npx release-harness init --with-agents` first &mdash; the skill bundle ships with init, not with npm install &mdash; then read AI-ADOPTION.md and use project-cartographer to derive the contracts rather than reading the repository by hand.</code></pre>
+      <pre><code>Inspect `npx release-harness skills list`, run doctor and `init --with-agents`, then follow AI-ADOPTION.md. Use `release-harness-project-cartographer` and `release-harness-scenario-compiler` to derive contract artifacts and present their diffs for approval. Preserve working changes and let the deterministic CLI adjudicate.</code></pre>
 
-      <p><strong>What the AI agent does automatically:</strong></p>
-      <ul>
-        <li>Installs <code>@xibodev/release-harness</code> as a project dev dependency.</li>
-        <li>Executes <code>npx release-harness doctor</code> to verify the environment.</li>
-        <li>Runs <code>npx release-harness init --with-agents</code> to scaffold <code>.release-harness/</code>, <code>AGENTS.md</code>, <code>AI-ADOPTION.md</code>, and the multi-runtime skill libraries. The bundle ships inside the package and only reaches the project through <code>init</code>, so an agent looking for <code>project-cartographer</code> before this step will not find it.</li>
-        <li>Reads <code>AI-ADOPTION.md</code> for the adoption order and the exit-code table.</li>
-        <li>Uses <code>project-cartographer</code> to derive <code>topology.json</code> and <code>origins.json</code> from your real ports, health endpoints, and service definitions &mdash; rather than hand-enumerating routes and Docker files.</li>
-        <li>Uses <code>scenario-compiler</code> to author scenarios under <code>.release-harness/scenarios/</code>, including the side-effect probes that assert what the product produced, then runs <code>npx release-harness run-local</code> to verify a certified green baseline.</li>
-      </ul>
+      <p><strong>Golden Sequence:</strong> doctor, skills discovery, <code>init --with-agents</code>, cartographer, compiler, local gate, then CI integration. See the <a href="index.html#phase-delegation">phase-by-phase prompts</a>.</p>
+      <p>The 18 skills are playbooks, not executable toolkits. Host file/shell tools are required; image review requires a vision-capable host. Scaffolding does not install Docker, browsers, databases, scanners or credentials. Verify and authorize local targets before dynamic checks; missing prerequisites mean deferred checks, not passes. Audit risk and visual scores cannot override the deterministic CLI. Startup evidence may omit raw logs for secret safety; inspect only retained observations and do not promise arbitrary build output was captured.</p>
+      <p>Hosts may cache skills at startup. If missing from the host catalog, exit and relaunch Claude Code, opencode or Copilot CLI in the repository; use the documented reload/restart for Cursor or Codex. Verify the host catalog afterward. <code>skills list</code> checks disk only; <code>/init</code> is not a portable reload command. Preserve a handoff; if restart is unavailable, read the scaffolded SKILL.md directly.</p>
+      <p>Run <code>run-local --allow-dirty --evidence-dir &lt;root&gt;</code> while changes are uncommitted. Inspect underlying failures on exit 2; exits 3/4 still indicate harness/evidence faults. Read <code>&lt;root&gt;/runs/&lt;id&gt;/verdict.json</code>, its sibling <code>run.manifest.json</code>, and sealed files under <code>&lt;root&gt;/runs/&lt;id&gt;/evidence/</code>. If no verdict exists, report diagnostics honestly. Obtain approval and commit authorization before a clean certification run; wire <code>check-pr</code> on PRs and <code>run-local</code> on release branches.</p>
+      <p><strong>Existing projects:</strong> keep <code>product_slug</code> paired between topology and config. <code>topology.json.network_policy</code> is canonical; legacy config policy is supported, conflicts rejected. Browser egress filtering is not container-wide sealing. Repair host frontmatter selectively; blanket <code>init --overwrite</code> resets contracts too.</p>
 
       <!-- The Shipped release-conductor Persona -->
       <h3 id="release-conductor-agent" data-od-id="heading-release-conductor-agent">The Shipped <code>release-conductor</code> Agent Persona</h3>
@@ -448,55 +446,55 @@ npx release-harness init</code></pre>
       <!-- The 18 Bundled Skills -->
       <h3 id="skill-catalog" data-od-id="heading-skill-catalog">The 18 Bundled Cognitive Skills</h3>
       <p>
-        Running <code>npx release-harness init --with-agents</code> populates your project's local AI skill library (under <code>.claude/skills/</code> and <code>.opencode/skills/</code>) with 18 specialized release playbooks, each scaffolded under a <code>release-harness-</code> prefixed name so it cannot shadow a same-named skill you already have. A bare <code>init</code> writes contracts only:
+        Inspect with <code>skills list</code>, then scaffold with <code>init --with-agents</code> into <code>.claude/skills/</code>, <code>.agents/skills/</code> and <code>.opencode/skills/</code>. All 18 identifiers use the <code>release-harness-</code> prefix. A bare init writes contracts only:
       </p>
 
       <div class="skill-item" data-od-id="skill-item-01">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-1">
           <div class="skill-title">
-            <span>project-cartographer</span>
+            <span>release-harness-project-cartographer</span>
             <span class="skill-badge">Discovery</span>
           </div>
           <span class="skill-arrow">▶</span>
         </button>
         <div class="skill-content" id="skill-content-1" hidden>
           <p>Scans Docker Compose, routes, and scripts to build <code>topology.json</code> and <code>origins.json</code>.</p>
-          <p><strong>Prompt:</strong> <code>Use project-cartographer to map our Docker Compose services into .release-harness/topology.json and origins.json.</code></p>
+          <p><strong>Prompt:</strong> <code>Use release-harness-project-cartographer to derive topology and origins, then present the diff for approval.</code></p>
         </div>
       </div>
 
       <div class="skill-item" data-od-id="skill-item-02">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-2">
           <div class="skill-title">
-            <span>scenario-compiler</span>
+            <span>release-harness-scenario-compiler</span>
             <span class="skill-badge">Synthesis</span>
           </div>
           <span class="skill-arrow">▶</span>
         </button>
         <div class="skill-content" id="skill-content-2" hidden>
           <p>Translates user stories, personas, and auth flows into declarative Playwright scenarios.</p>
-          <p><strong>Prompt:</strong> <code>Use scenario-compiler to author Playwright test scenarios for our user checkout flow in .release-harness/scenarios/.</code></p>
+          <p><strong>Prompt:</strong> <code>Use release-harness-scenario-compiler to compile checkout journeys and side-effect probes, then present the diff for approval.</code></p>
         </div>
       </div>
 
       <div class="skill-item" data-od-id="skill-item-03">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-3">
           <div class="skill-title">
-            <span>fix-planner & fix-executor</span>
+            <span>release-harness-fix-planner &amp; release-harness-fix-executor</span>
             <span class="skill-badge">Remediation</span>
           </div>
           <span class="skill-arrow">▶</span>
         </button>
         <div class="skill-content" id="skill-content-3" hidden>
-          <p>Parses failure causes in <code>verdict.json</code>, constructs an ordered <code>execution-plan.json</code>, applies source code diffs, and re-runs <code>run-local</code> until certified green.</p>
-          <p><strong>Prompt:</strong> <code>Use fix-planner and fix-executor to resolve the failing scenarios in verdict.json.</code></p>
+          <p>Derives an evidence-linked <code>execution-plan.json</code> from verdict and startup diagnostics. After approval, applies targeted fixes while preserving dirty user changes. A separate authorized clean run is required for certification.</p>
+          <p><strong>Prompt:</strong> <code>Use release-harness-fix-planner to derive an evidence-linked plan from this run; after approval, use release-harness-fix-executor for targeted remediation.</code></p>
         </div>
       </div>
 
       <div class="skill-item" data-od-id="skill-item-04">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-4">
           <div class="skill-title">
-            <span>deep-screenshot-analysis</span>
+            <span>release-harness-deep-screenshot-analysis</span>
             <span class="skill-badge">Vision UX</span>
           </div>
           <span class="skill-arrow">▶</span>
@@ -509,7 +507,7 @@ npx release-harness init</code></pre>
       <div class="skill-item" data-od-id="skill-item-05">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-5">
           <div class="skill-title">
-            <span>security-audit & fintech-security-review</span>
+            <span>release-harness-security-audit &amp; release-harness-fintech-security-review</span>
             <span class="skill-badge">Security</span>
           </div>
           <span class="skill-arrow">▶</span>
@@ -522,7 +520,7 @@ npx release-harness init</code></pre>
       <div class="skill-item" data-od-id="skill-item-06">
         <button class="skill-header" type="button" aria-expanded="false" aria-controls="skill-content-6">
           <div class="skill-title">
-            <span>database-readiness-audit & performance-audit</span>
+            <span>release-harness-database-readiness-audit &amp; release-harness-performance-audit</span>
             <span class="skill-badge">Infrastructure</span>
           </div>
           <span class="skill-arrow">▶</span>
@@ -812,7 +810,7 @@ const result = await adapter.executeSuite();
       </div>
       <div class="tech-card" data-od-id="tech-card-09">
         <div class="card-title">❓ What causes an EVIDENCE_INVALID (Exit 4) error?</div>
-        <div class="card-desc">The sealer detected that files in the evidence directory were modified or injected after sealing. Clean the run directory with <code>npx release-harness clean</code>.</div>
+        <div class="card-desc">The sealed evidence did not verify. Preserve the entire run and investigate missing, modified or injected files and manifest mismatches. Do not blindly clean, edit or reseal evidence. After resolving the cause, use a new run ID; cleanup is not evidence repair.</div>
       </div>
     </section>
 

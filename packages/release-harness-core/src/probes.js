@@ -10,40 +10,56 @@ import { execFile } from 'node:child_process';
  * Independent side-effect and health probes.
  */
 
-export async function probeHttp({ host = '127.0.0.1', port = 80, path = '/', scheme = 'http', method = 'GET', headers = {}, expectedStatus = 200, timeoutMs = 5000 }) {
+export async function probeHttp({ host = '127.0.0.1', port = 80, path = '/', scheme = 'http', method = 'GET', headers = {}, expectedStatus = 200, timeoutMs = 5000, maxBodyBytes = Infinity }) {
   const client = scheme === 'https' ? https : http;
-  const url = `${scheme}://${host}:${port}${path}`;
+  const url = `${scheme}://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${port}${path}`;
   const start = Date.now();
 
   return new Promise((resolve) => {
-    const req = client.request(url, { method, headers, timeout: timeoutMs, rejectUnauthorized: false }, (res) => {
-      const elapsed = Date.now() - start;
-      const resHeaders = res.headers;
-      let body = '';
-      res.on('data', (chunk) => (body += chunk));
-      res.on('end', () => {
-        const ok = res.statusCode === expectedStatus || (expectedStatus === 200 && res.statusCode >= 200 && res.statusCode < 400);
-        resolve({
-          ok,
-          status: res.statusCode,
-          headers: resHeaders,
-          body,
-          elapsedMs: elapsed,
-          message: `HTTP ${res.statusCode} in ${elapsed}ms`,
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    // Bound total response time, not just socket inactivity (a trickle can keep a socket alive).
+    const timer = setTimeout(() => {
+      finish({ ok: false, status: 0, error_code: 'ETIMEDOUT', elapsedMs: Date.now() - start, message: `HTTP probe timed out after ${timeoutMs}ms` });
+      req.destroy();
+    }, timeoutMs);
+    let req;
+    try {
+      req = client.request(url, { method, headers, timeout: timeoutMs, rejectUnauthorized: false }, (res) => {
+        const elapsed = Date.now() - start;
+        const resHeaders = res.headers;
+        let body = '';
+        let bodyBytes = 0;
+        res.on('data', (chunk) => {
+          bodyBytes += chunk.length;
+          if (bodyBytes <= maxBodyBytes) body += chunk;
+          else {
+            finish({ ok: false, status: res.statusCode, error_code: 'RESPONSE_TOO_LARGE', elapsedMs: Date.now() - start, message: 'HTTP probe response exceeded size limit' });
+            req.destroy();
+          }
+        });
+        res.on('error', (err) => finish({ ok: false, status: 0, error_code: err.code || 'RESPONSE_ERROR', elapsedMs: Date.now() - start, message: err.message }));
+        res.on('end', () => {
+          const ok = res.statusCode === expectedStatus || (expectedStatus === 200 && res.statusCode >= 200 && res.statusCode < 400);
+          finish({ ok, status: res.statusCode, headers: resHeaders, body, elapsedMs: elapsed, message: `HTTP ${res.statusCode} in ${elapsed}ms` });
         });
       });
-    });
-
-    req.on('timeout', () => {
-      req.destroy();
-      resolve({ ok: false, status: 0, elapsedMs: Date.now() - start, message: `HTTP probe timed out after ${timeoutMs}ms` });
-    });
-
-    req.on('error', (err) => {
-      resolve({ ok: false, status: 0, elapsedMs: Date.now() - start, message: err.message });
-    });
-
-    req.end();
+      req.on('timeout', () => {
+        req.destroy();
+        finish({ ok: false, status: 0, error_code: 'ETIMEDOUT', elapsedMs: Date.now() - start, message: `HTTP probe timed out after ${timeoutMs}ms` });
+      });
+      req.on('error', (err) => {
+        finish({ ok: false, status: 0, error_code: err.code || 'REQUEST_ERROR', elapsedMs: Date.now() - start, message: err.message });
+      });
+      req.end();
+    } catch (err) {
+      finish({ ok: false, status: 0, error_code: err.code || 'INVALID_REQUEST', elapsedMs: Date.now() - start, message: err.message });
+    }
   });
 }
 
@@ -61,12 +77,12 @@ export async function probeTcp({ host = '127.0.0.1', port, timeoutMs = 5000 }) {
 
     socket.on('timeout', () => {
       socket.destroy();
-      resolve({ ok: false, elapsedMs: Date.now() - start, message: `TCP timeout after ${timeoutMs}ms` });
+      resolve({ ok: false, error_code: 'ETIMEDOUT', elapsedMs: Date.now() - start, message: `TCP timeout after ${timeoutMs}ms` });
     });
 
     socket.on('error', (err) => {
       socket.destroy();
-      resolve({ ok: false, elapsedMs: Date.now() - start, message: err.message });
+      resolve({ ok: false, error_code: err.code || 'CONNECT_ERROR', elapsedMs: Date.now() - start, message: err.message });
     });
   });
 }

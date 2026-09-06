@@ -24,6 +24,10 @@ Compiles user journeys into deterministic JSON/YAML scenarios for Release-Harnes
    file, an email, a cache entry, a stored object -- add `expected_side_effects`
    so the scenario asserts the product's output and not only its UI. See
    "Asserting side effects" below.
+5. Present the generated artifact diff for human approval before treating it
+   as the accepted contract. Preserve user edits and required coverage. Use
+   `run-local --allow-dirty` for development validation via the calling agent;
+   inspect underlying results on exit 2 and follow `AI-ADOPTION.md` for triage.
 
 ## Asserting side effects
 
@@ -84,6 +88,9 @@ state with a custom probe that runs your own query tool.
 Use a **custom probe** when the product's real deliverable is a file -- a
 rendered video, a compiled binary, a generated PDF, an exported dataset -- or
 when you need an assertion the named probes cannot express:
+
+Product-owned example: `./scripts/probe-artifact.sh` is a script the project
+must implement and review; it is not a bundled skill support file.
 
 ```json
 {

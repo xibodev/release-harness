@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { EvidenceSealer } from './sealer.js';
-import { validateVerdict } from './validator.js';
+import { validateVerdict, validateAgainstSchema, validateNetworkPolicy } from './validator.js';
+import { Schemas } from '../../release-harness-schemas/index.js';
 
 /**
  * The cause to record for a failure that carries its own attribution.
@@ -38,6 +39,10 @@ export function evaluateRun({
   const evalDate = new Date(evaluationTime);
   const discoveredCauses = new Set();
   const violations = [];
+  harnessErrors = [...harnessErrors];
+  networkViolations = [...networkViolations];
+  let runtime = null;
+  let sealedPolicy = null;
 
   // 1. Evidence integrity verification and sealed policy/result ingestion
   let evidenceManifestSha256 = '0000000000000000000000000000000000000000000000000000000000000000';
@@ -46,6 +51,17 @@ export function evaluateRun({
   let sealedManifest = null;
 
   if (!skipIntegrityVerification && evidenceDir) {
+    // Caller observations never participate in a sealed adjudication, including
+    // older bundles. Missing historical policy/canaries remain non-certifying.
+    scenarios = [];
+    origins = [];
+    waivers = [];
+    brandContract = null;
+    canaryResults = [];
+    startedAt = null;
+    rawResults = [];
+    harnessErrors = [];
+    networkViolations = [];
     const sealer = new EvidenceSealer(evidenceDir, runId);
     const integrity = sealer.verifyIntegrity();
     if (!integrity.ok) {
@@ -59,60 +75,27 @@ export function evaluateRun({
       evidenceManifestSha256 = integrity.manifestSha256;
       sealedManifest = integrity.manifest;
 
-      // Timestamp Chronology Verification: started_at <= sealed_at <= evaluation_time
-      if (startedAt && sealedManifest.sealed_at) {
-        const startTimestamp = new Date(startedAt).getTime();
-        const sealedTimestamp = new Date(sealedManifest.sealed_at).getTime();
-        const evalTimestamp = evalDate.getTime();
-
-        if (sealedTimestamp < startTimestamp) {
-          chronologyInvalid = true;
-          violations.push({
-            type: 'TIMESTAMP_CHRONOLOGY_VIOLATION',
-            description: `Invalid chronology: sealed_at (${sealedManifest.sealed_at}) is earlier than started_at (${startedAt})`,
-          });
-        } else if (evalTimestamp < sealedTimestamp) {
-          chronologyInvalid = true;
-          violations.push({
-            type: 'TIMESTAMP_CHRONOLOGY_VIOLATION',
-            description: `Invalid chronology: evaluation_time (${evaluationTime}) is earlier than sealed_at (${sealedManifest.sealed_at})`,
-          });
-        }
+      if (!Number.isFinite(evalDate.getTime()) || evalDate.getTime() < Date.parse(sealedManifest.sealed_at)) {
+        chronologyInvalid = true;
+        violations.push({ type: 'TIMESTAMP_CHRONOLOGY_VIOLATION', description: 'evaluation_time must be at or after sealed_at' });
       }
 
       // Ingest sealed policy snapshot (Deterministic Replay)
       const policySnapshotFile = path.join(evidenceDir, 'policy-snapshot.json');
       if (fs.existsSync(policySnapshotFile)) {
         try {
-          const sealedPolicy = JSON.parse(fs.readFileSync(policySnapshotFile, 'utf8'));
+          sealedPolicy = sealer.readVerifiedJson('policy-snapshot.json', sealedManifest);
+          if (!sealedPolicy || typeof sealedPolicy !== 'object') throw new Error('Invalid policy snapshot');
+          for (const key of ['scenarios', 'origins', 'waivers']) {
+            if (sealedPolicy[key] !== undefined && !Array.isArray(sealedPolicy[key])) throw new Error(`Invalid policy ${key}`);
+          }
+          if (sealedPolicy.network_policy != null) validateNetworkPolicy(sealedPolicy.network_policy);
 
-          if (scenarios.length === 0 && Array.isArray(sealedPolicy.scenarios)) {
-            scenarios = sealedPolicy.scenarios;
-          }
-          if (origins.length === 0 && Array.isArray(sealedPolicy.origins)) {
-            origins = sealedPolicy.origins;
-          }
-          if (waivers.length === 0 && Array.isArray(sealedPolicy.waivers)) {
-            waivers = sealedPolicy.waivers;
-          }
-          if (!brandContract && sealedPolicy.brand_contract) {
-            brandContract = sealedPolicy.brand_contract;
-          }
-
-          // Verify that unsealed caller parameters do not contradict the sealed policy snapshot
-          if (Array.isArray(sealedPolicy.scenarios) && scenarios.length > 0) {
-            const sealedScenMap = new Map(sealedPolicy.scenarios.map((s) => [s.id, s]));
-            for (const s of scenarios) {
-              const matchedSealed = sealedScenMap.get(s.id);
-              if (!matchedSealed || matchedSealed.policy !== s.policy) {
-                evidenceInvalid = true;
-                violations.push({
-                  type: 'POLICY_SUBSTITUTION_VIOLATION',
-                  description: `Caller-provided unsealed scenario "${s.id}" conflicts with sealed policy snapshot`,
-                });
-              }
-            }
-          }
+          // Sealed policy is authoritative even when callers supply live objects.
+          scenarios = sealedPolicy.scenarios || [];
+          origins = sealedPolicy.origins || [];
+          waivers = sealedPolicy.waivers || [];
+          brandContract = sealedPolicy.brand_contract || null;
         } catch (e) {
           evidenceInvalid = true;
           violations.push({
@@ -124,12 +107,18 @@ export function evaluateRun({
 
       // Load sealed raw results if available
       const rawResultsFile = path.join(evidenceDir, 'raw-results.json');
+      rawResults = [];
       if (fs.existsSync(rawResultsFile)) {
         try {
-          const sealedRawResults = JSON.parse(fs.readFileSync(rawResultsFile, 'utf8'));
-          if (rawResults.length === 0) {
-            rawResults = sealedRawResults;
+          const sealedRawResults = sealer.readVerifiedJson('raw-results.json', sealedManifest);
+          if (!Array.isArray(sealedRawResults)) throw new Error('raw-results.json must be an array');
+          for (const raw of sealedRawResults) {
+            if (!raw || typeof raw !== 'object') throw new Error('Invalid raw result');
+            for (const key of ['network_violations', 'network_observations', 'side_effect_observations']) {
+              if (raw[key] !== undefined && (!Array.isArray(raw[key]) || raw[key].some((v) => !v || typeof v !== 'object'))) throw new Error(`Invalid result ${key}`);
+            }
           }
+          rawResults = sealedRawResults;
         } catch (e) {
           evidenceInvalid = true;
           violations.push({
@@ -138,7 +127,86 @@ export function evaluateRun({
           });
         }
       }
+      const runtimeFile = path.join(evidenceDir, 'runtime-observations.json');
+      if (fs.existsSync(runtimeFile)) {
+        try {
+          runtime = sealer.readVerifiedJson('runtime-observations.json', sealedManifest);
+          validateAgainstSchema(Schemas.RuntimeObservationsV1, runtime, 'Runtime observations');
+          if (!runtime.startup.blocked && (runtime.startup.error || runtime.startup.health.some((h) => !h.healthy))) throw new Error('Startup observations contradict blocked flag');
+          if (!runtime.startup.blocked && !['ready', 'not_applicable'].includes(runtime.startup.phase)) throw new Error('Startup did not reach readiness');
+          if (runtime.startup.blocked && !['compose_up', 'health'].includes(runtime.startup.phase)) throw new Error('Invalid blocked startup phase');
+          if (!Number.isFinite(Date.parse(runtime.started_at))) throw new Error('Invalid runtime started_at');
+          startedAt = runtime.started_at;
+          if (Date.parse(startedAt) > Date.parse(sealedManifest.sealed_at) || evalDate.getTime() < Date.parse(sealedManifest.sealed_at)) {
+            chronologyInvalid = true;
+            violations.push({ type: 'TIMESTAMP_CHRONOLOGY_VIOLATION', description: 'Runtime timestamps must satisfy started_at <= sealed_at <= evaluation_time' });
+          }
+          if (!fs.existsSync(rawResultsFile)) throw new Error('Required raw-results.json is missing');
+        } catch (err) {
+          runtime = null;
+          evidenceInvalid = true;
+          violations.push({ type: 'EVIDENCE_CORRUPTION_ERROR', description: err.message });
+        }
+      } else if (sealedPolicy?.runtime_observations_version) {
+        evidenceInvalid = true;
+        violations.push({ type: 'EVIDENCE_CORRUPTION_ERROR', description: 'Required runtime-observations.json is missing' });
+      }
+      const canaryFile = path.join(evidenceDir, 'canary-results.json');
+      try {
+        const observed = fs.existsSync(canaryFile)
+          ? sealer.readVerifiedJson('canary-results.json', sealedManifest)
+          : rawResults.flatMap((r) => r.canary_results || []);
+        if (!Array.isArray(observed) || observed.some((c) => !c || typeof c !== 'object' || typeof c.verdict !== 'string' || !(c.origin_id || c.canary_id))) throw new Error('Invalid sealed canary results');
+        canaryResults = observed;
+      } catch (err) {
+        evidenceInvalid = true;
+        violations.push({ type: 'EVIDENCE_CORRUPTION_ERROR', description: err.message });
+      }
+      // Reconstruct these inputs from sealed observations, never caller-only arrays.
+      harnessErrors = [];
+      networkViolations = [];
     }
+  }
+
+  for (const raw of rawResults) {
+    networkViolations.push(...(raw.network_violations || []));
+    for (const obs of raw.network_observations || []) {
+      if (obs.decision === 'DENIED' && !(raw.network_violations || []).some((v) => v.host === obs.host && v.port === obs.port && v.url === obs.url)) {
+        networkViolations.push({ host: obs.host, port: obs.port, url: obs.url, attributed_to: 'product' });
+      }
+    }
+    const flagged = (raw.side_effect_observations || []).filter((o) => o.is_harness_error);
+    for (const obs of flagged) harnessErrors.push({ cause: obs.cause || 'HARNESS_CONFIGURATION', message: `[${raw.id || raw.scenario_id}] ${obs.observed_result}`, scenario_id: raw.id || raw.scenario_id });
+    if (!flagged.length && (raw.is_harness_error || (raw.failed && ['HARNESS_ENVIRONMENT', 'HARNESS_CONFIGURATION'].includes(raw.cause)))) {
+      harnessErrors.push({ cause: raw.cause || 'HARNESS_ENVIRONMENT', message: raw.error_message, scenario_id: raw.id || raw.scenario_id });
+    }
+  }
+  // Existing direct evaluator callers can supply the same event twice. Keep diagnostics stable.
+  networkViolations = [...new Map(networkViolations.map((v) => [JSON.stringify(v), v])).values()];
+  harnessErrors = [...new Map(harnessErrors.map((v) => [JSON.stringify(v), v])).values()];
+  let startupCause = null;
+  if (runtime?.startup.blocked) {
+    const startup = runtime.startup;
+    startupCause = 'UNKNOWN';
+    if (startup.error?.kind === 'configuration') startupCause = 'HARNESS_CONFIGURATION';
+    else if (['ENOENT', 'EACCES', 'EPERM'].includes(startup.error?.code)) startupCause = 'HARNESS_ENVIRONMENT';
+    else {
+      const failures = startup.health.filter((h) => !h.healthy);
+      const services = [...(sealedPolicy?.topology?.nodes || []), ...(sealedPolicy?.topology?.repositories || []).flatMap((r) => r.services || [])];
+      // A transport failure or container exit alone cannot assign blame. Only an
+      // actual 5xx from a published endpoint of a running product service does.
+      const productResponse = (h) => h.probe_type === 'http' && h.status >= 500 && h.status <= 599 && !h.error_code
+        && services.some((s) => s.id === h.service_id && ['browser_app', 'api', 'worker'].includes(s.type) && s.health_probe?.type === 'http'
+          && (s.health_probe.expected_status ?? 200) === (h.expected_status ?? 200)
+          && (s.health_probe.path || '/health') === (h.path || '/health'))
+        && (startup.diagnostics?.containers || []).some((c) => c.service_id === h.service_id && c.running && !c.oom_killed && !c.error
+          && Object.values(c.ports || {}).flatMap((p) => p || []).some((p) => Number(p.HostPort) === h.port
+            && (p.HostIp === h.host || (p.HostIp === '0.0.0.0' && h.host === '127.0.0.1') || (p.HostIp === '::' && ['::1', '[::1]'].includes(h.host)))));
+      if (!startup.error && failures.length && !startup.diagnostics?.errors?.length && failures.every(productResponse)) startupCause = 'PRODUCT_BUG';
+    }
+    if (startupCause !== 'PRODUCT_BUG') harnessErrors.push({ cause: startupCause, message: 'Startup/readiness failed; see sealed runtime observations', phase: startup.phase });
+    discoveredCauses.add(startupCause);
+    violations.push({ type: 'STARTUP_FAILURE', description: `Startup blocked scenario execution (${startupCause})`, details: { phase: startup.phase } });
   }
 
   // 2. Enforce Coverage Floors (Zero scenarios or zero required scenarios cannot certify PASS)
@@ -222,6 +290,11 @@ export function evaluateRun({
       disposition = 'CONDITION_UNMET';
       cause = 'HARNESS_CONFIGURATION';
       errorMessage = 'Manual scenario requires explicit structured sign-off';
+    } else if (!raw && startupCause) {
+      status = startupCause === 'PRODUCT_BUG' ? 'FAIL' : 'UNPROVEN';
+      disposition = 'CONDITION_UNMET';
+      cause = startupCause;
+      errorMessage = 'Scenario not executed: startup/readiness failed';
     } else if (!raw) {
       // Scenario was not executed
       if (scenario.policy === 'required') {
@@ -429,7 +502,7 @@ export function evaluateRun({
   const requiredCount = scenarios.filter((s) => s.policy === 'required').length;
   const isAllSkippedOrConditional = scenarios.length > 0 && (requiredCount === 0 || summary.passed === 0 && summary.skipped > 0);
 
-  if (summary.failed > 0 || networkViolations.length > 0 || hasUncoveredRequiredOrigins) {
+  if (startupCause === 'PRODUCT_BUG' || summary.failed > 0 || networkViolations.length > 0 || hasUncoveredRequiredOrigins) {
     certificationStatus = 'FAIL';
   } else if (summary.unproven > 0 || isAllSkippedOrConditional || coverageFloorViolated) {
     certificationStatus = 'UNPROVEN';
@@ -440,7 +513,7 @@ export function evaluateRun({
     runIntegrity = 'EVIDENCE_INVALID';
   } else if (harnessErrors.length > 0 || chronologyInvalid || coverageFloorViolated) {
     runIntegrity = 'HARNESS_ERROR';
-    discoveredCauses.add('HARNESS_CONFIGURATION');
+    if (chronologyInvalid || coverageFloorViolated) discoveredCauses.add('HARNESS_CONFIGURATION');
   }
 
   let exitCode = 0;
@@ -456,6 +529,11 @@ export function evaluateRun({
     exitCode = 0;
   }
 
+  if (runtime?.execution_mode === 'DEVELOPMENT') {
+    certificationStatus = 'UNPROVEN';
+    if (runIntegrity === 'COMPLETE') exitCode = 2;
+    discoveredCauses.add('HARNESS_CONFIGURATION');
+  }
   const causesArray = Array.from(discoveredCauses).sort();
   if (causesArray.length === 0) {
     causesArray.push('NONE');
@@ -473,6 +551,7 @@ export function evaluateRun({
     summary,
     evidence_manifest_sha256: evidenceManifestSha256,
     violations: violations.length > 0 ? violations : undefined,
+    ...(runtime?.execution_mode === 'DEVELOPMENT' ? { execution_mode: 'DEVELOPMENT', certification_eligible: false } : {}),
   };
 
   validateVerdict(verdict);

@@ -23,6 +23,7 @@ export const Schemas = {
   VerdictV1: loadSchema('verdict-v1'),
   RunManifestV1: loadSchema('run-manifest-v1'),
   HarnessConfigV1: loadSchema('harness-config-v1'),
+  RuntimeObservationsV1: loadSchema('runtime-observations-v1'),
 };
 
 export default Schemas;

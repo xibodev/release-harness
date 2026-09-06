@@ -80,7 +80,7 @@ Look for `helmet`, `next-safe`, `secure_headers`, `django-csp`, ASP.NET middlewa
 
 - `./.quality-run/results/<ts>/security/security-report.md` — human-readable, grouped by section above.
 - `./.quality-run/results/<ts>/security/findings.json` — machine-readable raw findings with file + line + category.
-- `./.quality-run/results/<ts>/security/fix-plan.json` — shared Fix Plan Schema (see suite README).
+- `./.quality-run/results/<ts>/security/fix-plan.json` with the finding fields below.
 
 ### Fix-plan item conventions
 
@@ -105,7 +105,13 @@ Look for `helmet`, `next-safe`, `secure_headers`, `django-csp`, ASP.NET middlewa
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under an agreed root (for example `./.quality-run/`), outside this
+skill and sealed runs. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 
@@ -117,7 +123,13 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 - Never include actual secret values in any output file. Reference by file + line + pattern name only.
 - Never mutate the working tree. Read-only scanning only.
 - If a vulnerability scanner is missing on PATH, record the gap; do not skip silently.
-- **Sealed UAT — no internet.** Vuln scanners must use an offline DB: `osv-scanner --offline-vulnerabilities <dir>`, `npm audit --offline` against the cached lockfile, `pip-audit --no-deps`. If no cached DB is present under `artefacts/security-db/`, emit one `deferred-test` fix-plan item per missing DB (`category: "deferred-test"`, `severity: "info"`, `evidence.reason: "requires-internet"`, `evidence.what_to_run_offline: "populate artefacts/security-db/<scanner> with the offline DB or run the scanner outside the sealed run"`). Do not call out to any public service. Do not fabricate a result.
+- **Offline assessment:** verify the installed scanner's documented offline
+  mode and usable advisory database before execution. A lockfile/cache or
+  `--no-deps` is not proof of an offline vulnerability scan. If an offline scan
+  is unavailable, emit a `deferred-test` finding with tool/version, missing input
+  and proposed authorized follow-up; continue source review. Do not call public
+  services, install scanners or fabricate results. Browser policy does not
+  constrain scanner network access.
 
 ### Gates
 

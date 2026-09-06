@@ -1,4 +1,5 @@
 import Ajv from 'ajv';
+import { isIP } from 'node:net';
 import { Schemas } from '../../release-harness-schemas/index.js';
 
 /**
@@ -104,6 +105,47 @@ export function validateTopology(topology) {
   if (errors.length > 0) {
     throw new ValidationError(`Topology validation failed with ${errors.length} error(s)`, errors);
   }
+  if (topology.network_policy !== undefined) validateNetworkPolicy(topology.network_policy);
+  for (const service of [...(topology.nodes || []), ...(topology.repositories || []).flatMap((r) => r.services || [])]) {
+    if (service.health_probe !== undefined) validateHealthProbe(service.health_probe);
+  }
+  return true;
+}
+
+export function validateNetworkPolicy(policy) {
+  validateAgainstSchema(Schemas.TopologyV1.properties.network_policy, policy, 'Network policy');
+  for (const rule of policy.allowed_egress || []) {
+    if (!rule.host || /[\s/@?#\\]/.test(rule.host) || rule.host.includes('*') || (rule.host.includes(':') && !isIP(rule.host.replace(/^\[|\]$/g, '')))) {
+      throw new ValidationError('Network policy host must be an exact hostname or IP address');
+    }
+  }
+  return true;
+}
+
+// Compare enforcement semantics, not key order, rule order or descriptive text.
+export function resolveNetworkPolicy(topology, config = {}) {
+  const canonical = topology.network_policy;
+  const legacy = config.network_policy;
+  if (canonical !== undefined) validateNetworkPolicy(canonical);
+  if (legacy !== undefined) validateNetworkPolicy(legacy);
+  const signature = (p) => JSON.stringify([p.mode, [...new Set((p.allowed_egress || [])
+    .map((r) => `${r.host.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '')}:${r.port}`))].sort()]);
+  if (canonical !== undefined && legacy !== undefined && signature(canonical) !== signature(legacy)) {
+    throw new ValidationError('Conflicting network_policy declarations in topology.json and harness.config.json');
+  }
+  return canonical ?? legacy ?? null;
+}
+
+export function validateHealthProbe(probe, portOffset = 0) {
+  validateAgainstSchema(Schemas.TopologyV1.definitions.servicesList.items.properties.health_probe, probe, 'Health probe');
+  if (!['http', 'tcp'].includes(probe.type)) {
+    throw new ValidationError(`Health probe type "${probe.type}" is not implemented; use http or tcp`);
+  }
+  const port = (probe.port ?? (probe.scheme === 'https' ? 443 : 80)) + portOffset;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ValidationError('Health probe effective port must be between 1 and 65535');
+  if (probe.type === 'tcp' && probe.port === undefined) throw new ValidationError('TCP health probe requires a port');
+  if (probe.host !== undefined && (!probe.host || /[\s/@?#\\]/.test(probe.host) || (probe.host.includes(':') && !isIP(probe.host.replace(/^\[|\]$/g, ''))))) throw new ValidationError('Invalid health probe host');
+  if (probe.path !== undefined && !probe.path.startsWith('/')) throw new ValidationError('Health probe path must start with /');
   return true;
 }
 

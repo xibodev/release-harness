@@ -2,6 +2,54 @@
 
 All notable changes to Release-Harness are documented here.
 
+## Unreleased
+
+### Added
+
+- Read-only `skills list` and `skills info`, shared `.agents/skills` scaffolding,
+  host discovery guidance, and self-contained artifact-first skill playbooks.
+- Versioned, sealed startup observations with conservative failure attribution
+  and explicit accounting for scenarios blocked before execution.
+- Regression coverage for fresh-package consumers, runtime scaffolds, replay,
+  browser redirects, WebSockets, WebRTC UDP suppression, and interrupted responses.
+
+### Fixed
+
+- Generated slugs satisfy both contract schemas; partial scaffolds preserve a
+  valid existing identity and reject conflicts before writing (#7).
+- Consumer agents use runtime-specific frontmatter and native tool capabilities
+  rather than copying a mixed-dialect template (#10, #11).
+- Skill discovery and onboarding distinguish disk scaffolding from host
+  registration, preserve customizations, and triage actual evidence (#8).
+- Startup failures retain sealed diagnostic observations instead of returning
+  exit 3 without a verdict whenever evidence finalization succeeds (#12).
+- Runtime policy resolution honors legacy config declarations, rejects conflicts,
+  and uses topology as the canonical location for new scaffolds (#13).
+- Browser filtering checks redirect destinations and WebSocket transports before
+  connecting. Upstream aborts propagate without hanging downstream requests.
+- Sealed replay uses manifest-covered facts rather than caller-only overrides;
+  network and harness failures retain their verdicts. Linked evidence is rejected.
+
+### Upgrade Notes
+
+- Security and validation corrections can make previously green runs fail.
+  Preserve old evidence; do not edit or reseal archives to force certification.
+  Historical bundles missing required sealed facts may need a new run.
+- HTTP and TCP are the supported health probes. Previously accepted but
+  unimplemented probe types now fail explicitly. Ambiguous startup failures
+  remain exit 3 with `UNKNOWN`; they are not automatically product bugs.
+- Missing network policy retains legacy open behavior with a warning. Conflicting
+  declarations and malformed policy fields are rejected. HTTPS/WSS filtering
+  checks tunnel destinations, not encrypted content or SNI; allowed relays and
+  container-wide isolation are outside this boundary. Suppressed WebRTC UDP
+  attempts do not create individual verdict violations.
+- Arbitrary startup logs are omitted to avoid persisting secrets.
+- Repair existing slugs and agent frontmatter selectively. Normal init preserves
+  existing files; `--force`/`--overwrite` also resets customized contracts.
+  The stale sibling-repository template generator is retired.
+- Version selection and Node support remain release gates; see
+  [the release plan](docs/release-plan.md). No package version is bumped here.
+
 ## 1.2.0
 
 ### Behavior changes

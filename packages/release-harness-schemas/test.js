@@ -14,9 +14,10 @@ assert.ok(Schemas.EvidenceManifestV1, 'EvidenceManifestV1 should load');
 assert.ok(Schemas.VerdictV1, 'VerdictV1 should load');
 assert.ok(Schemas.RunManifestV1, 'RunManifestV1 should load');
 assert.ok(Schemas.HarnessConfigV1, 'HarnessConfigV1 should load');
+assert.ok(Schemas.RuntimeObservationsV1, 'RuntimeObservationsV1 should load');
 
 // Verify run_integrity enum in VerdictV1
 const runIntegrityEnum = Schemas.VerdictV1.properties.run_integrity.enum;
 assert.deepStrictEqual(runIntegrityEnum, ['COMPLETE', 'HARNESS_ERROR', 'EVIDENCE_INVALID']);
 
-console.log('All 9 schemas loaded and verified successfully!');
+console.log(`All ${Object.keys(Schemas).length} schemas loaded and verified successfully!`);

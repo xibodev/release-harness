@@ -88,7 +88,13 @@ Find the performance issues that actually matter at projection scale — backend
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under an agreed root (for example `./.quality-run/`), outside this
+skill and sealed runs. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 
@@ -100,7 +106,12 @@ Standard pipeline contract applies — working directory, `./.quality-run/` layo
 - Heuristics only; never report a number you didn't measure.
 - Never run load tests against projection hosts. Local/staging only.
 - Mark dynamic checks `skipped:environment` if the app/DB isn't reachable.
-- **Sealed UAT — no internet.** Live probes are allowed ONLY against the in-network containerized app (`http://app:<port>`, or the host:port published by `docker-uat`'s `env.json`). Probes against any public URL or external host MUST NOT run — emit one `deferred-test` fix-plan item per such target (`category: "deferred-test"`, `severity: "info"`, `evidence.reason: "requires-internet"`, `evidence.what_to_run_offline: "re-run the perf probe outside the sealed run, or add a wiremock mapping if the dependency belongs to the catalog"`). Static analysis (N+1, slow query patterns) continues unchanged.
+- Run dynamic probes only against an explicitly authorized disposable local
+  target verified from project Compose configuration and runtime state. No
+  external toolkit's environment report is required. Browser egress filtering
+  does not isolate container or load-tool traffic. If tooling, a safe target or
+  network isolation is unavailable, record a `deferred-test` finding with the
+  missing prerequisite and continue static analysis; never probe public hosts.
 
 ### Gates
 

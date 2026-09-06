@@ -20,7 +20,10 @@ Use this skill after `release-harness-code-change-review` or alongside it. The g
    - Vitest
    - `c8`
    - `nyc` / Istanbul
-2. If coverage config or scripts exist, run the project-native coverage command and parse the generated report.
+2. If coverage scripts exist, inspect their effects first. Run the project-native
+   command only within the authorized scope and parse its actual report. Missing
+   tools, unsafe database/Docker effects or remote access mean a deferred dynamic
+   check; continue static mapping instead of installing or fabricating results.
 3. If no coverage tool exists, fall back to static analysis:
    - inspect test file naming conventions
    - map changed source files to nearby tests
@@ -169,7 +172,13 @@ Include coverage percentage before/after only when tooling produced trustworthy 
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under an agreed root (for example `./.quality-run/`), outside this
+skill and sealed runs. Use host file tools to record findings with `id`,
+`severity`, `finding`, `affected_files`, `evidence` and `proposed_change`.
+Missing tools/inputs are gaps, not passes. Do not install tools or mutate
+source/remotes without approval. Only the deterministic CLI adjudicates;
+audit findings and readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 

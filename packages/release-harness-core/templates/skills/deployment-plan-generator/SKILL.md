@@ -171,7 +171,12 @@ Generate `./.quality-run/results/<ts>/release/post-deploy-verification.md`:
 
 ## Pipeline Contract
 
-Standard pipeline contract applies — working directory, `./.quality-run/` layout (artefacts vs results), worktree-only rules, and gate semantics per `references/pipeline-contract.md` (vendored into this skill's install). This skill's specifics:
+This playbook is self-contained. Paths below are product-owned assessment inputs
+and outputs under an agreed root (for example `./.quality-run/`), outside this
+skill and sealed runs. Use host file tools to record evidence-linked proposals.
+Missing tools/inputs are gaps, not passes. Deployment commands are draft plans,
+not permission to execute them. Only the deterministic CLI adjudicates;
+readiness recommendations cannot override its verdict.
 
 ### Outputs this skill produces
 

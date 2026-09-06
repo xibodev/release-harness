@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { assertSkillSupport } from './skill-support.mjs';
 
 console.log('======================================================================');
 console.log('  Release-Harness Packaging & Consumer Installation Acceptance Test   ');
@@ -69,13 +70,32 @@ assert.ok(versionOut.includes(corePkgVersion), `Version must report the publishe
 // 4b. Help test
 const helpOut = execSync(`${npxCmd} release-harness --help`, { cwd: consumerRepoDir, encoding: 'utf8' });
 assert.ok(helpOut.includes('doctor'), 'Help must list doctor command');
+assert.ok(helpOut.includes('skills'), 'Help must list skills command');
 assert.ok(helpOut.includes('check-pr'), 'Help must list check-pr command');
 assert.ok(helpOut.includes('run-local'), 'Help must list run-local command');
 assert.ok(helpOut.includes('clean'), 'Help must list clean command');
 console.log('  ✓ release-harness --help verified');
 
+// Inspect the installed package before extracting templates; no host/Docker needed.
+const beforeDiscovery = fs.readdirSync(consumerRepoDir).sort();
+const skillsListOut = execSync(`${npxCmd} release-harness skills list`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.ok(skillsListOut.includes('18 bundled'));
+assert.ok(skillsListOut.includes('release-harness-project-cartographer'));
+assert.ok(skillsListOut.includes('Invalid scaffold:'), 'Piped discovery output must include its final guidance');
+for (const runtime of ['.claude', '.agents', '.opencode']) {
+  assert.ok(skillsListOut.includes(`${runtime}/skills/ (0/18 scaffolded; 0 invalid)`));
+}
+const bareInfo = execSync(`${npxCmd} release-harness skills info project-cartographer`, { cwd: consumerRepoDir, encoding: 'utf8' });
+const canonicalInfo = execSync(`${npxCmd} release-harness skills info release-harness-project-cartographer`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.strictEqual(bareInfo, canonicalInfo);
+assert.ok(bareInfo.includes('Capability:'));
+assert.deepStrictEqual(fs.readdirSync(consumerRepoDir).sort(), beforeDiscovery, 'Discovery must not extract files');
+console.log('  ✓ Installed skill discovery is read-only and accepts both identifier forms');
+
 // 4c. Doctor test
 const doctorOut = execSync(`${npxCmd} release-harness doctor`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.ok(doctorOut.includes('skills list'));
+assert.ok(doctorOut.includes('init --with-agents'));
 console.log('  ✓ release-harness doctor executed');
 
 // 4d. Init scaffolding test
@@ -90,6 +110,7 @@ assert.ok(fs.existsSync(path.join(consumerRepoDir, '.release-harness', 'scenario
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'A bare init must not scaffold AGENTS.md');
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, 'AI-ADOPTION.md')), 'A bare init must not scaffold AI-ADOPTION.md');
 assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.claude')), 'A bare init must not scaffold agents implicitly');
+assert.ok(!fs.existsSync(path.join(consumerRepoDir, '.agents')), 'A bare init must not scaffold shared skills');
 assert.ok(bareInitOut.includes('--with-agents'), 'A bare init must name the flag that scaffolds the agent bundle');
 console.log('  ✓ Bare init wrote contracts only and pointed at --with-agents');
 
@@ -110,10 +131,27 @@ console.log('  ✓ --with-agents + --contracts-only rejected with exit 3');
 
 // Now the explicit opt-in.
 const initOut = execSync(`${npxCmd} release-harness init --with-agents`, { cwd: consumerRepoDir, encoding: 'utf8' });
+assert.match(initOut, /restart or reload/i, 'Init must explain host refresh');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, 'AGENTS.md')), 'AGENTS.md must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.claude', 'agents', 'release-conductor.md')), 'Claude agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.github', 'agents', 'release-conductor.agent.md')), 'GitHub Copilot agent must be scaffolded');
 assert.ok(fs.existsSync(path.join(consumerRepoDir, '.opencode', 'agents', 'release-conductor.md')), 'opencode agent must be scaffolded');
+const scaffoldList = execSync(`${npxCmd} release-harness skills list`, { cwd: consumerRepoDir, encoding: 'utf8' });
+for (const runtime of ['.claude', '.agents', '.opencode']) {
+  assert.ok(scaffoldList.includes(`${runtime}/skills/ (18/18 scaffolded; 0 invalid)`));
+}
+for (const relative of [
+  '.claude/agents/release-conductor.md', '.copilot/agents/release-conductor.md',
+  '.github/agents/release-conductor.agent.md', '.opencode/agents/release-conductor.md',
+]) {
+  const conductor = fs.readFileSync(path.join(consumerRepoDir, relative), 'utf8');
+  assert.ok(conductor.includes('npx release-harness skills list'), relative);
+  assert.ok(conductor.includes('generated artifact diff'), relative);
+  assert.ok(conductor.includes('Inspect underlying scenario statuses and causes'), relative);
+  assert.ok(conductor.includes('<root>/runs/<id>/verdict.json'), relative);
+  assert.ok(conductor.includes('UNKNOWN'), relative);
+  assert.match(conductor, /preserve the entire run and investigate/i);
+}
 
 // The adoption guide reaches the project the same way the skills do -- through
 // init. It has to state that, or an agent that looked for the bundle before
@@ -124,6 +162,11 @@ const adoption = fs.readFileSync(adoptionPath, 'utf8');
 assert.ok(/init --with-agents/.test(adoption), 'AI-ADOPTION.md must name the command that scaffolds the bundle');
 assert.ok(/not with `npm install`|not with npm install/.test(adoption), 'AI-ADOPTION.md must say the bundle does not arrive with npm install');
 assert.ok(adoption.includes('project-cartographer'), 'AI-ADOPTION.md must point at project-cartographer');
+assert.ok(adoption.includes('generated review artifacts'));
+assert.ok(adoption.includes('present the resulting diff for approval') || /Present the\s+resulting diff for approval/i.test(adoption));
+assert.ok(adoption.includes('topology.json.network_policy'));
+assert.ok(adoption.includes('UNKNOWN'));
+assert.ok(adoption.includes('host registration') || adoption.includes('active host has registered'));
 for (const code of ['| 0 |', '| 1 |', '| 2 |', '| 3 |', '| 4 |']) {
   assert.ok(adoption.includes(code), `AI-ADOPTION.md exit-code table must cover ${code}`);
 }
@@ -148,10 +191,11 @@ const bundledSkills = fs
   .filter((e) => e.isDirectory()).length;
 assert.strictEqual(bundledSkills, 18, 'The bundle must ship exactly 18 skills (update the docs and this number together)');
 
-for (const runtime of ['.claude', '.opencode']) {
+for (const runtime of ['.claude', '.agents', '.opencode']) {
   const scaffolded = fs.readdirSync(path.join(consumerRepoDir, runtime, 'skills'));
   assert.strictEqual(scaffolded.length, bundledSkills, `All ${bundledSkills} skills must be scaffolded into ${runtime}/skills`);
   for (const skillDir of scaffolded) {
+    assertSkillSupport(path.join(consumerRepoDir, runtime, 'skills', skillDir));
     assert.ok(skillDir.startsWith('release-harness-'), `Skill "${skillDir}" in ${runtime} must be namespaced`);
     // A runtime resolves a skill by its frontmatter name, not its directory, so
     // both must carry the namespace or the skill still shadows a global one.
@@ -161,6 +205,14 @@ for (const runtime of ['.claude', '.opencode']) {
   }
 }
 console.log(`  ✓ .release-harness/ and multi-runtime AI agents scaffolded (${bundledSkills} namespaced skills per runtime)`);
+
+for (const name of ['fix-planner', 'fix-executor']) {
+  const skill = fs.readFileSync(path.join(consumerRepoDir, '.agents', 'skills', `release-harness-${name}`, 'SKILL.md'), 'utf8');
+  assert.doesNotMatch(skill, /scripts\/[\w-]+\.py|references\/[\w-]+\.md/, 'Remediation must not require missing support assets');
+  assert.ok(skill.includes('execution-plan.json'));
+  assert.ok(skill.includes('UNKNOWN'));
+  assert.match(skill, /preserve/i);
+}
 
 // The bundle must teach the agent to author side-effect probes. An implemented
 // probe that no skill can emit is unreachable in practice: the adopting agent
@@ -210,7 +262,7 @@ const srv = http.createServer((req, res) => {
 });
 await new Promise((r) => srv.listen(38500, '127.0.0.1', r));
 
-const consumerEvidenceDir = path.join(os.tmpdir(), 'rh-consumer-evidence');
+const consumerEvidenceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-consumer-evidence-'));
 
 function spawnAsync(cmd, args, opts) {
   return new Promise((resolve) => {
@@ -236,6 +288,11 @@ try {
   console.log(runLocalProc.stdout);
   if (runLocalProc.status !== 0) {
     console.error('stderr:', runLocalProc.stderr);
+    const runsDir = path.join(consumerEvidenceDir, 'runs');
+    for (const runId of fs.existsSync(runsDir) ? fs.readdirSync(runsDir) : []) {
+      const verdictPath = path.join(runsDir, runId, 'verdict.json');
+      if (fs.existsSync(verdictPath)) console.error('Consumer failure verdict:', fs.readFileSync(verdictPath, 'utf8'));
+    }
   }
 
   assert.strictEqual(runLocalProc.status, 0, 'run-local must exit 0 on clean consumer fixture');

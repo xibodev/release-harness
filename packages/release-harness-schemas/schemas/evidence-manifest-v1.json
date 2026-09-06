@@ -19,7 +19,7 @@
           "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
           "bytes": { "type": "integer", "minimum": 0 },
           "mime_type": { "type": "string" },
-          "category": { "type": "string", "enum": ["log", "trace", "screenshot", "probe", "result", "other"] }
+          "category": { "type": "string", "enum": ["log", "trace", "screenshot", "probe", "result", "policy", "other"] }
         }
       }
     }
