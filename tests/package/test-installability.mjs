@@ -1,8 +1,9 @@
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { execSync, spawn, spawnSync } from 'node:child_process';
+import { execFileSync, execSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -52,6 +53,15 @@ execSync(`npm install --save-dev "${schemasTarball}" "${coreTarball}" "${facadeT
   stdio: ['ignore', 'inherit', 'inherit'],
 });
 console.log('  ✓ Installed @xibodev/release-harness from packed tarball');
+
+// The fresh consumer can resolve a newer Playwright than the workspace browser install.
+const consumerRequire = createRequire(path.join(consumerRepoDir, 'package.json'));
+const playwrightCli = path.join(path.dirname(consumerRequire.resolve('playwright/package.json')), 'cli.js');
+execFileSync(process.execPath, [playwrightCli, 'install', 'chromium'], {
+  cwd: consumerRepoDir,
+  stdio: ['ignore', 'inherit', 'inherit'],
+  timeout: 300_000,
+});
 
 // 4. Test installed CLI commands from consumer repo
 console.log('\n4. Verifying installed binary from consumer repository...');
