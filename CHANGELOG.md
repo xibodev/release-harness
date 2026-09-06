@@ -1,9 +1,36 @@
 # Changelog
 
 User-visible changes and upgrade considerations. The published npm release is
-`1.2.0`; entries under Unreleased describe source changes not yet published.
+`1.2.0`; the 2.0.0 release candidate below is not yet published.
 
-## Unreleased
+## 2.0.0 (Unreleased)
+
+### Breaking Changes And Migration
+
+- **Node.js 20+ is required** by all three packages. Version 1.2.0 declared
+  Node.js `>=18`; upgrade local Node installations, CI runners, and container
+  images before adopting 2.0.0. The optional facade Playwright peer now requires
+  `>=1.50.0`, matching the core dependency minimum. Install Chromium for the
+  Playwright version resolved in your lockfile. An open-ended peer range is not
+  a guarantee that every future Playwright release has been tested.
+- **Sealed replay ignores caller-only overrides.** Evaluation uses
+  manifest-covered facts, preserving recorded network and harness failures.
+  Callers must not rely on supplying replacement policy or outcome facts to
+  change a sealed verdict. Rerun with corrected contracts to produce new evidence;
+  do not edit or reseal historical archives. Missing required facts or linked
+  evidence can invalidate old bundles.
+- **Health probes are strict.** Use implemented HTTP or TCP probes; replace
+  unsupported declarations instead of relying on silent success. Harness/probe
+  errors return exit `3`, not a successful check or automatic product failure.
+  Built-in `sql_query` remains unsupported; use an asserting custom probe.
+- **Conflicting network policies are rejected.** Move policy to
+  `topology.json.network_policy`; remove a conflicting legacy declaration from
+  `harness.config.json` and correct malformed fields. Legacy config-only policy
+  remains supported. Declare policy explicitly: absence still means open mode
+  with a warning, not sealed isolation.
+
+Browser transport limits and contract-preservation guidance are listed under
+Compatibility below and in [SECURITY.md](SECURITY.md).
 
 ### Added
 

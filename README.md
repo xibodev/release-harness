@@ -13,16 +13,18 @@ topology, browser scenarios, and side-effect assertions. No AI agent is required
 
 ## Install
 
-The published npm release is **1.2.0**. This repository also documents unreleased
-changes, identified below and in the [changelog](CHANGELOG.md#unreleased).
+The published npm release is **1.2.0**. This repository prepares **2.0.0
+(Unreleased)**, a release candidate not yet published to npm. See the
+[changelog](CHANGELOG.md#200-unreleased) for breaking changes and migration.
 
 ```bash
 npm install -D @xibodev/release-harness@1.2.0
 npx playwright install chromium
 ```
 
-Use Node.js 20 for the CI-tested baseline. Package metadata currently declares
-Node.js `>=18`; that is not a claim that every declared version is tested. Local
+Version 2.0.0 requires Node.js `>=20`; the published 1.2.0 metadata declares
+`>=18`. Node.js 20 is the CI-tested baseline, not a claim that every newer runtime
+is tested. Upgrade local and CI runtimes before adopting the candidate. Local
 UAT also needs Git, Docker with Compose, a running Docker daemon, and Chromium's
 OS dependencies. On Linux, `npx playwright install --with-deps chromium` installs
 the browser and system dependencies where you have permission to do so.

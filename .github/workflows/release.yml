@@ -10,7 +10,7 @@ on:
       dry_run:
         description: 'Dry run (validate and pack without publishing)'
         required: false
-        default: false
+        default: true
         type: boolean
 
 jobs:
@@ -30,6 +30,9 @@ jobs:
         with:
           node-version: 20
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Validate release versions and tag
+        run: npm run test:release
 
       - name: Install dependencies
         run: npm ci

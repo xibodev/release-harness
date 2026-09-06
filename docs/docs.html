@@ -78,15 +78,15 @@
       <p>Use it directly in a terminal or let an AI coding agent prepare contracts and run commands. AI assistance is optional. A local <code>PASS</code> proves the declared gate, not production readiness beyond that gate.</p>
       <div class="callout">
         <div class="callout-title">Match the docs to your package</div>
-        <p>This site describes the current source. <strong>npm 1.2.0 does not include the unreleased changes called out below</strong>, including <code>skills list</code>/<code>skills info</code> and shared skill discovery. Released users should use the documentation at their installed version's Git tag. See <a href="#upgrades">versions &amp; source usage</a>.</p>
+        <p>This site describes the <strong>2.0.0 release candidate (unreleased, not yet published)</strong>. npm 1.2.0 remains the published release and does not include the changes called out below, including <code>skills list</code>/<code>skills info</code> and shared skill discovery. Released users should use the documentation at their installed version's Git tag. See <a href="#upgrades">versions &amp; source usage</a>.</p>
       </div>
     </section>
 
     <section id="installation">
       <h2>Install &amp; manual quickstart</h2>
-      <p>No AI host is required. Start in your product's Git repository with Node.js 20+ (the recommended tested environment), npm, and Git. Local Compose UAT also needs a running Docker Engine, Compose, and Playwright Chromium. Check the installed package's engine requirements separately.</p>
+      <p>No AI host is required. Start in your product's Git repository with npm and Git. Node.js 20 is the CI-tested baseline. The 2.0.0 candidate requires Node.js 20+; published 1.2.0 metadata declared Node.js 18+. Local Compose UAT also needs a running Docker Engine, Compose, and Playwright Chromium.</p>
       <div class="code-header"><span>INSTALL IN YOUR PRODUCT</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>npm install -D @xibodev/release-harness playwright
+      <pre><code>npm install -D @xibodev/release-harness@1.2.0 playwright
 npx playwright install chromium
 npx release-harness --version
 npx release-harness doctor
@@ -381,7 +381,15 @@ jobs:
 
     <section id="upgrades">
       <h2>Versions &amp; upgrades</h2>
-      <p>Check <code>npx release-harness --version</code> and your lockfile before following examples. For a released package, browse the repository at its matching version tag. The current source may retain the same version string while changes remain unreleased; the changelog, not the badge alone, identifies those changes.</p>
+      <p>Check <code>npx release-harness --version</code> and your lockfile before following examples. For a released package, browse the repository at its matching version tag. Source metadata reports 2.0.0, but this candidate is not yet published to npm; a source version string is not proof of publication.</p>
+      <h3>Breaking migration to 2.0.0 (unreleased)</h3>
+      <ul>
+        <li>Upgrade local Node, CI runners, and container images to Node.js 20+. The optional Playwright peer minimum is 1.50.0, matching core; install Chromium for the resolved version. The open-ended peer range does not certify untested future releases.</li>
+        <li>Sealed replay ignores caller-only overrides and uses manifest-covered facts. Rerun corrected contracts to change inputs; preserve old archives rather than editing or resealing them. Historical bundles missing required facts or containing linked evidence can be rejected.</li>
+        <li>Replace unsupported health probes with implemented HTTP or TCP probes. Probe configuration errors return exit 3, not silent success. Built-in SQL query assertions remain unsupported.</li>
+        <li>Use <code>topology.json.network_policy</code> as canonical. Remove conflicting legacy config policy and fix malformed fields. Config-only policy remains supported; missing policy remains open with a warning.</li>
+        <li>HTTPS/WSS filtering checks tunnel destinations, not encrypted content, TLS SNI, or certificate identity. Allowed relays and container-wide isolation are outside this boundary; suppressed WebRTC UDP attempts have no individual violation records.</li>
+      </ul>
       <h3>Try unreleased source</h3>
       <p>Clone the repository separately from your product and run <code>npm ci</code> in that checkout. There is no compilation step for the JavaScript CLI. From your product directory, invoke that checkout's CLI instead of <code>npx release-harness</code>, replacing the path below. This uses source code, not the published npm package.</p>
       <pre><code>node /path/to/release-harness/packages/release-harness/bin/release-harness.js --help</code></pre>

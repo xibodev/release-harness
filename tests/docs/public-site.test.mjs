@@ -8,6 +8,7 @@ import { PUBLIC_SITE_FILES, buildPublicSite } from '../../scripts/build-public-s
 import { Schemas } from '../../packages/release-harness-schemas/index.js';
 import { validateAgainstSchema } from '../../packages/release-harness-core/src/validator.js';
 import { readBundledSkills } from '../../packages/release-harness-core/src/cli.js';
+import { checkReleaseVersion } from '../../scripts/check-release-version.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const docs = path.join(repo, 'docs');
@@ -226,12 +227,24 @@ test('reference documentation covers commands, evidence, AI and supported bounda
 });
 
 test('public copy separates released npm from unreleased source and has no stale release narrative', () => {
-  const version = JSON.parse(read('packages/release-harness/package.json')).version;
+  const version = checkReleaseVersion(repo, '');
+  const changelog = read('CHANGELOG.md');
+  const headings = [...changelog.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+  const candidate = headings.find((heading) => heading === `${version} (Unreleased)`);
+  assert.ok(candidate, 'source version needs a versioned unreleased changelog entry');
+  const published = headings.find((heading) => /^\d+\.\d+\.\d+$/.test(heading));
+  assert.ok(published, 'changelog must identify a released version separately');
+  assert.notEqual(published, version, 'candidate must not be listed as published');
   for (const name of ['README.md', 'docs/index.html', 'docs/docs.html']) {
     const text = plain(read(name));
     assert.ok(text.includes(version), `${name}: package version context`);
     assert.match(text, /unreleased/i, name);
-    assert.match(text, /npm/i, name);
+    assert.match(text, /not yet published/i, name);
+    assert.ok(text.includes(`npm install -D @xibodev/release-harness@${published}`), `${name}: install the published version`);
+    assert.ok(!text.includes(`npm install -D @xibodev/release-harness@${version}`), `${name}: candidate is not on npm`);
+  }
+  for (const topic of [/Node\.js.*20/, /replay ignores caller-only overrides/i, /health probes/i, /conflicting.*polic/i, /SNI/]) {
+    assert.match(plain(changelog), topic, 'breaking migration coverage');
   }
   const html = read('docs/docs.html');
   const skillRow = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].find((match) => plain(match[1]).includes('skills list'));
