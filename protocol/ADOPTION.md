@@ -229,27 +229,33 @@ to make sure they decide it knowingly rather than by omission.
 
 ## 8. Surface contradictions instead of resolving them
 
-You will find sources that disagree. A compose file and an infrastructure
-definition naming different deployment paths. A README describing an endpoint
-the router does not have. A workflow that looks authoritative but is never
-triggered.
+You will find sources that disagree. A README describing an endpoint the router
+does not have. A workflow that looks authoritative but is never triggered. Two
+deployment definitions that name different targets.
 
-**Do not pick a winner from a rule.** "Code beats docs" is wrong as often as it
-is right: a test asserting deliberate absence encodes intent more strongly than
-a file listing does, and a deployment config may be aspirational while the
-documentation describes what actually runs.
+**First, check whether they actually disagree.** Read what each source says
+about *its own* status. A file that disclaims its own authority and points at
+another one is not in conflict with it — it is deferring to it, and recording a
+contradiction there would be inventing a conflict, which is the same failure as
+inventing a fact. This is easy to get wrong precisely because a disagreement is
+what you are looking for.
+
+When sources genuinely do conflict, **do not pick a winner from a rule.** "Code
+beats docs" is wrong as often as it is right: a test asserting deliberate
+absence encodes intent more strongly than a file listing does, and a deployment
+config may be aspirational while the documentation describes what actually runs.
 
 Record both sources and say plainly that they disagree:
 
 ```json
 {
-  "id": "deploy-path",
-  "claim": "production deploys go through the staging alias",
+  "id": "auth-token-lifetime",
+  "claim": "access tokens expire after 15 minutes",
   "status": "not_established",
   "evidence": {
     "contradiction": [
-      { "source": "docker-compose.prod.yml:12", "says": "deploys to :latest" },
-      { "source": "infra/main.tf:88", "says": "traffic routes to the prod alias" }
+      { "source": "docs/api.md:88", "says": "tokens are valid for 15 minutes" },
+      { "source": "src/auth/issue.ts:24", "says": "expiresIn: '1h'" }
     ]
   }
 }

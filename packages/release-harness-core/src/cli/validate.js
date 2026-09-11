@@ -21,6 +21,18 @@ import {
 } from '../validator.js';
 import { checkAcceptability } from '../draft.js';
 
+/**
+ * First line, clipped.
+ *
+ * A blocker's detail may be a whole paragraph -- a semantic question with its
+ * evidence and its reasoning. That belongs in the draft, where it can be read
+ * properly, not repeated in a summary whose job is to say how much is left.
+ */
+function summarise(detail, max = 150) {
+  const firstLine = String(detail).split(String.fromCharCode(10))[0].trim();
+  return firstLine.length <= max ? firstLine : `${firstLine.slice(0, max - 1)}…`;
+}
+
 /** Run one validator, converting a throw into a reportable result. */
 function check(label, fn) {
   try {
@@ -162,6 +174,15 @@ export function cmdValidate(ctx) {
   out.blank();
   out.info(`All ${results.length} artifacts are well-formed.`);
 
+  // Readiness is reported separately from well-formedness, and -- crucially --
+  // it reaches the exit code. Two adoption agents independently found that
+  // `validate` exited 0 while printing "not ready to accept", so
+  // `validate && deploy` in CI sailed past every blocker. The prose drew the
+  // distinction and the only channel automation reads did not, which is the
+  // "valid means ready" conflation this release exists to eliminate, surviving
+  // in the one place it does the most damage.
+  let anyBlocked = false;
+
   for (const name of draftNames) {
     const draft = readJson(p.draft(name));
     const record = readJson(p.record(name));
@@ -170,12 +191,26 @@ export function cmdValidate(ctx) {
     const { acceptable, blockers } = checkAcceptability(draft.value, record.value);
     if (acceptable) {
       out.info(`Draft "${name}" is also ready to accept.`);
-    } else {
-      out.blank();
-      out.info(`Draft "${name}" is well-formed but not ready to accept:`);
-      for (const b of blockers) out.detail(`[${b.kind}] ${b.detail}`);
+      continue;
     }
+
+    anyBlocked = true;
+    out.blank();
+    out.info(`Draft "${name}" is well-formed but not ready to accept -- ${blockers.length} blocker${blockers.length === 1 ? '' : 's'}:`);
+
+    // Summarised, not inlined. A blocker's detail can be an entire semantic
+    // question, and printing five of them in full buried the summary under
+    // 3,000 characters -- which penalised writing thorough questions, the exact
+    // behaviour the authoring protocol asks for.
+    for (const b of blockers) out.detail(`[${b.kind}] ${summarise(b.detail)}`);
+    out.blank();
+    out.detail(`Full text: ${p.draft(name)}`);
   }
 
-  return EXIT.OK;
+  out.data('acceptance_blocked', anyBlocked);
+
+  // UNPROVEN, not a usage error: the artifacts are fine and the work is simply
+  // unfinished. That is a different fact from a malformed document, and the
+  // exit codes keep them apart.
+  return anyBlocked ? EXIT.UNPROVEN : EXIT.OK;
 }

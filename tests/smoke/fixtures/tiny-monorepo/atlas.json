@@ -1,7 +1,0 @@
-{
-  "slug": "tiny-monorepo",
-  "brand": "Tiny Monorepo",
-  "box": "test-fixture-only",
-  "deploy_method": "none",
-  "_note": "Synthetic fixture for bundle smoke testing. Not a real product."
-}

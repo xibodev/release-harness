@@ -212,10 +212,15 @@ function authorGreeterDraft(dir, { resolved = true } = {}) {
   // Validation reports the draft as well-formed -- and says plainly that this
   // is not the same as being ready. Conflating the two is what let a
   // fabrication read as "valid... Ready".
+  // Well-formed and not-ready are different facts, and BOTH must reach the exit
+  // code rather than only the prose. Two adoption agents independently found
+  // that validate printed "not ready to accept" and exited 0, so a CI step of
+  // the form `validate && deploy` sailed past every blocker. The distinction
+  // the prose drew was invisible to the only channel automation reads.
   const validate = rh(dir, ['validate', '--draft', 'greeter']);
-  assert.strictEqual(validate.code, 0, 'a well-formed draft validates');
-  assert.match(validate.all, /well-formed/i, 'and is described as well-formed');
-  assert.match(validate.all, /not ready to accept/i, 'while saying it is not ready');
+  assert.match(validate.all, /well-formed/i, 'the artifacts are described as well-formed');
+  assert.match(validate.all, /not ready to accept/i, 'while saying plainly it is not ready');
+  assert.strictEqual(validate.code, 2, 'and it exits UNPROVEN so CI stops here');
   assert.match(validate.all, /Q1/, 'naming the unresolved question');
 
   const accept = rh(dir, ['accept', '--draft', 'greeter', '--by', 'a.operator']);
