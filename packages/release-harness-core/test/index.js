@@ -9,6 +9,7 @@ await import('./negative-evidence.test.js');
 await import('./acceptance.test.js');
 await import('./attribution.test.js');
 await import('./run-chain.test.js');
+await import('./vertical-slice.test.js');
 await import('./evaluator.test.js');
 await import('./sealer.test.js');
 await import('./validator.test.js');
