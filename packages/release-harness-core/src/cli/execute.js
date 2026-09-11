@@ -1,25 +1,54 @@
 /**
  * Executing assertions against resolved bindings.
  *
- * This is the adapter layer between the contract model and the probe code that
- * already works. The probes are kept as they are; what changes is how they are
- * reached -- every input comes from an explicit binding passed in, and nothing
- * here consults the current working directory, a topology, or any notion of
- * "the product". An assertion says what must hold and names a symbol; the
- * caller says what that symbol resolves to. There is no third source of truth.
+ * The hard problem here is not running things. It is knowing whether the
+ * subject ran at all, because a process exit code alone cannot tell you.
+ * `node /missing.js` exits 1 without the subject ever executing, and reading
+ * that as "the assertion was violated" accuses software that was never reached.
  *
- * Each execution returns an observation carrying its own cause. That matters
- * more than it looks: a probe that could not reach a binding reports
- * BINDING_INVALID, not silence, so nothing downstream has to guess what the
- * absence of a result meant. Under the old default, silence became a product
- * bug.
+ * An earlier version of this file solved that by matching stderr against
+ * phrases like "Cannot find module". That was wrong in both directions, and
+ * dangerous in both:
+ *
+ *   - stderr is application-controlled. A subject that legitimately prints
+ *     "Cannot find module" while failing its own assertion would have had a
+ *     real product finding silently demoted to a configuration problem.
+ *   - the vocabulary is not stable. Wording changes between runtime versions,
+ *     locales and wrappers, so the classification would drift without anyone
+ *     changing a line of code.
+ *
+ * A regex over application output must never decide whether software deserves
+ * to be accused. So attribution here is established structurally, and the
+ * distinction that makes it sound is this: the BINDING is operator-controlled
+ * configuration, which may be inspected freely; the subject's OUTPUT is not
+ * evidence about who is responsible.
+ *
+ * Four outcomes, in the order they can be established:
+ *
+ *   1. Preflight fails      -- something the binding names does not exist.
+ *                              Checked before launching anything.
+ *   2. Spawn fails          -- the OS says the child could not start, reported
+ *                              through a structured errno, never through text.
+ *   3. The subject ran      -- and only now may a failed assertion be a
+ *                              product finding.
+ *   4. Cannot be determined -- the binding could not be decomposed, or the
+ *                              process did not exit normally. UNKNOWN.
+ *
+ * The asymmetry is deliberate and permanent: weakening an ambiguous accusation
+ * to UNKNOWN is recoverable by reading the evidence; inventing a product
+ * attribution is not.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { probeHttp } from '../probes.js';
 import { CAUSE } from '../attribution.js';
 
-/** Parse a bound location into the pieces probeHttp needs. */
+// ---------------------------------------------------------------------------
+// HTTP
+// ---------------------------------------------------------------------------
+
 function parseHttpTarget(location) {
   let url;
   try {
@@ -42,12 +71,7 @@ function parseHttpTarget(location) {
 async function executeHttp(assertion, location, timeoutMs) {
   const target = parseHttpTarget(location);
   if (!target.ok) {
-    return {
-      passed: false,
-      cause: CAUSE.BINDING_INVALID,
-      observed: target.reason,
-      detail: { location },
-    };
+    return { passed: false, cause: CAUSE.BINDING_INVALID, observed: target.reason, detail: { location } };
   }
 
   const expect = assertion.expect ?? {};
@@ -64,19 +88,18 @@ async function executeHttp(assertion, location, timeoutMs) {
     timeoutMs,
   });
 
-  // Nothing answered. That is a statement about the binding, not about the
-  // software: there may be nothing there to be broken.
+  // HTTP has an advantage the process adapter does not: a response IS proof
+  // the subject was reached. No response is proof it was not. The distinction
+  // is structural and needs no interpretation of content.
   if (result.status === 0) {
     return {
       passed: false,
       cause: CAUSE.BINDING_INVALID,
       observed: `Nothing answered at ${target.scheme}://${target.host}:${target.port}${requestPath} (${result.message})`,
-      detail: { location, request_path: requestPath },
+      detail: { location, request_path: requestPath, subject_reached: false },
     };
   }
 
-  // Something answered, and said the wrong thing. This is a real observation of
-  // the subject's behaviour, so it can carry a product attribution.
   const matched = result.status === expectedStatus;
   return {
     passed: matched,
@@ -88,59 +111,219 @@ async function executeHttp(assertion, location, timeoutMs) {
       status: result.status,
       expected_status: expectedStatus,
       elapsed_ms: result.elapsedMs,
+      subject_reached: true,
     },
   };
 }
 
+// ---------------------------------------------------------------------------
+// Process bindings: structural preflight
+// ---------------------------------------------------------------------------
+
 /**
- * Did this process fail to START, rather than run and report a failure?
+ * Characters that hand the string to a shell rather than to a program.
  *
- * A non-zero exit is ambiguous, and resolving that ambiguity toward the product
- * is the exact defect this project exists to eliminate. `node /missing.js` exits
- * 1 without the subject ever running: the interpreter started, could not find
- * what it was asked to run, and gave up. Reading that as "the assertion was
- * violated" accuses software that was never reached.
- *
- * These signatures are conservative. A false positive here weakens a real
- * product finding to UNKNOWN, which is recoverable by reading the evidence; a
- * false negative fabricates an accusation, which is not. When the signal is
- * ambiguous, the harness must decline to accuse.
+ * A binding containing any of these is a pipeline, not a command: the failure
+ * could come from any stage, and nothing structural can say which. Such a
+ * binding cannot be preflighted, so its failures cannot be attributed.
  */
-function looksLikeItNeverRan(stderr, exitCode) {
-  if (!stderr) return false;
-  const signatures = [
-    /Cannot find module/i,
-    /MODULE_NOT_FOUND/,
-    /No such file or directory/i,
-    /command not found/i,
-    /is not recognized as an internal or external command/i,
-    /Permission denied/i,
-    /cannot execute binary file/i,
-    /ModuleNotFoundError/,
-    /ImportError: /,
-    /can't open file/i,
-  ];
-  // 126/127 are the shell's own "could not execute" / "not found" codes.
-  if (exitCode === 126 || exitCode === 127) return true;
-  return signatures.some((re) => re.test(stderr));
+const SHELL_METACHARACTERS = /[|&;<>()$`\\"'*?[\]{}~\n]/;
+
+/** Split a plain command into an executable and its operands. */
+function decompose(location) {
+  const text = String(location).trim();
+  if (!text) return { ok: false, reason: 'the binding is empty' };
+  if (SHELL_METACHARACTERS.test(text)) {
+    return {
+      ok: false,
+      reason:
+        'the binding uses shell syntax, so which stage failed cannot be established ' +
+        'from outside',
+    };
+  }
+  const parts = text.split(/\s+/);
+  return { ok: true, executable: parts[0], operands: parts.slice(1) };
 }
 
-async function executeCli(assertion, location, timeoutMs, cwd) {
+/**
+ * Find an executable the way the OS would: a path is checked directly, a bare
+ * name is searched along PATH (honouring PATHEXT on Windows).
+ *
+ * This is a filesystem question with a filesystem answer. Nothing here consults
+ * anything the subject produced.
+ */
+function resolveExecutable(executable, cwd) {
+  const hasSeparator = executable.includes('/') || executable.includes(path.sep);
+
+  if (hasSeparator) {
+    const full = path.resolve(cwd, executable);
+    return fs.existsSync(full) ? { found: true, at: full } : { found: false, searched: [full] };
+  }
+
+  const dirs = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
+  const extensions =
+    process.platform === 'win32'
+      ? (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
+      : [''];
+
+  for (const dir of dirs) {
+    for (const ext of extensions) {
+      const candidate = path.join(dir, executable + ext);
+      if (fs.existsSync(candidate)) return { found: true, at: candidate };
+    }
+  }
+  return { found: false, searched: [`PATH (${dirs.length} entries)`] };
+}
+
+/**
+ * Does this operand unambiguously name a file?
+ *
+ * Conservative on purpose: a path separator or a script extension is a
+ * structural signal that the operator meant a file. A bare word like `there` is
+ * an argument and is left alone, because flagging it would invent a binding
+ * error out of an ordinary parameter.
+ */
+const SCRIPT_EXTENSIONS = /\.(js|mjs|cjs|ts|py|rb|sh|bash|php|pl|jar|exe)$/i;
+
+function looksLikeFileOperand(operand) {
+  if (operand.startsWith('-')) return false;
+  if (operand.includes('=')) return false;
+  return operand.includes('/') || operand.includes('\\') || SCRIPT_EXTENSIONS.test(operand);
+}
+
+/**
+ * Establish, before launching anything, whether the binding names things that
+ * exist. Returns either a refusal or the evidence that the subject is reachable.
+ */
+function preflight(location, cwd) {
+  if (!fs.existsSync(cwd)) {
+    return {
+      ok: false,
+      cause: CAUSE.BINDING_INVALID,
+      observed: `The working directory ${cwd} does not exist`,
+      detail: { location, cwd },
+    };
+  }
+
+  const parts = decompose(location);
+  if (!parts.ok) {
+    // Not a filesystem problem -- the command may well be valid. What it is is
+    // unattributable, which the caller turns into a refusal to execute.
+    return { ok: true, decomposable: false, reason: parts.reason };
+  }
+
+  const resolved = resolveExecutable(parts.executable, cwd);
+  if (!resolved.found) {
+    return {
+      ok: false,
+      cause: CAUSE.BINDING_INVALID,
+      observed: `The executable "${parts.executable}" could not be found`,
+      detail: { location, searched: resolved.searched },
+    };
+  }
+
+  // Every file the binding explicitly names must exist. This is the check that
+  // catches `node /missing.js` before anything runs -- and it catches it by
+  // asking the filesystem, not by reading what node printed afterwards.
+  for (const operand of parts.operands) {
+    if (!looksLikeFileOperand(operand)) continue;
+    const full = path.resolve(cwd, operand);
+    if (!fs.existsSync(full)) {
+      return {
+        ok: false,
+        cause: CAUSE.BINDING_INVALID,
+        observed: `The binding names "${operand}", which does not exist`,
+        detail: { location, missing_path: full },
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    decomposable: true,
+    executable: parts.executable,
+    executablePath: resolved.at,
+    argv: parts.operands,
+  };
+}
+
+/**
+ * Classify a spawn failure from its errno.
+ *
+ * The error object is produced by the OS and the runtime, not by the subject,
+ * so it is admissible where stderr is not.
+ */
+function causeForSpawnError(err) {
+  switch (err.code) {
+    case 'ENOENT':
+      // The executable disappeared between preflight and launch, or was never
+      // really there. Either way the subject was not reached.
+      return { cause: CAUSE.BINDING_INVALID, observed: `Could not start "${err.path ?? ''}": not found` };
+    case 'EACCES':
+    case 'EPERM':
+      return {
+        cause: CAUSE.BINDING_INVALID,
+        observed: `Could not start "${err.path ?? ''}": permission denied`,
+      };
+    case 'EMFILE':
+    case 'ENOMEM':
+    case 'EAGAIN':
+      // The machine could not start a process. That is the environment, and it
+      // says nothing about the subject.
+      return { cause: CAUSE.HARNESS_ENVIRONMENT, observed: `Could not start the process: ${err.code}` };
+    default:
+      return { cause: CAUSE.UNKNOWN, observed: `The process could not be started (${err.code ?? err.message})` };
+  }
+}
+
+async function executeProcess(assertion, location, timeoutMs, cwd) {
   const expect = assertion.expect ?? {};
   const expectedExit = typeof expect.exit_code === 'number' ? expect.exit_code : 0;
 
-  // The bound location IS the command. An assertion never carries one, because
-  // a command is a local fact about where things are installed.
-  const parts = String(location).trim().split(/\s+/);
-  const extra = typeof expect.args === 'string' ? expect.args.trim().split(/\s+/) : [];
-  const argv = [...parts.slice(1), ...extra];
+  const pre = preflight(location, cwd);
+  if (!pre.ok) {
+    return { passed: false, cause: pre.cause, observed: pre.observed, detail: { ...pre.detail, subject_reached: false } };
+  }
+
+  // A binding this adapter cannot decompose is refused rather than run.
+  //
+  // Running it anyway would be worse than useless: the arguments would be
+  // passed literally to the first program (so `node app.js | grep x` hands
+  // `|` and `grep` to node, which then waits on stdin forever), and whatever
+  // came back could not be attributed to anything in particular. Declining is
+  // the honest answer, and it names the missing capability rather than
+  // producing a result the operator would have to distrust.
+  if (!pre.decomposable) {
+    return {
+      passed: false,
+      cause: CAUSE.UNKNOWN,
+      observed:
+        `"${location}" was not executed: ${pre.reason}. Nothing can be attributed, ` +
+        'so nothing is claimed. Bind a single program, or wrap the pipeline in a ' +
+        'script and bind that.',
+      detail: { location, subject_reached: 'not_established', unattributable_because: pre.reason },
+    };
+  }
+
+  const argv = [
+    ...(pre.argv ?? []),
+    ...(typeof expect.args === 'string' ? expect.args.trim().split(/\s+/).filter(Boolean) : []),
+  ];
 
   return new Promise((resolve) => {
     let settled = false;
     let stdout = '';
     let stderr = '';
 
-    const child = spawn(parts[0], argv, { cwd, shell: false });
+    let child;
+    try {
+      child = spawn(pre.executable, argv, { cwd, shell: false });
+    } catch (err) {
+      const { cause, observed } = causeForSpawnError(err);
+      resolve({ passed: false, cause, observed, detail: { location, errno: err.code, subject_reached: false } });
+      return;
+    }
+
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -149,7 +332,7 @@ async function executeCli(assertion, location, timeoutMs, cwd) {
         passed: false,
         cause: CAUSE.HARNESS_ENVIRONMENT,
         observed: `"${location}" did not finish within ${timeoutMs}ms`,
-        detail: { location },
+        detail: { location, timed_out: true, subject_reached: true },
       });
     }, timeoutMs);
 
@@ -160,58 +343,58 @@ async function executeCli(assertion, location, timeoutMs, cwd) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      // The command could not be started at all: the binding points at nothing
-      // runnable, which is not evidence about the subject.
-      resolve({
-        passed: false,
-        cause: CAUSE.BINDING_INVALID,
-        observed: `Could not run "${location}": ${err.message}`,
-        detail: { location },
-      });
+      const { cause, observed } = causeForSpawnError(err);
+      resolve({ passed: false, cause, observed, detail: { location, errno: err.code, subject_reached: false } });
     });
 
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
 
-      // Before judging the exit code, ask whether the subject ran at all. A
-      // command that could not be found produces a non-zero exit that says
-      // nothing whatsoever about the software the assertion is about.
-      if (code !== 0 && looksLikeItNeverRan(stderr, code)) {
+      // Killed rather than exited. There is no exit code to judge, and no way
+      // to know how far it got.
+      if (code === null) {
         resolve({
           passed: false,
-          cause: CAUSE.BINDING_INVALID,
-          observed: `"${location}" could not be run (exit ${code}); the subject was never reached`,
-          detail: {
-            location,
-            exit_code: code,
-            stderr: stderr.slice(0, 4000),
-          },
+          cause: CAUSE.UNKNOWN,
+          observed: `"${location}" was terminated by ${signal} without exiting`,
+          detail: { location, signal, subject_reached: 'not_established' },
         });
         return;
       }
 
-      const matched = code === expectedExit;
       const contains = typeof expect.stdout_contains === 'string' ? expect.stdout_contains : null;
-      const textOk = contains === null || stdout.includes(contains);
+      const exitMatched = code === expectedExit;
+      const textMatched = contains === null || stdout.includes(contains);
+      const passed = exitMatched && textMatched;
 
-      resolve({
-        passed: matched && textOk,
-        cause: matched && textOk ? 'NONE' : CAUSE.PRODUCT,
-        observed: matched
-          ? textOk
-            ? `exit ${code}`
-            : `exit ${code}, but stdout did not contain ${JSON.stringify(contains)}`
-          : `exit ${code}, expected ${expectedExit}`,
-        detail: {
-          location,
-          exit_code: code,
-          expected_exit_code: expectedExit,
-          stdout: stdout.slice(0, 4000),
-          stderr: stderr.slice(0, 4000),
-        },
-      });
+      const detail = {
+        location,
+        exit_code: code,
+        expected_exit_code: expectedExit,
+        stdout: stdout.slice(0, 4000),
+        stderr: stderr.slice(0, 4000),
+        // Preflight proved the executable and every named file exist, and the
+        // process ran to a normal exit. The subject was reached.
+        subject_reached: true,
+      };
+
+      if (passed) {
+        resolve({ passed: true, cause: 'NONE', observed: `exit ${code}`, detail });
+        return;
+      }
+
+      const what = !exitMatched
+        ? `exit ${code}, expected ${expectedExit}`
+        : `exit ${code}, but stdout did not contain ${JSON.stringify(contains)}`;
+
+      // The decisive branch. Preflight established that the executable and every
+      // file the binding names exist, and the process ran to a normal exit --
+      // so this exit code is the subject's own behaviour and may be attributed.
+      // Note what is NOT consulted: stderr. A subject that fails while printing
+      // "Cannot find module" is still a subject that failed.
+      resolve({ passed: false, cause: CAUSE.PRODUCT, observed: what, detail });
     });
   });
 }
@@ -222,9 +405,9 @@ export const SUPPORTED_KINDS = ['http', 'cli'];
 /**
  * Execute one assertion.
  *
- * An unknown kind fails closed as a contract problem. It is not skipped: a run
- * that quietly ignores an assertion certifies less than it appears to, and the
- * gap is invisible in the result.
+ * An unknown kind fails closed as a contract problem rather than being skipped:
+ * a run that quietly ignores an assertion certifies less than it appears to,
+ * and the gap is invisible in the result.
  */
 export async function executeAssertion(assertion, resolvedTargets, { timeoutMs = 15000, cwd } = {}) {
   const location = resolvedTargets[assertion.target];
@@ -235,7 +418,7 @@ export async function executeAssertion(assertion, resolvedTargets, { timeoutMs =
       passed: false,
       cause: CAUSE.BINDING_INVALID,
       observed: `Target "${assertion.target}" is not bound.`,
-      detail: {},
+      detail: { subject_reached: false },
     };
   }
 
@@ -254,7 +437,7 @@ export async function executeAssertion(assertion, resolvedTargets, { timeoutMs =
   const outcome =
     assertion.kind === 'http'
       ? await executeHttp(assertion, location, timeoutMs)
-      : await executeCli(assertion, location, timeoutMs, cwd);
+      : await executeProcess(assertion, location, timeoutMs, cwd);
 
   return { id: assertion.id, ...outcome };
 }

@@ -20,7 +20,8 @@
     "./sealer": "./src/sealer.js",
     "./materializer": "./src/materializer.js",
     "./probes": "./src/probes.js",
-    "./redactor": "./src/redactor.js"
+    "./redactor": "./src/redactor.js",
+    "./adjudicate": "./src/adjudicate.js"
   },
   "files": [
     "bin",

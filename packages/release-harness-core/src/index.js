@@ -10,6 +10,7 @@ export * from './acceptance.js';
 export * from './attribution.js';
 export * from './bindings.js';
 export * from './run-manifest.js';
+export * from './adjudicate.js';
 
 export * from './validator.js';
 export * from './sealer.js';

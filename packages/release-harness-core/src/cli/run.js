@@ -21,9 +21,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { paths, readJson, writeJson, resolveAccepted, isInstalled } from './layout.js';
-import { EXIT, exitCodeForCause } from './exit-codes.js';
+import { EXIT } from './exit-codes.js';
 import { decideMode, resolveBindings } from '../bindings.js';
-import { attributeFailure, MODE, CAUSE } from '../attribution.js';
+import { MODE } from '../attribution.js';
+import { adjudicate, exitCodeForVerdict } from '../adjudicate.js';
 import { buildRunManifest } from '../run-manifest.js';
 import { EvidenceSealer } from '../sealer.js';
 import { executeAssertion } from './execute.js';
@@ -206,61 +207,23 @@ export async function cmdRun(ctx) {
   const sealed = sealer.sealEvidence();
 
   // -------------------------------------------------------------------------
-  // Adjudicate. Every attribution goes through the one shared path.
+  // Adjudicate. The CLI hands over sealed observations and gets a verdict; it
+  // does not decide what any of them mean. Every rule here -- what supports a
+  // product attribution, how failures become a status, which exit code follows
+  // -- is one a future API or authoring caller needs identically, so it lives
+  // in core where there can only be one of it.
   // -------------------------------------------------------------------------
 
-  const acceptedIds = new Set((contract?.assertions ?? []).map((a) => a.id));
-  const adjudicated = observations.map((o) => {
-    if (o.passed) return { id: o.id, status: 'PASS', observed: o.observed };
-
-    const verdict = attributeFailure(
-      {
-        reported: o.cause,
-        // Product attribution needs an accepted assertion to have been
-        // violated. An exploratory run has none by definition.
-        hasAcceptedAssertion: acceptedIds.has(o.id),
-        // And it needs an observation of the subject's behaviour. A binding
-        // that answered nothing produced no such observation.
-        hasSupportingEvidence: o.cause === CAUSE.PRODUCT,
-      },
-      decision.mode
-    );
-
-    return {
-      id: o.id,
-      status: 'FAIL',
-      cause: verdict.cause,
-      authoritative: verdict.authoritative,
-      rationale: verdict.rationale,
-      observed: o.observed,
-    };
+  const verdict = adjudicate({
+    runId,
+    observations,
+    contract,
+    mode: decision.mode,
+    evidenceSealed: Boolean(sealed?.manifestSha256),
   });
 
-  const failures = adjudicated.filter((a) => a.status === 'FAIL');
-  const certifying = decision.mode === MODE.CERTIFYING;
-
-  let status;
-  if (!certifying) {
-    // An exploratory run never passes. Everything it tried may have worked, and
-    // that is worth knowing -- it is just not a certificate.
-    status = failures.length > 0 ? 'FAIL' : 'UNPROVEN';
-  } else {
-    status = failures.length > 0 ? 'FAIL' : 'PASS';
-  }
-
-  const verdict = {
-    schema_version: '1.0.0',
-    run_id: runId,
-    status,
-    certifying,
-    contract_digest: contract?.digest ?? null,
-    assertions: adjudicated,
-    summary: {
-      total: adjudicated.length,
-      passed: adjudicated.length - failures.length,
-      failed: failures.length,
-    },
-  };
+  const certifying = verdict.certifying;
+  const adjudicated = verdict.assertions;
 
   const manifest = buildRunManifest({
     runId,
@@ -309,18 +272,12 @@ export async function cmdRun(ctx) {
   }
 
   out.blank();
-  out.info(`${verdict.summary.passed}/${verdict.summary.total} passed. Status: ${status}.`);
+  out.info(`${verdict.summary.passed}/${verdict.summary.total} passed. Status: ${verdict.status}.`);
   out.detail(`${runDir}`);
   out.blank();
   out.info(`  release-harness verify ${runId}`);
 
-  // Exit code comes from the most serious cause present, so automation can
-  // branch without parsing prose.
-  if (!certifying) return EXIT.UNPROVEN;
-  if (failures.length === 0) return EXIT.OK;
-
-  const worst = failures
-    .map((f) => exitCodeForCause(f.cause))
-    .sort((a, b) => (a === EXIT.ASSERTION_FAILED ? -1 : b === EXIT.ASSERTION_FAILED ? 1 : a - b))[0];
-  return worst;
+  // What the verdict means is core's decision, including what it implies for
+  // an automated caller. The CLI returns it.
+  return exitCodeForVerdict(verdict);
 }
