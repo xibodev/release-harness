@@ -21,6 +21,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { paths, DIRS, writeJson, isInstalled } from './layout.js';
 import { EXIT } from './exit-codes.js';
 
@@ -135,6 +136,25 @@ export function cmdInit(ctx) {
   writeJson(path.join(p.root, 'examples', 'example.draft.json'), EXAMPLE);
   writeJson(path.join(p.root, 'examples', 'example.record.json'), EXAMPLE_RECORD);
 
+  // The authoring protocol, copied so an agent on any host can read it. Note
+  // what this does NOT establish: whether a host has loaded it. A file on disk
+  // is not proof a capability is active, and `doctor` reports the two facts
+  // separately for exactly that reason.
+  const protocolSource = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    'templates',
+    'protocol',
+    'ADOPTION.md'
+  );
+  let protocolInstalled = false;
+  if (fs.existsSync(protocolSource)) {
+    fs.mkdirSync(path.join(p.root, 'protocol'), { recursive: true });
+    fs.copyFileSync(protocolSource, path.join(p.root, 'protocol', 'ADOPTION.md'));
+    protocolInstalled = true;
+  }
+
   out.ok(`Installed release-harness in ${path.relative(cwd, p.root) || '.'}`);
   out.blank();
   out.info('No contract exists yet, and nothing here describes your software.');
@@ -143,6 +163,11 @@ export function cmdInit(ctx) {
   out.info('Next:');
   out.info('  release-harness draft new <name>     write what must hold');
   out.info('  release-harness doctor               see where you stand');
+  if (protocolInstalled) {
+    out.blank();
+    out.info('An agent can help you author a draft. Point it at:');
+    out.info(`  ${path.join(path.relative(cwd, p.root) || '.', 'protocol', 'ADOPTION.md')}`);
+  }
 
   return EXIT.OK;
 }

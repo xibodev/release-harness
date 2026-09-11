@@ -178,6 +178,25 @@ function authorGreeterDraft(dir, { resolved = true } = {}) {
   assert.ok(!/\bReady\b/.test(doctor.all), 'the word "Ready" must not appear');
   assert.notStrictEqual(doctor.code, 0, 'and it must not exit 0 with nothing accepted');
 
+  // The authoring protocol is installed, and `doctor` is honest about the limit
+  // of what that proves. A file on disk is not evidence that an agent host has
+  // loaded anything -- claiming "agent ready" because a copy succeeded would be
+  // the same class of false summary as the readiness flag this release removed.
+  assert.ok(
+    fs.existsSync(path.join(root, 'protocol', 'ADOPTION.md')),
+    'init must install the authoring protocol'
+  );
+  assert.match(doctor.all, /authoring protocol\s+installed/, 'doctor reports it as installed');
+  assert.match(
+    doctor.all,
+    /not observable from here/,
+    'and says plainly that host activation is not something it can establish'
+  );
+  assert.ok(
+    !/agent ready|agent active|capability active/i.test(doctor.all),
+    'doctor must never claim an agent capability is active'
+  );
+
   fs.rmSync(dir, { recursive: true, force: true });
   pass('C1', 'bootstrap creates no proposition and doctor does not claim readiness');
 }

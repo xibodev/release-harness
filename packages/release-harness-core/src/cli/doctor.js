@@ -18,6 +18,7 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { paths, readJson, listDrafts, listAccepted, listBindings, isInstalled } from './layout.js';
 import { EXIT } from './exit-codes.js';
 import { validateDraft, validateAuthoringRecord, validateAcceptedContract } from '../validator.js';
@@ -158,6 +159,21 @@ export function cmdDoctor(ctx) {
   }
 
   out.info(`bindings            ${bindingNames.length === 0 ? 'none' : bindingNames.join(', ')}`);
+
+  // Authoring capability: reported as what can actually be checked.
+  //
+  // Whether an agent host has loaded a skill is not a fact this process can
+  // establish -- hosts keep their own registries, and a file on disk is not
+  // proof anything is active. Saying "agent ready" because a file was copied
+  // would be the same class of claim as the readiness flag this command
+  // exists to have removed, so the two facts are reported separately.
+  const protocolFile = path.join(p.root, 'protocol', 'ADOPTION.md');
+  const protocolInstalled = fs.existsSync(protocolFile);
+  out.data('authoring_protocol_installed', protocolInstalled);
+  out.info(`authoring protocol  ${protocolInstalled ? 'installed' : 'not installed'}`);
+  if (protocolInstalled) {
+    out.detail('whether your agent host has loaded it is not observable from here');
+  }
 
   out.blank();
 
