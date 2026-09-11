@@ -49,10 +49,41 @@ function skeletonDraft() {
   };
 }
 
+/**
+ * A skeleton authoring record.
+ *
+ * The starting status is `not_established`, because that is the truth before
+ * anyone has looked at anything -- and because it is the one status that needs
+ * no evidence, so a new record is valid the moment it is written.
+ *
+ * The comment carries what each other status requires. An adoption agent found
+ * this gap: the scaffold happily suggests writing `observed`, and the schema
+ * then rejects it for a missing `evidence.source` that nothing had mentioned.
+ * The requirements are not arbitrary -- a negative claim needs its bounds
+ * because "not found" is a statement about the search until you know where it
+ * looked and whether it finished -- but an author meeting them for the first
+ * time should not have to learn them from a validation error.
+ */
 function skeletonRecord() {
   return {
     schema_version: '1.0.0',
     authored_by: '',
+    _status_guide: {
+      observed: 'you read it. requires evidence.source, e.g. "src/server.js:41"',
+      observed_absent:
+        'a COMPLETED bounded search found nothing. requires evidence.method, ' +
+        'evidence.roots (non-empty), evidence.completed: true, and optionally ' +
+        'evidence.exclusions',
+      asserted_absent:
+        'something asserts it must not exist. requires evidence.asserted_by, ' +
+        'e.g. "tests/test_no_v1.js:11"',
+      inferred:
+        'you worked it out. requires evidence.source. cannot support an accepted ' +
+        'assertion -- acceptance will refuse it',
+      not_established:
+        'the search never ran, failed, was killed or truncated. needs no evidence, ' +
+        'and supports no claim. this is the honest starting point',
+    },
     claims: [
       {
         id: 'C1',

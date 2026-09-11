@@ -206,8 +206,14 @@ const by = { by: 'a.operator', at: '2026-09-11T09:00:00Z' };
     'an unattributed acceptance records responsibility without recording who'
   );
 
-  // A draft may legitimately be incomplete -- but a contract may not, and
-  // acceptance is the last point at which that can be caught.
+  // A draft may legitimately be incomplete -- a scaffold with blank fields is a
+  // draft in its honest initial state -- but a contract may not be, and
+  // acceptance is where that stops being acceptable.
+  //
+  // The incompleteness is reported as work remaining rather than as a broken
+  // document, because the operator is being told what to fill in, not that the
+  // file the tool just wrote for them is malformed. `contract_invalid` remains
+  // the backstop for anything that slips past.
   const thin = {
     schema_version: '1.0.0',
     proposition: { subject: { id: 's' }, assertions: [{ id: 'A1' }] },
@@ -216,8 +222,12 @@ const by = { by: 'a.operator', at: '2026-09-11T09:00:00Z' };
     () => acceptDraft(thin, { schema_version: '1.0.0', claims: [] }, by),
     (err) => {
       assert.ok(
-        err.blockers.some((b) => b.kind === 'contract_invalid'),
-        'an incomplete assertion must be caught at acceptance, not at run time'
+        err.blockers.some((b) => b.kind === 'incomplete' || b.kind === 'contract_invalid'),
+        'an assertion with no kind or target must be refused at acceptance'
+      );
+      assert.ok(
+        err.blockers.some((b) => /kind|target/.test(b.detail)),
+        'and must name what is missing'
       );
       return true;
     },

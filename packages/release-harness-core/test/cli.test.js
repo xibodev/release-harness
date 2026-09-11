@@ -649,4 +649,69 @@ function authorGreeterDraft(dir, { resolved = true } = {}) {
   pass('C11', 'exit codes distinguish ok, product failure, unproven and usage');
 }
 
+// ---------------------------------------------------------------------------
+// C12  Every command completes without crashing, in every lifecycle state.
+//
+// Found by an adoption agent: `doctor` printed its whole summary and THEN threw
+// on a missing import, exiting 4. Every fact it reported was correct and the
+// process still failed -- the worst shape of bug for this product, because a
+// reader sees good output and a failure code and cannot tell which to believe.
+//
+// A crash is always the harness's fault. It must never be reported as anything
+// the subject did, and exit 4 says so -- but the crash itself must not happen.
+// ---------------------------------------------------------------------------
+{
+  const dir = tmpProject('cli-nocrash-');
+
+  const states = [
+    ['not installed', () => {}],
+    ['freshly installed', () => rh(dir, ['init'], { expectOk: true })],
+    ['with an unresolved draft', () => authorGreeterDraft(dir, { resolved: false })],
+    [
+      'with a resolved draft',
+      () => {
+        const d = readJson(dir, `${DRAFT}/greeter.draft.json`);
+        d.questions[0].resolution = 'No; it defaults to "world".';
+        d.questions[0].resolved_by = 'op';
+        writeJson(dir, `${DRAFT}/greeter.draft.json`, d);
+      },
+    ],
+    [
+      'with an accepted contract',
+      () => rh(dir, ['accept', '--draft', 'greeter', '--by', 'op'], { expectOk: true }),
+    ],
+    [
+      'with a binding',
+      () => rh(dir, ['bind', 'local', '--target', 'cli=node greet.js'], { expectOk: true }),
+    ],
+    ['after a run', () => rh(dir, ['run', '--binding', 'local'], { expectOk: true })],
+  ];
+
+  const readOnly = [['doctor'], ['validate'], ['draft', 'list'], ['bind'], ['verify'], ['help']];
+
+  for (const [label, setUp] of states) {
+    setUp();
+    for (const argv of readOnly) {
+      const r = rh(dir, argv);
+
+      // A thrown error is the one thing no state may produce. The CLI reports
+      // it as a harness fault (exit 4) rather than crashing bare, so that is
+      // what is asserted against.
+      assert.ok(
+        !/release-harness failed:|is not defined|Cannot read propert/.test(r.all),
+        `\`${argv.join(' ')}\` threw when ${label}:
+${r.all}`
+      );
+      assert.notStrictEqual(
+        r.code,
+        4,
+        `\`${argv.join(' ')}\` reported a harness failure when ${label}`
+      );
+    }
+  }
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  pass('C12', 'no read-only command crashes in any lifecycle state');
+}
+
 console.log(`\n  ${results.length} CLI checks passed\n`);

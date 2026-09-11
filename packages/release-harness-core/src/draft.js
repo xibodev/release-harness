@@ -156,11 +156,16 @@ export function checkClaim(claim, index) {
     return [`${at} must be an object`];
   }
 
-  if (typeof claim.id !== 'string' || !claim.id.trim()) {
-    errors.push(`${at}.id must be a non-empty string`);
+  // Emptiness is not malformedness. A scaffolded record with blank fields is a
+  // record in its honest initial state, and reporting it as broken teaches an
+  // author that validation output is noise to be worked around. What matters is
+  // the TYPE being right; whether it has been filled in is a question for
+  // acceptability, which says what to fill in rather than what is wrong.
+  if (typeof claim.id !== 'string') {
+    errors.push(`${at}.id must be a string`);
   }
-  if (typeof claim.claim !== 'string' || !claim.claim.trim()) {
-    errors.push(`${at}.claim must state what is being claimed`);
+  if (typeof claim.claim !== 'string') {
+    errors.push(`${at}.claim must be a string`);
   }
 
   const status = claim.status;
@@ -358,6 +363,35 @@ export function checkAcceptability(draft, record) {
     ...checkAuthoringRecord(record).map((e) => ({ kind: 'record_invalid', detail: e }))
   );
   if (blockers.length > 0) return { acceptable: false, blockers };
+
+  // What the schema deliberately tolerates in a draft, acceptance must not.
+  const subjectId = draft.proposition?.subject?.id;
+  if (typeof subjectId !== 'string' || !subjectId.trim()) {
+    blockers.push({
+      kind: 'incomplete',
+      detail: 'The subject has no id yet. Name what is being certified.',
+    });
+  }
+
+  for (const [i, a] of (draft.proposition?.assertions ?? []).entries()) {
+    for (const field of ['id', 'kind', 'target']) {
+      if (typeof a?.[field] !== 'string' || !a[field].trim()) {
+        blockers.push({
+          kind: 'incomplete',
+          detail: `assertions[${i}] has no ${field} yet.`,
+        });
+      }
+    }
+  }
+
+  for (const [i, c] of (record.claims ?? []).entries()) {
+    if (typeof c?.claim !== 'string' || !c.claim.trim()) {
+      blockers.push({
+        kind: 'incomplete',
+        detail: `claims[${i}] states nothing yet. Say what is being claimed, or remove it.`,
+      });
+    }
+  }
 
   for (const q of draft.questions ?? []) {
     const resolved = typeof q.resolution === 'string' && q.resolution.trim().length > 0;
