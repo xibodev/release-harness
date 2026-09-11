@@ -234,34 +234,10 @@ const by = { by: 'a.operator', at: '2026-09-11T09:00:00Z' };
     'a draft too incomplete to be a contract must be refused'
   );
 
-  // An assertion the harness cannot exercise is refused while it is still a
-  // draft. Found by an adoption agent that authored `kind: "process"`: it
-  // validated, accepted cleanly, and failed only at run time -- after the
-  // operator had taken responsibility for a proposition nothing could ever
-  // check. A promise nobody can keep should be caught while it is still cheap
-  // to change.
-  const unrunnable = {
-    schema_version: '1.0.0',
-    proposition: {
-      subject: { id: 's' },
-      assertions: [{ id: 'A1', kind: 'process', target: 't', supported_by: ['port-claim'] }],
-    },
-  };
-  assert.throws(
-    () => acceptDraft(unrunnable, soundRecord(), by),
-    (err) => {
-      assert.ok(
-        err.blockers.some((b) => /cannot exercise/.test(b.detail)),
-        'an unexecutable assertion kind must be refused at acceptance'
-      );
-      assert.ok(
-        err.blockers.some((b) => /http, cli/.test(b.detail)),
-        'and the message must name the kinds that would work'
-      );
-      return true;
-    },
-    'a contract that could never be checked must not be accepted'
-  );
+  // Note: an assertion whose KIND cannot be exercised is refused too, but that
+  // rule belongs to semantic validation (see negative-evidence E-9), not to
+  // acceptance policy. Acceptance inherits it by calling the same check, which
+  // is why no separate test for it lives here.
 
   pass('A-5', 'acceptance demands attribution and refuses an incomplete proposition');
 }

@@ -24,6 +24,8 @@
  * cannot return `observed_absent` for a search that did not complete.
  */
 
+import { EXECUTABLE_KINDS } from './contract.js';
+
 export const DRAFT_SCHEMA_VERSION = '1.0.0';
 
 /**
@@ -279,6 +281,26 @@ export function checkDraft(draft) {
   const proposition = draft.proposition;
   if (!proposition || typeof proposition !== 'object') {
     errors.push('Draft must declare a "proposition"');
+  } else {
+    // An assertion with no kind yet is INCOMPLETE, which a draft is allowed to
+    // be -- acceptability reports it as work remaining. An assertion with a
+    // kind nothing can exercise is different in nature: no amount of filling in
+    // makes it checkable, so it is wrong the moment it is written and is
+    // reported here, where `validate` will show it.
+    //
+    // An adoption agent authored `kind: "process"`. It looked reasonable, it
+    // validated, and it failed only when a run reached it -- after the operator
+    // had taken responsibility for a proposition nothing could evaluate.
+    for (const [i, a] of (proposition.assertions ?? []).entries()) {
+      if (typeof a?.kind !== 'string' || !a.kind.trim()) continue;
+      if (!EXECUTABLE_KINDS.includes(a.kind)) {
+        errors.push(
+          `assertions[${i}] has kind "${a.kind}", which this version cannot exercise ` +
+            `(it knows: ${EXECUTABLE_KINDS.join(', ')}). An assertion that cannot be ` +
+            'checked is a promise nobody can keep.'
+        );
+      }
+    }
   }
 
   if (draft.questions !== undefined) {

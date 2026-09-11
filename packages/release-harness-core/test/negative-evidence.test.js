@@ -12,6 +12,8 @@
 
 import assert from 'node:assert';
 import Ajv from 'ajv';
+import fs from 'node:fs';
+import { EXECUTABLE_KINDS } from '../src/contract.js';
 import { Schemas } from '../../release-harness-schemas/index.js';
 import {
   classifySearch,
@@ -465,5 +467,150 @@ console.log('\nNegative-evidence and draft semantics\n');
 
   pass('E-8', 'the schema enforces bounded absence without the runtime');
 }
+
+// ---------------------------------------------------------------------------
+// E-9  Assertion kinds are a semantic-validation rule, with one authority.
+//
+// An adoption agent authored `kind: "process"`. It passed validation, would
+// have been accepted, and failed only when a run reached it -- by which point
+// the operator had taken responsibility for a proposition nothing could ever
+// evaluate.
+//
+// The distinction being drawn: an assertion with NO kind yet is incomplete,
+// which a draft is allowed to be. An assertion with a kind nothing can exercise
+// is wrong the moment it is written, because no amount of filling in makes it
+// checkable.
+// ---------------------------------------------------------------------------
+{
+  const draftWith = (assertion) => ({
+    schema_version: '1.0.0',
+    proposition: { subject: { id: 's' }, assertions: [assertion] },
+  });
+
+  // 1. Incomplete is not invalid: a scaffolded assertion with no kind is a
+  //    valid draft that is simply not ready yet.
+  const incomplete = draftWith({ id: 'A1' });
+  assert.deepStrictEqual(checkDraft(incomplete), [], 'an assertion with no kind is a valid draft');
+  const incompleteBlockers = checkAcceptability(incomplete, { claims: [] }).blockers;
+  assert.ok(
+    incompleteBlockers.some((b) => b.kind === 'incomplete' && /kind/.test(b.detail)),
+    'and is reported as work remaining, not as malformed'
+  );
+
+  // 2. A supported kind passes.
+  for (const kind of EXECUTABLE_KINDS) {
+    assert.deepStrictEqual(
+      checkDraft(draftWith({ id: 'A1', kind, target: 't' })),
+      [],
+      `"${kind}" must be accepted as executable`
+    );
+  }
+
+  // 3. An unsupported kind is a semantic-validation failure, reported by the
+  //    same function `validate` calls.
+  const unsupported = checkDraft(draftWith({ id: 'A1', kind: 'process', target: 't' }));
+  assert.ok(
+    unsupported.some((e) => /cannot exercise/.test(e)),
+    'an unexecutable kind must fail semantic validation'
+  );
+  assert.ok(
+    unsupported.some((e) => e.includes(EXECUTABLE_KINDS.join(', '))),
+    'and must name the kinds that would work'
+  );
+
+  // 4. Acceptance refuses it because it calls that same authority -- note the
+  //    blocker kind is `draft_invalid`, not an acceptance-specific code.
+  const blockers = checkAcceptability(draftWith({ id: 'A1', kind: 'process', target: 't' }), {
+    claims: [],
+  }).blockers;
+  assert.ok(
+    blockers.some((b) => b.kind === 'draft_invalid' && /cannot exercise/.test(b.detail)),
+    'acceptance must refuse via the shared rule rather than one of its own'
+  );
+
+  pass('E-9', 'an unexecutable assertion kind fails validation, and acceptance inherits it');
+}
+
+// ---------------------------------------------------------------------------
+// E-10  There is exactly one list of executable kinds.
+//
+// Two lists would eventually disagree, and the disagreement would surface as a
+// contract that validates and then cannot run.
+// ---------------------------------------------------------------------------
+{
+  const read = (rel) => fs.readFileSync(new URL(rel, import.meta.url), 'utf8');
+
+  const declarations = ['../src/contract.js', '../src/draft.js', '../src/cli/execute.js']
+    .map((f) => ({ file: f, src: read(f) }))
+    .filter(({ src }) => /EXECUTABLE_KINDS\s*=\s*\[/.test(src));
+
+  assert.strictEqual(
+    declarations.length,
+    1,
+    `exactly one module may declare the kind list; found ${declarations.length}`
+  );
+  assert.match(declarations[0].file, /contract\.js$/, 'and it belongs to the contract model');
+
+  // The CLI must import that list, never restate it.
+  const cli = read('../src/cli/execute.js');
+  assert.ok(
+    !/\[\s*'http'\s*,\s*'cli'\s*\]/.test(cli),
+    'the CLI must import the kind list rather than hardcoding one'
+  );
+
+  pass('E-10', 'the executable-kind list is declared once, in the contract model');
+}
+
+
+// ---------------------------------------------------------------------------
+// E-11  The artifacts stay closed to unknown properties.
+//
+// A `_`-prefixed escape hatch was briefly added so a scaffold could explain the
+// status vocabulary inside the file it was scaffolding. That was the wrong fix:
+// `additionalProperties: false` is what makes these schemas authoritative, and
+// a wildcard beside it opens a second, uncontrolled metadata channel. Guidance
+// now belongs to `draft new`, which prints it, and the artifacts carry nothing
+// but product data.
+// ---------------------------------------------------------------------------
+{
+  const ajv = new Ajv({ allErrors: true, strict: false });
+  const draftOk = ajv.compile(Schemas.DraftV1);
+  const recordOk = ajv.compile(Schemas.AuthoringRecordV1);
+
+  const draft = {
+    schema_version: '1.0.0',
+    proposition: { subject: { id: 's' }, assertions: [{ id: 'A1', kind: 'cli', target: 't' }] },
+  };
+  const record = {
+    schema_version: '1.0.0',
+    claims: [{ id: 'c1', claim: 'x', status: 'observed', evidence: { source: 'f:1' } }],
+  };
+
+  assert.ok(draftOk(draft), 'the baseline draft is valid');
+  assert.ok(recordOk(record), 'the baseline record is valid');
+
+  for (const key of ['_status_guide', '_note', '_comment', 'notes', 'extra']) {
+    assert.strictEqual(
+      draftOk({ ...draft, [key]: 'anything' }),
+      false,
+      `the draft schema must reject the unknown property "${key}"`
+    );
+    assert.strictEqual(
+      recordOk({ ...record, [key]: 'anything' }),
+      false,
+      `the record schema must reject the unknown property "${key}"`
+    );
+  }
+
+  // And a scaffolded record must itself be clean product data.
+  const scaffoldSource = fs.readFileSync(new URL('../src/cli/draft.js', import.meta.url), 'utf8');
+  assert.ok(
+    !/_status_guide/.test(scaffoldSource),
+    'the scaffold must not embed guidance in the artifact it creates'
+  );
+
+  pass('E-11', 'draft and record reject unknown properties, including underscore keys');
+}
+
 
 console.log(`\n  ${results.length} negative-evidence checks passed\n`);

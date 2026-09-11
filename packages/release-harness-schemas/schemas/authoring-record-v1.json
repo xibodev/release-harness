@@ -188,10 +188,5 @@
         }
       ]
     }
-  },
-  "patternProperties": {
-    "^_": {
-      "description": "Author annotations. Keys beginning with an underscore are ignored by every consumer, so a scaffold can carry guidance and an author can leave themselves notes without either becoming part of the authoring record. They are not evidence and never reach an accepted contract."
-    }
   }
 }

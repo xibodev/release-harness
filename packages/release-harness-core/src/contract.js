@@ -203,10 +203,14 @@ export function checkContractSemantics(contract) {
       if (typeof a.kind !== 'string' || !a.kind.trim()) {
         errors.push(`assertions[${i}] must declare a "kind"`);
       } else if (!EXECUTABLE_KINDS.includes(a.kind)) {
+        // Same rule as `checkDraft`, reached by a different door: this function
+        // guards the accepted artifact, that one guards the draft. Both read
+        // EXECUTABLE_KINDS, so there is one list and one message to maintain,
+        // and a caller cannot reach acceptance past a validation that passed.
         errors.push(
           `assertions[${i}] has kind "${a.kind}", which this version cannot exercise ` +
-            `(it knows: ${EXECUTABLE_KINDS.join(', ')}). An accepted assertion that ` +
-            'cannot be checked is a promise nobody can keep.'
+            `(it knows: ${EXECUTABLE_KINDS.join(', ')}). An assertion that cannot be ` +
+            'checked is a promise nobody can keep.'
         );
       }
       // An assertion names the thing it exercises symbolically. What that name
