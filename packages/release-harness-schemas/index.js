@@ -13,19 +13,26 @@ export function loadSchema(name) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+/**
+ * The published schemas.
+ *
+ * The lifecycle in order: a draft is proposed, an authoring record says how its
+ * claims were arrived at, an accepted contract freezes the proposition, a run
+ * manifest records what was exercised and where, evidence is sealed, and a
+ * verdict adjudicates.
+ *
+ * The topology, origins, scenario, brand-contract, waiver and harness-config
+ * schemas were removed with the architecture that read them. They described a
+ * world where execution bindings and assertions were hashed as one unit, which
+ * meant changing a port changed the identity of a promise.
+ */
 export const Schemas = {
-  ContractV1: loadSchema('contract-v1'),
   DraftV1: loadSchema('draft-v1'),
   AuthoringRecordV1: loadSchema('authoring-record-v1'),
-  TopologyV1: loadSchema('topology-v1'),
-  OriginsV1: loadSchema('origins-v1'),
-  ScenarioV1: loadSchema('scenario-v1'),
-  BrandContractV1: loadSchema('brand-contract-v1'),
-  WaiversV1: loadSchema('waivers-v1'),
+  ContractV1: loadSchema('contract-v1'),
+  RunManifestV1: loadSchema('run-manifest-v1'),
   EvidenceManifestV1: loadSchema('evidence-manifest-v1'),
   VerdictV1: loadSchema('verdict-v1'),
-  RunManifestV1: loadSchema('run-manifest-v1'),
-  HarnessConfigV1: loadSchema('harness-config-v1'),
 };
 
 export default Schemas;

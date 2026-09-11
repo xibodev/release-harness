@@ -105,20 +105,24 @@ export class EvidenceSealer {
   }
 
   /**
-   * Closes the evidence directory, computes all file hashes, and writes evidence.manifest.json.
+   * Close the evidence directory, hash every file, and write the manifest.
+   *
+   * This used to take a `policySnapshot` argument: one object holding the
+   * topology, the origins AND the scenarios, written as a single file and
+   * hashed as a single unit. That is the boundary error the contract model
+   * exists to correct -- one digest covering both what was promised and where
+   * it was checked, so changing a port changed the identity of a promise.
+   *
+   * The argument is gone rather than merely unused. A door into the old model
+   * that nobody walks through is still a door, and the next person needing
+   * "somewhere to put run config" would have found it.
    */
-  sealEvidence(policySnapshot = null) {
+  sealEvidence() {
     if (this.state === 'COLLECTING') {
       this.transitionTo('SANITIZING');
     }
     if (this.state === 'SANITIZING') {
       this.transitionTo('SEALED');
-    }
-
-    // Write policy snapshot into evidence directory before computing hashes if provided
-    if (policySnapshot) {
-      const policySnapshotPath = path.join(this.evidenceDir, 'policy-snapshot.json');
-      fs.writeFileSync(policySnapshotPath, JSON.stringify(policySnapshot, null, 2) + '\n', 'utf8');
     }
 
     const files = this.scanFiles();
