@@ -3,6 +3,7 @@
 // output of three suites and made it unclear which file produced which line.
 // Sequential dynamic imports also guarantee every assertion has resolved
 // before the banner below claims they all passed.
+await import('./characterization.test.js');
 await import('./evaluator.test.js');
 await import('./sealer.test.js');
 await import('./validator.test.js');
