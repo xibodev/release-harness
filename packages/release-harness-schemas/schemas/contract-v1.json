@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/contract-v1.json",
+  "title": "ReleaseHarnessAcceptedContract",
+  "description": "The proposition release-harness adjudicates: a subject, what must hold of it, and the normative references whose change would alter that meaning. Deliberately excludes execution bindings, authoring metadata and acceptance metadata -- a proposition's identity must not move because a port changed or a different person accepted it.",
+  "type": "object",
+  "required": ["schema_version", "subject", "assertions"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "description": "Version of this contract format.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "subject": {
+      "description": "What is being certified.",
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Stable identifier for the subject. Chosen by the author, not derived from a directory name or any other local filesystem accident.",
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "description": "Human-readable name, for reports.",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "assertions": {
+      "description": "What must hold. A contract asserting nothing certifies nothing, so this must be non-empty.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/assertion" }
+    },
+    "requires": {
+      "description": "Normative references: other subjects whose change would alter what these assertions mean. Each must be pinned by digest -- an unpinned reference is a convention, not a reference.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/normativeReference" }
+    }
+  },
+  "definitions": {
+    "assertion": {
+      "type": "object",
+      "required": ["id", "kind", "target"],
+      "properties": {
+        "id": {
+          "description": "Identifier unique within this contract. Verdicts cite it, so it must be stable.",
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "description": "What class of check this is. The adjudicator dispatches on this value; an unknown kind is refused rather than skipped.",
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "description": "The SYMBOLIC name of the thing exercised -- 'api', 'web', 'db'. What this resolves to at run time is an execution binding, supplied per-run and deliberately not part of the contract. This is what lets one contract be authored on a laptop and certified in CI.",
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "description": "What this assertion means, in the author's words. Carried into reports so a failure reads as a broken promise rather than a failed probe.",
+          "type": "string"
+        },
+        "expect": {
+          "description": "The expected outcome. Shape depends on `kind` and is validated by the probe that implements it.",
+          "type": "object"
+        }
+      }
+    },
+    "normativeReference": {
+      "type": "object",
+      "required": ["ref", "digest"],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "description": "Identifier of the referenced subject or artifact.",
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "description": "sha256 of the referenced proposition, pinning exactly which version this contract was accepted against.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
