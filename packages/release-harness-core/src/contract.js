@@ -37,6 +37,19 @@ export const CONTRACT_SCHEMA_VERSION = '1.0.0';
 const IDENTITY_FIELDS = ['schema_version', 'subject', 'assertions', 'requires'];
 
 /**
+ * The assertion kinds this version can actually exercise.
+ *
+ * Declared here, beside the contract semantics, because it is a statement about
+ * what a contract may promise -- not an implementation detail of the runner. An
+ * adoption agent found the gap it closes: it authored `kind: "process"`, which
+ * validated and accepted cleanly and only failed at run time, after the
+ * operator had already taken responsibility for a proposition that could never
+ * be checked. A promise the harness cannot evaluate should be refused while it
+ * is still a draft and still cheap to change.
+ */
+export const EXECUTABLE_KINDS = ['http', 'cli'];
+
+/**
  * Recursively canonicalize a value.
  *
  * - Objects get their keys sorted, so property order cannot move the digest.
@@ -189,6 +202,12 @@ export function checkContractSemantics(contract) {
       }
       if (typeof a.kind !== 'string' || !a.kind.trim()) {
         errors.push(`assertions[${i}] must declare a "kind"`);
+      } else if (!EXECUTABLE_KINDS.includes(a.kind)) {
+        errors.push(
+          `assertions[${i}] has kind "${a.kind}", which this version cannot exercise ` +
+            `(it knows: ${EXECUTABLE_KINDS.join(', ')}). An accepted assertion that ` +
+            'cannot be checked is a promise nobody can keep.'
+        );
       }
       // An assertion names the thing it exercises symbolically. What that name
       // resolves to at run time is an execution binding, deliberately not here.

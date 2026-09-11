@@ -44,6 +44,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { probeHttp } from '../probes.js';
 import { CAUSE } from '../attribution.js';
+import { EXECUTABLE_KINDS } from '../contract.js';
 
 // ---------------------------------------------------------------------------
 // HTTP
@@ -400,7 +401,9 @@ async function executeProcess(assertion, location, timeoutMs, cwd) {
 }
 
 /** The assertion kinds this version can execute. */
-export const SUPPORTED_KINDS = ['http', 'cli'];
+// Re-exported from the contract model, which is where what a contract may
+// promise is decided. Two lists would eventually disagree.
+export { EXECUTABLE_KINDS as SUPPORTED_KINDS } from '../contract.js';
 
 /**
  * Execute one assertion.
@@ -422,14 +425,14 @@ export async function executeAssertion(assertion, resolvedTargets, { timeoutMs =
     };
   }
 
-  if (!SUPPORTED_KINDS.includes(assertion.kind)) {
+  if (!EXECUTABLE_KINDS.includes(assertion.kind)) {
     return {
       id: assertion.id,
       passed: false,
       cause: CAUSE.CONTRACT_INVALID,
       observed:
         `Assertion kind "${assertion.kind}" cannot be executed by this version ` +
-        `(supported: ${SUPPORTED_KINDS.join(', ')}).`,
+        `(supported: ${EXECUTABLE_KINDS.join(', ')}).`,
       detail: {},
     };
   }
