@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/draft-v1.json",
+  "title": "ReleaseHarnessDraft",
+  "description": "A mutable proposal for a contract, together with the open questions it has not settled. A draft is allowed to be incomplete -- that is what distinguishes it from an accepted contract -- so this schema constrains shape without demanding resolution.",
+  "type": "object",
+  "required": ["schema_version", "proposition"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "proposition": {
+      "description": "The proposed contract. Deliberately NOT validated against contract-v1 here: a draft may be missing pieces a contract must have, and validating it as a contract would force an author to fake completeness before they have it.",
+      "type": "object",
+      "required": ["subject", "assertions"],
+      "properties": {
+        "subject": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "name": { "type": "string" },
+            "description": { "type": "string" }
+          }
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "kind": { "type": "string" },
+              "target": { "type": "string" },
+              "description": { "type": "string" },
+              "expect": { "type": "object" },
+              "supported_by": {
+                "description": "Ids of claims in the authoring record that this assertion rests on. Acceptance refuses any assertion whose cited claims do not support a claim.",
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ref": { "type": "string" },
+              "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "questions": {
+      "description": "What the author could not settle. A blocking question must be resolved before acceptance; a non-blocking one is recorded and may stay open, because an author who is penalised for recording uncertainty will stop recording it.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "question"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "question": { "type": "string", "minLength": 1 },
+          "blocking": { "type": "boolean" },
+          "resolution": { "type": "string" },
+          "resolved_by": { "type": "string" }
+        }
+      }
+    }
+  }
+}

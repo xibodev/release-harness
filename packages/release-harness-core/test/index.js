@@ -5,6 +5,7 @@
 // before the banner below claims they all passed.
 await import('./characterization.test.js');
 await import('./contract-identity.test.js');
+await import('./negative-evidence.test.js');
 await import('./evaluator.test.js');
 await import('./sealer.test.js');
 await import('./validator.test.js');
