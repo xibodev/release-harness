@@ -1,110 +1,89 @@
 # Changelog
 
-All notable changes to Release-Harness are documented here.
+User-visible changes and upgrade considerations. The published npm release is
+`1.2.0`; entries under Unreleased describe source changes not yet published.
 
-## 1.2.0
-
-### Behavior changes
-
-Read these before upgrading. Each one corrects behavior that was previously
-wrong, so **a run that was green on 1.1.0 may legitimately fail on 1.2.0.**
-
-- **Source materialization mirrors committed source.** The detached workspace is
-  built from git rather than from a filesystem walk with a basename denylist.
-  Nested product directories named `docs`, `uploads`, `research`, or `brand` are
-  no longer dropped, and git-ignored package-manager stores such as
-  `.pnpm-store` are no longer copied.
-
-  **Git-ignored files no longer reach the workspace.** A build that depends on
-  an untracked file — a local `.env`, an uncommitted fixture — will now fail.
-  Materialization names the excluded file so the cause is visible. Commit the
-  file, or provide the value through your compose file's environment, so the
-  build does not depend on an uncommitted file.
-
-- **`sql_query` probes fail closed.** The Postgres probe never executed SQL and
-  never evaluated `expected_rows_count` or `forbidden_values`, yet reported
-  success whenever the port answered. It now reports that the probe is
-  unimplemented, so a scenario declaring it exits 3 where it previously
-  certified green. Assert database state with a custom probe running your own
-  query tool.
-
-- **Harness faults report exit 3.** A misconfigured or unimplemented probe now
-  yields `HARNESS_ERROR` with exit code 3, where it previously reported exit 1
-  as a product failure. Check any CI step whose handling assumed exit 1.
-
-- **A dirty run's exit code no longer masks integrity failures.** With
-  `--allow-dirty`, a would-be pass or fail still reports 2 (non-certifying
-  development mode), but a harness error keeps exit 3 and invalid evidence keeps
-  exit 4. Those two were previously downgraded to 2 and disappeared.
-
-- **Scaffolded skills are namespaced.** `init --with-agents` writes skills under
-  `release-harness-*` names, in both the directory name and the frontmatter, so
-  they cannot shadow same-named skills you already have. Unnamespaced copies
-  written by 1.1.0 are left in place; remove them manually if you no longer want
-  them.
-
-- **Contracts are validated against their schemas at load time.** An unsupported
-  `service` or `probe_type`, a malformed `pr_gate`, or a missing required field
-  is rejected with a message naming the field and the allowed values, instead of
-  surfacing deep in the engine. An invalid `harness.config.json` now fails
-  `check-pr` with exit 3 rather than being skipped while the gate reported PASS.
-
-- **`harness_version` accepts any released version.** The published schema
-  pinned it to `enum: ["1.0.0"]` and therefore rejected the configuration `init`
-  itself writes. It now accepts any semver, including prereleases, and still
-  rejects non-versions such as `1.1`, `v1.1.0`, and `latest`.
+## Unreleased
 
 ### Added
 
-- **Custom side-effect probes.** Declare a command in your committed
-  `.release-harness/` contract and the harness executes it against the
-  materialized workspace, compares the exit code to `expect_exit_code`, and
-  seals stdout and stderr as evidence under `evidence/probes/`. Products whose
-  deliverable is a file — a rendered video, a compiled binary, a generated PDF,
-  an exported dataset — can now assert on their actual output. The command runs
-  with no shell in between, so a contract value cannot smuggle in shell syntax.
-  The exit code is the whole verdict: stdout and stderr are captured for a human
-  to read, never matched against.
+- Read-only `skills list` and `skills info` commands, shared `.agents/skills`
+  scaffolding, and revised adoption playbooks with host discovery guidance.
+- Sealed startup observations and explicit accounting for scenarios blocked
+  before execution. Ambiguous startup failures retain `UNKNOWN` attribution.
 
-- **Multi-repo Level 2 certification.** `run-local` materializes and certifies
-  every repository a `multi_repo` topology declares, recording one `sources[]`
-  entry per repository. Previously it bound whichever repository the operator
-  was standing in while the manifest claimed the whole graph.
+### Changed
 
-- **Materialization diagnostics.** File count, byte count, and elapsed time are
-  reported per materialized repository, and warnings raised during enumeration —
-  including a named excluded `.env` — now reach the operator instead of being
-  discarded.
+- Generated product slugs satisfy both contract schemas. Partial scaffolds
+  preserve valid existing identities and reject conflicting identities.
+- Generated agents use runtime-specific frontmatter. Disk scaffolding and host
+  registration are documented as separate steps.
+- Network policy uses `topology.json` as the canonical location. Legacy config
+  declarations remain supported; conflicts and malformed fields are rejected.
+- Sealed browser traffic uses a destination-filtering proxy, including redirect
+  and WebSocket destinations. Interrupted upstream responses no longer leave
+  downstream requests hanging.
+- Replay uses manifest-covered facts rather than caller-only overrides, retains
+  network/harness failures, and rejects linked evidence.
+- Startup failures produce sealed diagnostics and a verdict when evidence
+  finalization succeeds. Arbitrary startup logs are omitted for secret safety.
 
-- **`AI-ADOPTION.md`**, scaffolded by `init --with-agents`, documenting the
-  adoption order and exit codes for the AI agent doing the integration.
+### Compatibility
 
-- **`--contracts-only`**, which was documented but read nowhere. A bare `init`
-  writes contracts only; `--contracts-only` states that explicitly and the two
-  scaffolding flags are now mutually exclusive.
+- Stricter evidence validation can change verdicts. Historical bundles without
+  required sealed facts may need a new run; preserve archives rather than editing
+  or resealing them to obtain a different result.
+- HTTP and TCP are supported health probes. Unimplemented health probe types
+  fail explicitly. Ambiguous startup failures remain `HARNESS_ERROR` (exit `3`),
+  not automatically product failures.
+- Missing network policy retains legacy open behavior with a warning. HTTPS/WSS
+  filtering checks tunnel destinations, not encrypted content, SNI, or certificate
+  identity. Allowed relays and container-wide isolation are outside this boundary.
+  Non-proxied WebRTC UDP is suppressed without individual violation records.
+- Preserve existing contracts and repair slugs/frontmatter selectively. Normal
+  `init` preserves existing files; `--force` / `--overwrite` resets customized
+  contracts as well as agent files.
 
-- **Evidence sealing enforced at write time.** A write attempted after
-  `sealEvidence()` is refused at the write, with a message naming the seal,
-  rather than passing silently and surfacing later as a manifest hash mismatch.
+## 1.2.0
 
-### Fixed
+### Added
 
-- Tree digests cover every materialized file at any depth. The walk stopped at
-  four levels, so a change deeper in the tree left the recorded provenance
-  unchanged.
-- Source cleanliness fails closed when git status cannot be resolved, instead of
-  defaulting to clean. Untracked files are no longer invisible to the check.
-- Symlinks are materialized rather than silently skipped. On a host that cannot
-  create them — Windows without developer mode — the resolved content is copied
-  so the build still sees a real file. A symlink that can be neither recreated
-  nor copied is reported as a named skip rather than counted as materialized.
-- `--port-offset` applies to side-effect probes, so a concurrent run verifies
-  its own containers rather than the unshifted ones.
-- Unknown CLI flags are rejected with exit 3 instead of being silently ignored.
-  The unused `--config` flag is removed from the help.
-- `init --with-agents` no longer depends on the absence of an unrelated
-  `AGENTS.md`, and reports pre-existing same-name skills before writing.
-- `scenario-compiler` documents how to author side-effect probes, so the probes
-  the engine implements are ones the bundled skills can actually emit.
+- Custom side-effect probes run a project-owned executable with argument arrays
+  and compare its exit status with `expect_exit_code`. Stdout/stderr are retained
+  as evidence, not matched as assertions. Execution uses `shell: false`, which
+  does not isolate an untrusted executable.
+- Multi-repository local UAT materializes every declared repository and records
+  a `sources[]` entry for each, with materialization counts and warnings.
+- `init --with-agents` includes `AI-ADOPTION.md` and namespaced
+  `release-harness-*` skills. Bare `init` writes contracts only;
+  `--contracts-only` makes this explicit and is mutually exclusive with
+  `--with-agents`.
 
-Closes #3. Closes #4. Closes #5.
+### Changed And Fixed
+
+- Detached source follows Git's tracked/ignored-file rules, retains nested
+  product directories, and reports excluded inputs. Tree digests cover all
+  materialized file depths; unresolved Git status does not count as clean.
+- Source symlinks are materialized where supported, with resolved-content
+  fallback where possible and named diagnostics for skipped entries.
+- Contracts are schema-validated at load time, including `check-pr` config.
+  `harness_version` accepts semantic versions, including prereleases.
+- Writes after evidence sealing are refused. Probe port offsets apply to the
+  run's own service ports. Unknown CLI flags are rejected; unused `--config`
+  help was removed.
+- Agent scaffolding works independently of a pre-existing `AGENTS.md` and reports
+  same-name skill collisions.
+
+### Compatibility
+
+- **`sql_query` is unsupported** and returns `HARNESS_ERROR` (exit `3`). Use a
+  custom probe that executes a database query and asserts its result.
+- Misconfigured or unimplemented probes return exit `3`, not a product-failure
+  exit `1`. Update CI exit-code handling accordingly.
+- `--allow-dirty` returns `2` for otherwise passing/failing development runs,
+  but preserves harness errors as `3` and invalid evidence as `4`.
+- Git-ignored files do not reach the detached workspace. Commit only nonsecret
+  source and test fixtures; supply secrets through controlled runtime environment
+  configuration. Do not commit a local `.env` to fix a missing build input.
+- Unnamespaced skills from older scaffolds are left in place. Remove only copies
+  you no longer use; preserve customizations when adopting the namespaced bundle.

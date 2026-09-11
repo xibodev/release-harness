@@ -1,18 +1,42 @@
-# AGENTS.md — Release Harness Multi-Runtime Integration
+# Release-Harness Contributor Instructions
 
-Cross-tool entry point for **Release-Harness** across Claude Code, GitHub Copilot CLI, Gemini CLI, opencode, Codex, and Cursor.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for package layout, setup, template
+ownership, and test prerequisites. Read [SECURITY.md](SECURITY.md) before changing
+execution, networking, evidence collection, or verification.
 
-## Roles & Personas
+## Deterministic Authority
 
-- **Release Conductor** (`agents/release-conductor.md`): Orchestrates the product-readiness loop from product definition to GREEN mock-integrated local-docker UAT using the deterministic `release-harness` CLI.
+Gate outcomes and cause classifications belong to the deterministic CLI and
+evaluator. Agent playbooks author contracts and help investigate results; they
+must not calculate, override, or claim a verdict without corresponding evidence.
+Test replay, tampering, and invalid inputs when changing this boundary.
 
-## Multi-Runtime Directory Layout
+## Public Documentation Policy
 
-- `.claude/agents/release-conductor.md` — Claude Code variant
-- `.copilot/agents/release-conductor.md` — GitHub Copilot CLI variant
-- `.github/agents/release-conductor.agent.md` — GitHub Copilot Workspace / Extensions variant
-- `.opencode/agents/release-conductor.md` — opencode variant
+Public content must help readers understand, install, use, evaluate, upgrade, or
+contribute to Release-Harness. Describe current behavior, architecture, supported
+use cases, APIs, security limits, and clearly labeled planned features.
 
-## Principle of Deterministic Core Authority
+Do not publish internal conversations, prompts from development sessions,
+implementation diaries, agent-performance reports, pivots, rejected approaches,
+unresolved release decisions, or operator coordination. This applies to tracked
+files, README, changelog, website, packaged templates, and release notes. Keep
+private working notes outside the tracked public repository, not merely outside
+site navigation. Consumer-facing agent usage examples are product documentation,
+not transcripts of our own development sessions.
 
-AI personas and LLM agents do **not** calculate or override gate verdicts. Gate outcomes (`PASS`, `FAIL`, `UNPROVEN`, `HARNESS_ERROR`, `EVIDENCE_INVALID`) and cause classifications are computed solely by the deterministic `@xibodev/release-harness` CLI from sealed, tamper-checked evidence.
+Use neutral changelog entries: user-visible change, affected behavior, and action
+needed. Preserve necessary compatibility and security disclosures without
+narrating the investigation. Do not promise roadmap dates or shipped capabilities
+without implementation and release evidence. Mark unreleased behavior explicitly.
+
+The Pages artifact contains only files explicitly allowed by
+`scripts/build-public-site.mjs`. Never upload all of `docs/` or add working notes
+to the allowlist. A website exclusion does not make a tracked Git file private.
+
+## Validation
+
+Run `npm test` before delivery and report skipped coverage. For documentation,
+also run `npm run test:docs` and `npm run build:site`; check links, copyable examples,
+desktop/mobile rendering, and published-versus-unreleased claims. Preserve
+unrelated work; never publish credentials, private evidence, or local notes.
