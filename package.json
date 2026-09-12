@@ -12,7 +12,8 @@
     "test:schemas": "node packages/release-harness-schemas/test.js",
     "test:core": "node packages/release-harness-core/test/index.js",
     "test:install": "node tests/package/test-installability.mjs",
-    "test:all": "npm run test:schemas && npm run test:core && npm run test:install"
+    "test:all": "npm run test:vocab && npm run test:schemas && npm run test:core && npm run test:install",
+    "test:vocab": "node scripts/sync-assertion-kinds.mjs --check"
   },
   "devDependencies": {
     "playwright": "^1.50.0"

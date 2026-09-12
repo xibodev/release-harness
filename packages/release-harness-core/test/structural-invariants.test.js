@@ -582,4 +582,72 @@ console.log('\nStructural invariants (C2)\n');
   pass('S-13', 'the core model is subject + assertions + requires + bindings, and nothing more');
 }
 
+
+// ---------------------------------------------------------------------------
+// S-14  The vocabulary an author is TAUGHT is the vocabulary that VALIDATES.
+//
+// D44. S-5 proved every field in the kinds schema is read by the executor, and
+// passed -- while the draft and contract schemas rejected two of those fields
+// outright. Both carried hand-copied `expect` rules, so `body_contains` and
+// `stderr_contains` existed in the authority, in the executor and in the CLI's
+// help, and nowhere in either validator.
+//
+// An adoption run hit it in minutes: the tool's own `draft new` output taught
+// two fields that `validate` refused. That is worse than a missing feature --
+// it is the product lying to an author about its own vocabulary, which is the
+// precise failure D18 and D19 were about.
+//
+// S-5 could not have caught it because it only ever looked in one direction.
+// This closes the other: every field the author is shown must survive both
+// validators, for every kind.
+// ---------------------------------------------------------------------------
+{
+  const ajv = new Ajv({ strict: false, allErrors: true });
+
+  // A minimal well-formed artifact of each shape, with one assertion whose
+  // `expect` carries exactly the field under test.
+  const sample = (field, spec) => {
+    if (Array.isArray(spec.enum)) return spec.enum[0];
+    if (spec.type === 'integer') return spec.minimum ?? 0;
+    return 'x';
+  };
+
+  for (const k of describeAssertionKinds()) {
+    const defs = Schemas.AssertionKindsV1.definitions[k.kind].properties;
+
+    for (const [field, spec] of Object.entries(defs)) {
+      const expect = { [field]: sample(field, spec) };
+      const assertion = { id: 'A1', kind: k.kind, target: 't', expect, supported_by: [] };
+
+      const draft = {
+        schema_version: '1.0.0',
+        proposition: { subject: { id: 's', name: 's' }, assertions: [assertion] },
+        questions: [],
+      };
+      assert.ok(
+        ajv.validate(Schemas.DraftV1, draft),
+        `the draft schema rejects \`expect.${field}\` for kind "${k.kind}", ` +
+          `but the CLI teaches it: ${ajv.errorsText(ajv.errors)}`
+      );
+
+      // `supported_by` is authoring provenance: it belongs to the draft and is
+      // deliberately absent from the accepted contract, so the contract sample
+      // must not carry it.
+      const { supported_by, ...contractAssertion } = assertion;
+      const contract = {
+        schema_version: '1.0.0',
+        subject: { id: 's', name: 's' },
+        assertions: [contractAssertion],
+      };
+      assert.ok(
+        ajv.validate(Schemas.ContractV1, contract),
+        `the contract schema rejects \`expect.${field}\` for kind "${k.kind}": ` +
+          ajv.errorsText(ajv.errors)
+      );
+    }
+  }
+
+  pass('S-14', 'every taught assertion field validates in both the draft and the contract');
+}
+
 console.log(`\n  ${results.length} structural invariants passed\n`);
