@@ -27,7 +27,7 @@ import { MODE } from '../attribution.js';
 import { adjudicate, exitCodeForVerdict } from '../adjudicate.js';
 import { buildRunManifest } from '../run-manifest.js';
 import { EvidenceSealer } from '../sealer.js';
-import { executeAssertion } from './execute.js';
+import { executeAssertion } from '../execute.js';
 
 /**
  * The side-effect trace.

@@ -21,7 +21,8 @@
     "./materializer": "./src/materializer.js",
     "./probes": "./src/probes.js",
     "./redactor": "./src/redactor.js",
-    "./adjudicate": "./src/adjudicate.js"
+    "./adjudicate": "./src/adjudicate.js",
+    "./execute": "./src/execute.js"
   },
   "files": [
     "bin",

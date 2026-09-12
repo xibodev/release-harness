@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import { paths, writeJson, readJson, listDrafts, isInstalled } from './layout.js';
 import { EXIT } from './exit-codes.js';
-import { checkAcceptability } from '../draft.js';
+import { checkAcceptability, describeStatuses } from '../draft.js';
 
 /**
  * A skeleton draft.
@@ -129,15 +129,13 @@ function draftNew(ctx) {
   out.info('  - the draft says what must hold;');
   out.info('  - the record says how you know, and gets checked when you accept.');
   out.blank();
+  // Derived from core, never restated here. A help text that keeps its own copy
+  // of the evidence rules is a help text that will eventually contradict the
+  // validator enforcing them.
   out.info('Each claim carries a status, and each status needs its own evidence:');
-  out.detail('observed          you read it -- needs evidence.source ("src/app.js:41")');
-  out.detail('observed_absent   a COMPLETED bounded search found nothing -- needs');
-  out.detail('                  evidence.method, evidence.roots, evidence.completed: true');
-  out.detail('asserted_absent   something requires it not to exist -- needs');
-  out.detail('                  evidence.asserted_by ("tests/test_no_v1.js:11")');
-  out.detail('inferred          you worked it out -- needs evidence.source, and cannot');
-  out.detail('                  support an accepted assertion');
-  out.detail('not_established   the search never finished -- needs nothing, supports nothing');
+  for (const { status, requires } of describeStatuses()) {
+    out.detail(`${status.padEnd(17)} needs ${requires}`);
+  }
   out.blank();
   out.info(`Then: release-harness validate --draft ${name}`);
 

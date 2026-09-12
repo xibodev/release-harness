@@ -540,7 +540,7 @@ console.log('\nNegative-evidence and draft semantics\n');
 {
   const read = (rel) => fs.readFileSync(new URL(rel, import.meta.url), 'utf8');
 
-  const declarations = ['../src/contract.js', '../src/draft.js', '../src/cli/execute.js']
+  const declarations = ['../src/contract.js', '../src/draft.js', '../src/execute.js']
     .map((f) => ({ file: f, src: read(f) }))
     .filter(({ src }) => /EXECUTABLE_KINDS\s*=\s*\[/.test(src));
 
@@ -552,7 +552,7 @@ console.log('\nNegative-evidence and draft semantics\n');
   assert.match(declarations[0].file, /contract\.js$/, 'and it belongs to the contract model');
 
   // The CLI must import that list, never restate it.
-  const cli = read('../src/cli/execute.js');
+  const cli = read('../src/execute.js');
   assert.ok(
     !/\[\s*'http'\s*,\s*'cli'\s*\]/.test(cli),
     'the CLI must import the kind list rather than hardcoding one'
@@ -610,6 +610,62 @@ console.log('\nNegative-evidence and draft semantics\n');
   );
 
   pass('E-11', 'draft and record reject unknown properties, including underscore keys');
+}
+
+
+// ---------------------------------------------------------------------------
+// E-12  The CLI holds no semantics of its own.
+//
+// The boundary: CLI parses, loads, orchestrates, renders and picks an exit
+// code. Every rule a future API caller or authoring agent would need applied
+// identically lives in core. This is checked against the source rather than
+// asserted in prose, because the drift happens quietly -- a help text grows its
+// own copy of a rule, and a year later it contradicts the validator.
+// ---------------------------------------------------------------------------
+{
+  const cliDir = new URL('../src/cli/', import.meta.url);
+  const files = fs.readdirSync(cliDir).filter((f) => f.endsWith('.js'));
+
+  const strip = (src) => {
+    const lines = src.replace(new RegExp('/\\*[\\s\\S]*?\\*/', 'g'), '').split('\n');
+    return lines.filter((l) => !l.trim().startsWith('//')).join('\n');
+  };
+
+  for (const file of files) {
+    const code = strip(fs.readFileSync(new URL(file, cliDir), 'utf8'));
+
+    // Attribution: only core may decide who is responsible for a failure.
+    assert.ok(
+      !/attributeFailure\s*\(/.test(code),
+      `${file} must not compute attribution; that belongs to adjudicate.js`
+    );
+
+    // The executable-kind list must be imported, never restated.
+    assert.ok(
+      !/\[\s*'http'\s*,\s*'cli'\s*\]/.test(code),
+      `${file} must not restate the executable kinds`
+    );
+
+    // Reachability is established by the execution adapter, not re-derived.
+    assert.ok(
+      !/subject_reached\s*[=:]/.test(code),
+      `${file} must not determine whether the subject was reached`
+    );
+
+    // Verdict status is computed once, in adjudicate.js.
+    assert.ok(
+      !/status\s*=\s*['"](PASS|FAIL|UNPROVEN)['"]/.test(code),
+      `${file} must not compute a certification status`
+    );
+  }
+
+  // And the execution semantics now live in core, reachable by anyone.
+  assert.ok(
+    !fs.existsSync(new URL('execute.js', cliDir)),
+    'the execution adapter must not live under cli/'
+  );
+
+  pass('E-12', 'the CLI holds no attribution, kind, reachability or status semantics');
 }
 
 

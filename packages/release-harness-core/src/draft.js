@@ -37,14 +37,22 @@ export const DRAFT_SCHEMA_VERSION = '1.0.0';
  */
 export const EPISTEMIC_STATUS = {
   /** Directly read. The strongest positive claim. */
-  observed: { supports: true, draftOnly: false },
+  observed: {
+    supports: true,
+    draftOnly: false,
+    requires: 'evidence.source, e.g. "src/app.js:41"',
+  },
 
   /**
    * A bounded search completed and found nothing. Supports a claim ONLY because
    * the bounds are recorded: without method, roots and completion, "not found"
    * is a statement about the search, not about the world.
    */
-  observed_absent: { supports: true, draftOnly: false },
+  observed_absent: {
+    supports: true,
+    draftOnly: false,
+    requires: 'evidence.method, evidence.roots, and evidence.completed: true',
+  },
 
   /**
    * A test or contract asserts the thing must not exist. The assertion IS the
@@ -58,7 +66,11 @@ export const EPISTEMIC_STATUS = {
    * because someone decided it should be is not the same fact as a file that
    * happens to be missing today.
    */
-  asserted_absent: { supports: true, draftOnly: false },
+  asserted_absent: {
+    supports: true,
+    draftOnly: false,
+    requires: 'evidence.asserted_by, e.g. "tests/test_no_v1.js:11"',
+  },
 
   /**
    * An interpretation. Legitimate while drafting -- it is how a proposal gets
@@ -66,7 +78,11 @@ export const EPISTEMIC_STATUS = {
    * someone took responsibility for the claim, which requires converting the
    * inference into something checked, or asking the question outright.
    */
-  inferred: { supports: false, draftOnly: true },
+  inferred: {
+    supports: false,
+    draftOnly: true,
+    requires: 'evidence.source -- and it cannot support an accepted assertion',
+  },
 
   /**
    * Nothing is established: the search never ran, failed, was killed, timed
@@ -77,10 +93,29 @@ export const EPISTEMIC_STATUS = {
    * confident absence, which then justifies a decision nobody would have made
    * knowing the search never finished.
    */
-  not_established: { supports: false, draftOnly: false },
+  not_established: {
+    supports: false,
+    draftOnly: false,
+    requires: 'nothing -- and it supports nothing',
+  },
 };
 
 export const EPISTEMIC_STATUSES = Object.keys(EPISTEMIC_STATUS);
+
+/**
+ * What each status obliges an author to provide.
+ *
+ * Derived from the table above rather than restated anywhere else. The CLI used
+ * to print its own copy of these requirements, which is how a help text and a
+ * validator come to disagree about the same rule.
+ */
+export function describeStatuses() {
+  return Object.entries(EPISTEMIC_STATUS).map(([status, meta]) => ({
+    status,
+    requires: meta.requires,
+    supports: meta.supports,
+  }));
+}
 
 /** May an accepted assertion rest on a claim in this status? */
 export function supportsClaim(status) {
@@ -90,6 +125,19 @@ export function supportsClaim(status) {
 /** Is this status confined to drafts? */
 export function isDraftOnly(status) {
   return EPISTEMIC_STATUS[status]?.draftOnly === true;
+}
+
+/**
+ * Does this claim record a contradiction between sources, as structure?
+ *
+ * Structure rather than prose: a claim whose text merely uses the word
+ * "disagrees" while stating a plain fact is an observation, not an unresolved
+ * conflict. What marks a genuine one is naming the sides, so that is what is
+ * looked for.
+ */
+export function recordsContradiction(claim) {
+  const e = claim?.evidence ?? {};
+  return Array.isArray(e.contradiction) || Array.isArray(e.conflict);
 }
 
 /** The statuses that assert something is absent, and so need bounded evidence. */
@@ -441,14 +489,30 @@ export function checkAcceptability(draft, record) {
       }
 
       if (!supportsClaim(claim.status)) {
+        // Three different situations block acceptance here, and telling an
+        // author they are the same one is unhelpful in a specific way.
+        //
+        // An adoption agent found a contradiction between two sources, refused
+        // to pick a winner, and deliberately pinned its assertion to the
+        // unresolved claim so acceptance could not proceed until a human
+        // decided. That is the protocol working exactly as intended -- and the
+        // blocker told them their assertion "has no evidence behind it", which
+        // describes a deliberate, correct act as an oversight. An author who is
+        // told they made a mistake when they did the right thing learns to stop
+        // doing the right thing.
+        const contested = recordsContradiction(claim);
+
         blockers.push({
-          kind: 'unsupported_claim',
-          detail:
-            `Assertion "${assertion.id}" rests on claim "${claimId}", which is ` +
-            `"${claim.status}"` +
-            (isDraftOnly(claim.status)
-              ? ' -- an interpretation may propose an assertion but cannot support an accepted one'
-              : ' -- nothing was established, so this assertion has no evidence behind it'),
+          kind: contested ? 'contested_claim' : 'unsupported_claim',
+          detail: contested
+            ? `Assertion "${assertion.id}" is held on claim "${claimId}", which records an ` +
+              'unresolved contradiction between sources. This is a deliberate hold, not an ' +
+              'error: acceptance waits until someone decides which source is right.'
+            : `Assertion "${assertion.id}" rests on claim "${claimId}", which is ` +
+              `"${claim.status}"` +
+              (isDraftOnly(claim.status)
+                ? ' -- an interpretation may propose an assertion but cannot support an accepted one'
+                : ' -- nothing was established, so this assertion has no evidence behind it'),
         });
       }
     }

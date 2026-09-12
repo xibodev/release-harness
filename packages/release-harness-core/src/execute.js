@@ -1,6 +1,14 @@
 /**
  * Executing assertions against resolved bindings.
  *
+ * This is core, not CLI. Everything here is a rule a future API caller or
+ * authoring agent would need applied identically -- what counts as a
+ * structurally establishable binding fault, whether the subject was reached,
+ * how a spawn failure is classified. It lived under `cli/` while the command
+ * surface was being built, which is the kind of accident that turns into a
+ * second implementation the first time something other than the CLI needs to
+ * run an assertion.
+ *
  * The hard problem here is not running things. It is knowing whether the
  * subject ran at all, because a process exit code alone cannot tell you.
  * `node /missing.js` exits 1 without the subject ever executing, and reading
@@ -42,9 +50,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { probeHttp } from '../probes.js';
-import { CAUSE } from '../attribution.js';
-import { EXECUTABLE_KINDS } from '../contract.js';
+import { probeHttp } from './probes.js';
+import { CAUSE } from './attribution.js';
+import { EXECUTABLE_KINDS } from './contract.js';
 
 // ---------------------------------------------------------------------------
 // HTTP
@@ -403,7 +411,7 @@ async function executeProcess(assertion, location, timeoutMs, cwd) {
 /** The assertion kinds this version can execute. */
 // Re-exported from the contract model, which is where what a contract may
 // promise is decided. Two lists would eventually disagree.
-export { EXECUTABLE_KINDS as SUPPORTED_KINDS } from '../contract.js';
+export { EXECUTABLE_KINDS as SUPPORTED_KINDS } from './contract.js';
 
 /**
  * Execute one assertion.

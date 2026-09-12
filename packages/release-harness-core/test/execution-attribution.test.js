@@ -16,7 +16,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { executeAssertion } from '../src/cli/execute.js';
+import { executeAssertion } from '../src/execute.js';
 import { CAUSE } from '../src/attribution.js';
 
 const results = [];
@@ -272,7 +272,7 @@ const run = (location, expect) =>
 // ---------------------------------------------------------------------------
 {
   const source = fs.readFileSync(
-    new URL('../src/cli/execute.js', import.meta.url),
+    new URL('../src/execute.js', import.meta.url),
     'utf8'
   );
 
