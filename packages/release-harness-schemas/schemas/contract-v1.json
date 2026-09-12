@@ -4,7 +4,11 @@
   "title": "ReleaseHarnessAcceptedContract",
   "description": "The proposition release-harness adjudicates: a subject, what must hold of it, and the normative references whose change would alter that meaning. Deliberately excludes execution bindings, authoring metadata and acceptance metadata -- a proposition's identity must not move because a port changed or a different person accepted it.",
   "type": "object",
-  "required": ["schema_version", "subject", "assertions"],
+  "required": [
+    "schema_version",
+    "subject",
+    "assertions"
+  ],
   "additionalProperties": false,
   "properties": {
     "schema_version": {
@@ -15,7 +19,9 @@
     "subject": {
       "description": "What is being certified.",
       "type": "object",
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -36,18 +42,26 @@
       "description": "What must hold. A contract asserting nothing certifies nothing, so this must be non-empty.",
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/definitions/assertion" }
+      "items": {
+        "$ref": "#/definitions/assertion"
+      }
     },
     "requires": {
       "description": "Normative references: other subjects whose change would alter what these assertions mean. Each must be pinned by digest -- an unpinned reference is a convention, not a reference.",
       "type": "array",
-      "items": { "$ref": "#/definitions/normativeReference" }
+      "items": {
+        "$ref": "#/definitions/normativeReference"
+      }
     }
   },
   "definitions": {
     "assertion": {
       "type": "object",
-      "required": ["id", "kind", "target"],
+      "required": [
+        "id",
+        "kind",
+        "target"
+      ],
       "properties": {
         "id": {
           "description": "Identifier unique within this contract. Verdicts cite it, so it must be stable.",
@@ -55,9 +69,11 @@
           "minLength": 1
         },
         "kind": {
-          "description": "What class of check this is. The adjudicator dispatches on this value; an unknown kind is refused rather than skipped.",
-          "type": "string",
-          "minLength": 1
+          "description": "Which executor evaluates this assertion. Only kinds the harness can exercise may be accepted -- a promise nobody can check is refused while it is still a draft.",
+          "enum": [
+            "http",
+            "cli"
+          ]
         },
         "target": {
           "description": "The SYMBOLIC name of the thing exercised -- 'api', 'web', 'db'. What this resolves to at run time is an execution binding, supplied per-run and deliberately not part of the contract. This is what lets one contract be authored on a laptop and certified in CI.",
@@ -69,14 +85,108 @@
           "type": "string"
         },
         "expect": {
-          "description": "The expected outcome. Shape depends on `kind` and is validated by the probe that implements it.",
+          "description": "What must hold. Deliberately unconstrained HERE: the shape is determined by `kind` and enforced by the allOf rules below, which close it per kind. See assertion-kinds-v1.json.",
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "An assertion of kind \"http\" may only expect what the http adapter reads.",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "http"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "expect": {
+                "description": "Exercise an HTTP endpoint. WHERE it lives is an execution binding; this says only what must be true of the response.",
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "method": {
+                    "description": "HTTP method. Defaults to GET.",
+                    "type": "string",
+                    "enum": [
+                      "GET",
+                      "HEAD",
+                      "POST",
+                      "PUT",
+                      "PATCH",
+                      "DELETE",
+                      "OPTIONS"
+                    ]
+                  },
+                  "path": {
+                    "description": "Path appended to the bound location. Defaults to /.",
+                    "type": "string"
+                  },
+                  "status": {
+                    "description": "Expected status code. Defaults to 200.",
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 599
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "An assertion of kind \"cli\" may only expect what the cli adapter reads.",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "cli"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "expect": {
+                "description": "Exercise a command. WHAT is executed comes from the execution binding -- an assertion never carries a command, because a command is a local fact about where things are installed, not part of a promise.",
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "args": {
+                    "description": "Extra arguments appended to the bound command.",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "description": "Expected exit code. Defaults to 0.",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "stdout_contains": {
+                    "description": "Substring that must appear in stdout.",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "normativeReference": {
       "type": "object",
-      "required": ["ref", "digest"],
+      "required": [
+        "ref",
+        "digest"
+      ],
       "additionalProperties": false,
       "properties": {
         "ref": {

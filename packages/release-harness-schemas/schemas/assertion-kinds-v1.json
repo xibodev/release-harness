@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/assertion-kinds-v1.json",
+  "title": "ReleaseHarnessAssertionKinds",
+  "description": "What each assertion kind may promise, and exactly which fields the executor reads. This is the single definition shared by the draft schema, the contract schema and the execution adapter -- so a field the schema accepts is a field something consumes, and a field the executor honours is a field an author can discover. C1 exposed both halves of the gap: `expect: {}` reached 'ready to accept', and `expect.command` was accepted by the schema, taught by the project's own example, and read by nothing.",
+
+  "definitions": {
+    "http": {
+      "description": "Exercise an HTTP endpoint. WHERE it lives is an execution binding; this says only what must be true of the response.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "method": {
+          "description": "HTTP method. Defaults to GET.",
+          "type": "string",
+          "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        },
+        "path": {
+          "description": "Path appended to the bound location. Defaults to /.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Expected status code. Defaults to 200.",
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        }
+      }
+    },
+
+    "cli": {
+      "description": "Exercise a command. WHAT is executed comes from the execution binding -- an assertion never carries a command, because a command is a local fact about where things are installed, not part of a promise.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "args": {
+          "description": "Extra arguments appended to the bound command.",
+          "type": "string"
+        },
+        "exit_code": {
+          "description": "Expected exit code. Defaults to 0.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "stdout_contains": {
+          "description": "Substring that must appear in stdout.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+
+  "oneOfByKind": {
+    "description": "Non-standard annotation, read by the vocabulary-alignment test rather than by a validator: maps each executable kind to the definition above that describes its expect payload.",
+    "http": "#/definitions/http",
+    "cli": "#/definitions/cli"
+  }
+}

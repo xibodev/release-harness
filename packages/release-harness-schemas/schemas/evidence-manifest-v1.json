@@ -4,24 +4,66 @@
   "title": "ReleaseHarnessEvidenceManifest",
   "description": "Integrity manifest containing content hashes of all sealed evidence files",
   "type": "object",
-  "required": ["schema_version", "run_id", "sealed_at", "files"],
+  "required": [
+    "schema_version",
+    "run_id",
+    "sealed_at",
+    "files"
+  ],
   "properties": {
-    "schema_version": { "type": "string", "enum": ["1.0.0"] },
-    "run_id": { "type": "string" },
-    "sealed_at": { "type": "string", "format": "date-time" },
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1.0.0"
+      ]
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "sealed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
     "files": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["path", "sha256", "bytes", "category"],
+        "required": [
+          "path",
+          "sha256",
+          "bytes",
+          "category"
+        ],
         "properties": {
-          "path": { "type": "string" },
-          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-          "bytes": { "type": "integer", "minimum": 0 },
-          "mime_type": { "type": "string" },
-          "category": { "type": "string", "enum": ["log", "trace", "screenshot", "probe", "result", "other"] }
-        }
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "log",
+              "trace",
+              "screenshot",
+              "probe",
+              "result",
+              "other"
+            ]
+          }
+        },
+        "additionalProperties": false
       }
     }
-  }
+  },
+  "additionalProperties": false
 }

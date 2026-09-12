@@ -27,10 +27,11 @@
   "files": [
     "bin",
     "src",
-    "templates"
+    "generated"
   ],
   "scripts": {
-    "test": "node test/index.js"
+    "test": "node test/index.js",
+    "prepack": "node ../../scripts/sync-protocol.mjs"
   },
   "engines": {
     "node": ">=18"

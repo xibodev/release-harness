@@ -22,6 +22,8 @@ import fs from 'node:fs';
 import { paths, readJson, writeJson, isInstalled } from './layout.js';
 import { EXIT } from './exit-codes.js';
 import { acceptDraft, AcceptanceRefused } from '../acceptance.js';
+import { assessDraft, DRAFT_STATE } from '../assess.js';
+import { renderBlockers, describeState } from './blockers.js';
 
 export function cmdAccept(ctx) {
   const { cwd, out, args } = ctx;
@@ -61,6 +63,19 @@ export function cmdAccept(ctx) {
   }
   if (draft.error || record.error) {
     out.error(draft.error ?? record.error);
+    return EXIT.USAGE_OR_CONTRACT;
+  }
+
+  // The same assessment `validate` reported. Acceptance refuses on exactly the
+  // facts validate showed, so the two can never disagree about whether a draft
+  // was ready -- which is what D10 was.
+  const assessment = assessDraft(draft.value, record.value);
+  if (assessment.state !== DRAFT_STATE.ACCEPTABLE) {
+    out.error(describeState(name, assessment));
+    renderBlockers({ detail: (m) => out.error(`  ${m}`), blank: () => {} }, assessment.blockers, {
+      fullTextAt: p.draft(name),
+    });
+    out.data('assessment', { state: assessment.state, blockers: assessment.blockers });
     return EXIT.USAGE_OR_CONTRACT;
   }
 

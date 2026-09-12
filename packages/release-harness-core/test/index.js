@@ -13,6 +13,7 @@ await import('./vertical-slice.test.js');
 await import('./fixture-a-regression.test.js');
 await import('./adjudicate.test.js');
 await import('./execution-attribution.test.js');
+await import('./structural-invariants.test.js');
 await import('./cli.test.js');
 await import('./sealer.test.js');
 await import('./validator.test.js');

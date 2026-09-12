@@ -22,7 +22,8 @@ import path from 'node:path';
 import { paths, readJson, listDrafts, listAccepted, listBindings, isInstalled } from './layout.js';
 import { EXIT } from './exit-codes.js';
 import { validateDraft, validateAuthoringRecord, validateAcceptedContract } from '../validator.js';
-import { checkAcceptability } from '../draft.js';
+import { assessDraft, DRAFT_STATE } from '../assess.js';
+import { summariseBlocker } from './blockers.js';
 import { describeReadiness } from '../bindings.js';
 
 function safe(fn) {
@@ -74,12 +75,15 @@ export function cmdDoctor(ctx) {
       continue;
     }
 
-    const { acceptable, blockers } = checkAcceptability(draft.value, record.value);
+    const assessment = assessDraft(draft.value, record.value);
     draftFacts.push({
       name,
-      wellFormed: true,
-      acceptable,
-      blockers: blockers.map((b) => `[${b.kind}] ${b.detail}`),
+      wellFormed: assessment.shape_valid,
+      state: assessment.state,
+      acceptable: assessment.acceptable,
+      // Summarised through the shared renderer. D17 was this command printing
+      // 916-character lines while `validate` summarised at 180.
+      blockers: assessment.blockers.map((b) => `[${b.kind}] ${summariseBlocker(b.detail)}`),
     });
   }
 

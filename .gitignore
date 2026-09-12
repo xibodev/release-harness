@@ -24,3 +24,6 @@ pnpm-debug.log*
 # development. The lifecycle is proven by the CLI test suite; these are one
 # operator run and would go stale as soon as the CLI changes.
 .release-harness/
+
+# Generated, never authored. See scripts/sync-protocol.mjs.
+packages/release-harness-core/generated/

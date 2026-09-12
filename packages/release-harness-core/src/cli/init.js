@@ -140,16 +140,21 @@ export function cmdInit(ctx) {
   // what this does NOT establish: whether a host has loaded it. A file on disk
   // is not proof a capability is active, and `doctor` reports the two facts
   // separately for exactly that reason.
-  const protocolSource = path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    'templates',
-    'protocol',
-    'ADOPTION.md'
-  );
+  // One canonical protocol, two places it can live depending on how this code
+  // was reached: `generated/` in a packed install, and the repo's own
+  // `protocol/` when running from a checkout. Both are copies OF the same
+  // authored file -- `generated/` is produced by scripts/sync-protocol.mjs and
+  // is git-ignored, so there is exactly one file a developer can edit.
+  //
+  // D9 was two AUTHORED copies. A fix landed in one of them and every adopter
+  // received the other for as long as nobody compared them.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const protocolSource = [
+    path.join(here, '..', '..', 'generated', 'protocol', 'ADOPTION.md'),
+    path.join(here, '..', '..', '..', '..', 'protocol', 'ADOPTION.md'),
+  ].find((candidate) => fs.existsSync(candidate));
   let protocolInstalled = false;
-  if (fs.existsSync(protocolSource)) {
+  if (protocolSource) {
     fs.mkdirSync(path.join(p.root, 'protocol'), { recursive: true });
     fs.copyFileSync(protocolSource, path.join(p.root, 'protocol', 'ADOPTION.md'));
     protocolInstalled = true;

@@ -19,19 +19,8 @@ import {
   validateAcceptedContract,
   ValidationError,
 } from '../validator.js';
-import { checkAcceptability } from '../draft.js';
-
-/**
- * First line, clipped.
- *
- * A blocker's detail may be a whole paragraph -- a semantic question with its
- * evidence and its reasoning. That belongs in the draft, where it can be read
- * properly, not repeated in a summary whose job is to say how much is left.
- */
-function summarise(detail, max = 150) {
-  const firstLine = String(detail).split(String.fromCharCode(10))[0].trim();
-  return firstLine.length <= max ? firstLine : `${firstLine.slice(0, max - 1)}…`;
-}
+import { assessDraft, DRAFT_STATE } from '../assess.js';
+import { renderBlockers, describeState } from './blockers.js';
 
 /** Run one validator, converting a throw into a reportable result. */
 function check(label, fn) {
@@ -181,36 +170,41 @@ export function cmdValidate(ctx) {
   // distinction and the only channel automation reads did not, which is the
   // "valid means ready" conflation this release exists to eliminate, surviving
   // in the one place it does the most damage.
-  let anyBlocked = false;
+  // Readiness comes from the one assessment `accept` and `doctor` also use.
+  // D10 was this command reporting "ready to accept" for a draft acceptance
+  // then refused -- two implementations of one question, and the one that said
+  // yes is the one authors are told to rely on.
+  let worst = EXIT.OK;
 
   for (const name of draftNames) {
     const draft = readJson(p.draft(name));
     const record = readJson(p.record(name));
     if (!draft.value || !record.value) continue;
 
-    const { acceptable, blockers } = checkAcceptability(draft.value, record.value);
-    if (acceptable) {
-      out.info(`Draft "${name}" is also ready to accept.`);
-      continue;
-    }
+    const assessment = assessDraft(draft.value, record.value);
+    out.data(`assessment.${name}`, {
+      state: assessment.state,
+      acceptable: assessment.acceptable,
+      blockers: assessment.blockers,
+    });
 
-    anyBlocked = true;
     out.blank();
-    out.info(`Draft "${name}" is well-formed but not ready to accept -- ${blockers.length} blocker${blockers.length === 1 ? '' : 's'}:`);
+    out.info(describeState(name, assessment));
 
-    // Summarised, not inlined. A blocker's detail can be an entire semantic
-    // question, and printing five of them in full buried the summary under
-    // 3,000 characters -- which penalised writing thorough questions, the exact
-    // behaviour the authoring protocol asks for.
-    for (const b of blockers) out.detail(`[${b.kind}] ${summarise(b.detail)}`);
-    out.blank();
-    out.detail(`Full text: ${p.draft(name)}`);
+    if (assessment.state === DRAFT_STATE.ACCEPTABLE) continue;
+
+    renderBlockers(out, assessment.blockers, { fullTextAt: p.draft(name) });
+
+    // INVALID is a usage/contract problem: something written is wrong.
+    // BLOCKED is honest unfinished work, which is UNPROVEN rather than an
+    // error -- and must still be non-zero so `validate && deploy` stops.
+    worst =
+      assessment.state === DRAFT_STATE.INVALID
+        ? EXIT.USAGE_OR_CONTRACT
+        : worst === EXIT.USAGE_OR_CONTRACT
+          ? worst
+          : EXIT.UNPROVEN;
   }
 
-  out.data('acceptance_blocked', anyBlocked);
-
-  // UNPROVEN, not a usage error: the artifacts are fine and the work is simply
-  // unfinished. That is a different fact from a malformed document, and the
-  // exit codes keep them apart.
-  return anyBlocked ? EXIT.UNPROVEN : EXIT.OK;
+  return worst;
 }

@@ -52,7 +52,69 @@
           ]
         },
         "evidence": {
-          "type": "object"
+          "description": "How the claim was arrived at. Which fields are REQUIRED depends on the claim's status; see the rules below. The set is closed so a misspelled field is reported rather than silently dropped.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "description": "What was read, ideally file:line.",
+              "type": "string",
+              "minLength": 1
+            },
+            "method": {
+              "description": "How a search was performed.",
+              "type": "string",
+              "minLength": 1
+            },
+            "roots": {
+              "description": "Where a search looked.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "exclusions": {
+              "description": "What a search deliberately skipped.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "completed": {
+              "description": "Whether the search ran to completion. Must be true to establish absence.",
+              "type": "boolean"
+            },
+            "asserted_by": {
+              "description": "The test or contract that requires the thing not to exist.",
+              "type": "string",
+              "minLength": 1
+            },
+            "contradiction": {
+              "description": "Sources that genuinely disagree, both recorded, neither chosen.",
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "source",
+                  "says"
+                ],
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "says": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "note": {
+              "description": "Free prose for a reader. Never a substitute for a citation.",
+              "type": "string"
+            }
+          }
         },
         "superseded": {
           "description": "A claim this one corrected. Retained so a reader can see that an earlier search was wrong and why.",
@@ -62,12 +124,14 @@
               "type": "string"
             },
             "evidence": {
-              "type": "object"
+              "description": "The evidence the corrected claim rested on, retained so a reader can see why the earlier search was wrong.",
+              "$ref": "#/definitions/claim/properties/evidence"
             },
             "reason": {
               "type": "string"
             }
-          }
+          },
+          "additionalProperties": false
         }
       },
       "allOf": [
@@ -94,13 +158,7 @@
               "evidence": {
                 "required": [
                   "source"
-                ],
-                "properties": {
-                  "source": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                }
+                ]
               }
             }
           }
@@ -129,26 +187,12 @@
                   "completed"
                 ],
                 "properties": {
-                  "method": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "roots": {
-                    "type": "array",
-                    "minItems": 1,
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "exclusions": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "completed": {
                     "description": "Must be true. A killed, timed-out or truncated search establishes nothing and belongs in not_established.",
                     "const": true
+                  },
+                  "roots": {
+                    "minItems": 1
                   }
                 }
               }
@@ -175,18 +219,13 @@
               "evidence": {
                 "required": [
                   "asserted_by"
-                ],
-                "properties": {
-                  "asserted_by": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                }
+                ]
               }
             }
           }
         }
-      ]
+      ],
+      "additionalProperties": false
     }
   }
 }

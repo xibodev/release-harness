@@ -37,7 +37,8 @@
             "description": {
               "type": "string"
             }
-          }
+          },
+          "additionalProperties": false
         },
         "assertions": {
           "type": "array",
@@ -60,6 +61,7 @@
                 "type": "string"
               },
               "expect": {
+                "description": "What must hold. Deliberately unconstrained HERE: the shape is determined by `kind` and enforced by the allOf rules below, which close it per kind. See assertion-kinds-v1.json.",
                 "type": "object"
               },
               "supported_by": {
@@ -69,7 +71,98 @@
                   "type": "string"
                 }
               }
-            }
+            },
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "description": "An assertion of kind \"http\" may only expect what the http adapter reads.",
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "http"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "expect": {
+                      "description": "Exercise an HTTP endpoint. WHERE it lives is an execution binding; this says only what must be true of the response.",
+                      "type": "object",
+                      "additionalProperties": false,
+                      "minProperties": 1,
+                      "properties": {
+                        "method": {
+                          "description": "HTTP method. Defaults to GET.",
+                          "type": "string",
+                          "enum": [
+                            "GET",
+                            "HEAD",
+                            "POST",
+                            "PUT",
+                            "PATCH",
+                            "DELETE",
+                            "OPTIONS"
+                          ]
+                        },
+                        "path": {
+                          "description": "Path appended to the bound location. Defaults to /.",
+                          "type": "string"
+                        },
+                        "status": {
+                          "description": "Expected status code. Defaults to 200.",
+                          "type": "integer",
+                          "minimum": 100,
+                          "maximum": 599
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "description": "An assertion of kind \"cli\" may only expect what the cli adapter reads.",
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "cli"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "expect": {
+                      "description": "Exercise a command. WHAT is executed comes from the execution binding -- an assertion never carries a command, because a command is a local fact about where things are installed, not part of a promise.",
+                      "type": "object",
+                      "additionalProperties": false,
+                      "minProperties": 1,
+                      "properties": {
+                        "args": {
+                          "description": "Extra arguments appended to the bound command.",
+                          "type": "string"
+                        },
+                        "exit_code": {
+                          "description": "Expected exit code. Defaults to 0.",
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 255
+                        },
+                        "stdout_contains": {
+                          "description": "Substring that must appear in stdout.",
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
           }
         },
         "requires": {
@@ -87,10 +180,12 @@
               "description": {
                 "type": "string"
               }
-            }
+            },
+            "additionalProperties": false
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "questions": {
       "description": "What the author could not settle. A blocking question must be resolved before acceptance; a non-blocking one is recorded and may stay open, because an author who is penalised for recording uncertainty will stop recording it.",
@@ -115,11 +210,24 @@
             "type": "boolean"
           },
           "resolution": {
-            "type": "string"
+            "description": "The operator's answer. Requires `resolved_by`: a resolution nobody is named for is indistinguishable from an agent answering its own question, which the protocol forbids and the artifact could not previously evidence.",
+            "type": "string",
+            "minLength": 1
           },
           "resolved_by": {
+            "description": "Who decided. Attribution, not authorization -- an agent may record an operator's answer, but it must say whose answer it is.",
+            "type": "string",
+            "minLength": 1
+          },
+          "resolved_at": {
+            "description": "When, ISO 8601. Optional, and never part of proposition identity.",
             "type": "string"
           }
+        },
+        "dependencies": {
+          "resolution": [
+            "resolved_by"
+          ]
         }
       }
     }

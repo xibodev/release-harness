@@ -145,6 +145,21 @@ mean*. A database you happen to connect to is usually an execution binding. A
 schema you must stay compatible with is usually normative. The operator decides;
 you surface the candidate.
 
+When the operator confirms one, it goes in `proposition.requires` — an array of
+`{ ref, digest }`, where the digest is the sha256 of the accepted contract you
+are pinning to:
+
+```json
+"requires": [
+  { "ref": "usage-schema", "digest": "<64 hex chars>" }
+]
+```
+
+An unpinned reference is a convention, not a reference, so the digest is
+required. If the thing you would pin has no accepted contract yet, say so and
+ask — do not invent a digest, and do not record the reference under any other
+field name.
+
 ## 5. Record what you found, and how you know
 
 Everything you learn goes into the authoring record with an honest status. There
@@ -196,9 +211,24 @@ answers do not matter.
 Keep the count low. A simple project should feel nearly automatic — one or two
 questions. If you have ten, most of them are probably derivable or premature.
 
-Write every question into the draft, with `blocking: true` when acceptance
-should not proceed without an answer. A question you asked in conversation and
-did not record is a question that will be lost.
+Write every question into the draft's `questions` array, with `blocking: true`
+when acceptance should not proceed without an answer. A question you asked in
+conversation and did not record is a question that will be lost.
+
+When the operator answers one, record both fields:
+
+```json
+{
+  "id": "Q1",
+  "question": "Do these two packages release independently?",
+  "blocking": true,
+  "resolution": "No — they ship together from one tag.",
+  "resolved_by": "a.operator"
+}
+```
+
+`resolved_by` is required. A resolution nobody is named for cannot be told apart
+from an agent answering its own question, and that is a thing you must never do.
 
 ## 7. Propose assertions that would actually catch something
 
@@ -229,16 +259,21 @@ to make sure they decide it knowingly rather than by omission.
 
 ## 8. Surface contradictions instead of resolving them
 
-You will find sources that disagree. A README describing an endpoint the router
-does not have. A workflow that looks authoritative but is never triggered. Two
-deployment definitions that name different targets.
+You will find sources that appear to disagree. A README describing an endpoint
+the router does not have. A workflow that looks authoritative but is never
+triggered. Two files that name different targets.
 
-**First, check whether they actually disagree.** Read what each source says
-about *its own* status. A file that disclaims its own authority and points at
-another one is not in conflict with it — it is deferring to it, and recording a
-contradiction there would be inventing a conflict, which is the same failure as
-inventing a fact. This is easy to get wrong precisely because a disagreement is
-what you are looking for.
+**First, establish whether they actually conflict.** Two sources disagree only
+when their claims are incompatible. Different files, different mechanisms, or
+different deployment targets are not by themselves a contradiction — a project
+may legitimately have a local mirror and a real deployment, or a build target
+and a serving target.
+
+Read what each source says about *its own* status. A source may explicitly
+disclaim its authority or name its successor; one that defers to another is not
+in conflict with it. Recording a contradiction there would be inventing a
+conflict, which is the same failure as inventing a fact — and it is easy to get
+wrong precisely because a disagreement is what you are looking for.
 
 When sources genuinely do conflict, **do not pick a winner from a rule.** "Code
 beats docs" is wrong as often as it is right: a test asserting deliberate

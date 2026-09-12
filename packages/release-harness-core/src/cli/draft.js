@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import { paths, writeJson, readJson, listDrafts, isInstalled } from './layout.js';
 import { EXIT } from './exit-codes.js';
 import { checkAcceptability, describeStatuses } from '../draft.js';
+import { renderBlockers } from './blockers.js';
 
 /**
  * A skeleton draft.
@@ -137,6 +138,12 @@ function draftNew(ctx) {
     out.detail(`${status.padEnd(17)} needs ${requires}`);
   }
   out.blank();
+  out.info('A blocking question is resolved by editing it in the draft:');
+  out.detail('{ "id": "Q1", "question": "...", "blocking": true,');
+  out.detail('  "resolution": "the answer", "resolved_by": "your name" }');
+  out.detail('Both fields are required -- a resolution nobody is named for cannot be');
+  out.detail('told apart from an agent answering its own question.');
+  out.blank();
   out.info(`Then: release-harness validate --draft ${name}`);
 
   out.data('draft', name);
@@ -198,6 +205,12 @@ function draftStatus(ctx) {
 
   out.info(`Not ready to accept -- ${blockers.length} thing${blockers.length === 1 ? '' : 's'} to settle:`);
   out.blank();
-  for (const b of blockers) out.info(`  [${b.kind}] ${b.detail}`);
+  renderBlockers(out, blockers, { fullTextAt: paths(cwd).draft(name) });
+
+  if (blockers.some((b) => b.kind === 'unresolved_question')) {
+    out.blank();
+    out.info('To resolve a question, add both fields to it in the draft:');
+    out.detail('"resolution": "the answer", "resolved_by": "your name"');
+  }
   return EXIT.UNPROVEN;
 }
