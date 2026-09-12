@@ -14,6 +14,19 @@ import { Schemas } from '../../release-harness-schemas/index.js';
 import { auditClosure } from '../../../scripts/schema-closure-audit.mjs';
 import { EXECUTABLE_KINDS, describeAssertionKinds } from '../src/contract.js';
 import { assessDraft } from '../src/assess.js';
+import { sameCanonicalText } from '../src/canonical-text.js';
+import { execFileSync } from 'node:child_process';
+
+/**
+ * Files under source control, POSIX-separated.
+ *
+ * Source control is the authority question: a file git tracks is one a person
+ * edits and whose edit ships. Anything else is a copy.
+ */
+function trackedFiles() {
+  const out = execFileSync('git', ['ls-files'], { cwd: REPO, encoding: 'utf8' });
+  return out.split(/\r?\n/).filter(Boolean);
+}
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -34,25 +47,43 @@ console.log('\nStructural invariants (C2)\n');
 // left two authorities; the fix is that only one is authored.
 // ---------------------------------------------------------------------------
 {
-  const authored = [];
-  (function walk(dir) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name === '.git') continue;
-      // `generated/` is produced by scripts/sync-protocol.mjs and git-ignored.
-      if (entry.name === 'generated') continue;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name === 'ADOPTION.md') authored.push(path.relative(REPO, full));
-    }
-  })(REPO);
+  // D35: this walked for any ADOPTION.md outside a three-name skip list and
+  // called every hit "authored". That made the product fail its own suite the
+  // moment it was adopted into its own repository, because `init` installs a
+  // copy at .release-harness/protocol/ADOPTION.md.
+  //
+  // The invariant was never about filenames. It is about AUTHORITY: exactly one
+  // copy may be edited and have the edit mean something. A generated copy and
+  // an installed copy are consequences of the authored one, and a consequence
+  // is not a second authority.
+  //
+  // So authority is decided by source control, which is the mechanism that
+  // actually makes a file editable-and-meaningful, rather than by a hand-kept
+  // list of directory names that must be remembered every time a new kind of
+  // copy appears.
+  const tracked = trackedFiles();
+  const authored = tracked.filter((f) => path.basename(f) === 'ADOPTION.md');
 
   assert.deepStrictEqual(
     authored,
-    ['protocol' + path.sep + 'ADOPTION.md'],
-    `exactly one authored protocol must exist; found: ${authored.join(', ')}`
+    ['protocol/ADOPTION.md'],
+    `exactly one authored protocol may be source-controlled; found: ${authored.join(', ')}`
   );
 
-  pass('S-1', 'exactly one adoption protocol is authored in the repository');
+  // And the untracked copies that DO exist must be consequences, not rivals:
+  // identical to the authority under canonical text comparison. A copy that has
+  // drifted is a second authority no matter where it sits.
+  const canonical = fs.readFileSync(path.join(REPO, 'protocol', 'ADOPTION.md'));
+  for (const rel of ['.release-harness/protocol/ADOPTION.md']) {
+    const full = path.join(REPO, rel);
+    if (!fs.existsSync(full)) continue;
+    assert.ok(
+      sameCanonicalText(fs.readFileSync(full), canonical),
+      `${rel} exists but has drifted from the authored protocol`
+    );
+  }
+
+  pass('S-1', 'exactly one adoption protocol carries authority in the repository');
 }
 
 // ---------------------------------------------------------------------------
@@ -467,5 +498,88 @@ console.log('\nStructural invariants (C2)\n');
   pass('S-11', 'one read-only normative-reference resolver, shared by run and doctor');
 }
 
+
+
+// ---------------------------------------------------------------------------
+// S-12  The protocol's examples are unmistakably fictional.
+//
+// D27: the `requires` example used "usage-schema", which was the exact name of
+// a dependency in the fixture an agent was adopting. It noticed and refused --
+// "treating it as corroboration would have been circular" -- but a less careful
+// reader pins a digest because the documentation appeared to confirm a finding.
+//
+// That is the D8 priming class: an example concrete enough to be mistaken for
+// evidence. This does not ban examples; it bans example entity names that could
+// plausibly appear in a real dependency tree.
+// ---------------------------------------------------------------------------
+{
+  const protocolText = fs.readFileSync(path.join(REPO, 'protocol', 'ADOPTION.md'), 'utf8');
+
+  // Names that have appeared as real entities in fixtures or real repositories.
+  const realLooking = ['usage-schema', 'usage-api', 'usage-client', 'platform-ops', 'equilibria'];
+  const found = realLooking.filter((n) => protocolText.includes(n));
+
+  assert.deepStrictEqual(
+    found,
+    [],
+    `the protocol must not name entities that exist in real dependency trees; found: ${found.join(', ')}`
+  );
+
+  pass('S-12', 'the adoption protocol names no fixture-like entities');
+}
+
+
+// ---------------------------------------------------------------------------
+// S-13  The core model is exactly four things, and stays that way.
+//
+// THE ARCHITECTURAL CONCLUSION, recorded where it can be enforced rather than
+// in prose that nobody re-reads.
+//
+//     subject + assertions + requires + execution bindings
+//
+// That model represented, without extension: a 703-file product across three
+// repositories; evidence-triggered outward inspection; cross-repo deployment
+// relationships; cross-repo normative candidates; contradictory documentation
+// and configuration where several sources disclaimed their own authority; an
+// incomplete normative identity that could not be pinned; and both executable
+// and HTTP propositions.
+//
+// Earlier designs carried a topology type, repository roles, an origins file
+// and a product slug. All of it was deleted, and the real estate needed none of
+// it back. Discovering that a repository is a "core API" is an authoring
+// conclusion recorded as a claim -- not a field the schema should name.
+//
+// So changing this model requires a concrete proposition that cannot be
+// represented. Not inconvenience, not repo complexity, not product size. A real
+// counterexample, plus a demonstration that no assertion primitive would solve
+// it -- because D39 and D40 looked like ontology gaps and were both closed by
+// adding one field to an existing kind.
+// ---------------------------------------------------------------------------
+{
+  const contract = Schemas.ContractV1;
+  const top = Object.keys(contract.properties).sort();
+
+  assert.deepStrictEqual(
+    top,
+    ['assertions', 'requires', 'schema_version', 'subject'],
+    'the contract carries exactly the model -- subject, assertions, requires, and its version'
+  );
+
+  // The vocabulary that was deleted must not return by any spelling.
+  const forbidden = [
+    'topology', 'topology_type', 'repositories', 'repository_role', 'role',
+    'origins', 'product_slug', 'component', 'component_type', 'coordinator',
+    'release_unit', 'registry', 'scenario',
+  ];
+  const serialized = JSON.stringify(contract);
+  for (const word of forbidden) {
+    assert.ok(
+      !new RegExp(`"${word}"`).test(serialized),
+      `"${word}" describes a topology ontology the real estate did not need`
+    );
+  }
+
+  pass('S-13', 'the core model is subject + assertions + requires + bindings, and nothing more');
+}
 
 console.log(`\n  ${results.length} structural invariants passed\n`);

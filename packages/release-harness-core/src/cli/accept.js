@@ -71,10 +71,17 @@ export function cmdAccept(ctx) {
   // was ready -- which is what D10 was.
   const assessment = assessDraft(draft.value, record.value);
   if (assessment.state !== DRAFT_STATE.ACCEPTABLE) {
+    // D38: this began mid-sentence with a bare blocker list, which reads as a
+    // crash rather than a decision. Refusing to accept is the single most
+    // consequential thing this command does, and it has to look deliberate.
+    out.error('Acceptance refused');
+    out.error('');
     out.error(describeState(name, assessment));
-    renderBlockers({ detail: (m) => out.error(`  ${m}`), blank: () => {} }, assessment.blockers, {
-      fullTextAt: p.draft(name),
-    });
+    renderBlockers(
+      { detail: (m) => out.error(`  ${m}`), blank: () => out.error('') },
+      assessment.blockers,
+      { fullTextAt: p.draft(name) }
+    );
     out.data('assessment', { state: assessment.state, blockers: assessment.blockers });
     return EXIT.USAGE_OR_CONTRACT;
   }

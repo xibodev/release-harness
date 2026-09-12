@@ -16,12 +16,54 @@ import { assessDraft, DRAFT_STATE } from '../assess.js';
 import { renderBlockers, describeState } from './blockers.js';
 
 /**
+ * The assertion vocabulary, with types.
+ *
+ * D26/D36/D41: this was printed once by `draft new` as a bare field list and
+ * was unavailable afterwards. An author who came back the next day, or who
+ * scrolled past it, had no way to recover it -- one run resorted to reading
+ * the package's schema files, which by the protocol's own standard means the
+ * protocol failed. And without types, `args` reads as plural: two independent
+ * runs wrote `[]` and were rejected.
+ *
+ * Everything here is derived from the schema, so there is no second copy to
+ * drift.
+ */
+export function renderVocabulary(out) {
+  for (const k of describeAssertionKinds()) {
+    out.detail(`${k.kind}`);
+    out.detail(`  target: string   (which bound target to exercise)`);
+    out.detail(`  expect:          (at least ${k.minProperties} of:)`);
+    const width = Math.max(...k.expect.map((e) => e.field.length));
+    for (const e of k.expect) {
+      out.detail(`    ${e.field.padEnd(width)}  ${e.type}`);
+    }
+  }
+}
+
+/**
  * A skeleton draft.
  *
  * Note what is NOT here: no subject id derived from the directory name, no
  * assertion, no target, no port. The subject id is the one field a tool is most
  * tempted to guess -- the folder is right there -- and guessing it is how a
  * proposition acquires an identity nobody chose.
+ *
+ * D30/D33: this used to ship a placeholder assertion A1 and a placeholder claim
+ * C1, both empty. They were not neutral. An author with nothing yet assertable
+ * had to carry a fake assertion that tripped three separate [incomplete]
+ * blockers -- on a kind, a target and a subject it never chose -- so the most
+ * honest possible draft produced the noisiest output. The empty claim then
+ * counted as a claim that "states nothing yet".
+ *
+ * Scaffolding may be incomplete. It may not fabricate author intent. That is
+ * the same rule that removed generated browser and port assertions from the
+ * original product, applied to the thing the tool writes about itself.
+ *
+ * An empty `assertions` array is a legal DRAFT (the draft schema sets no
+ * minItems) and an illegal CONTRACT (contract-v1 sets minItems: 1). So nothing
+ * is weakened: the draft may be honestly empty, and acceptance still refuses a
+ * proposition that asserts nothing -- one blocker saying exactly that, instead
+ * of three about fields nobody filled in.
  */
 function skeletonDraft() {
   return {
@@ -31,16 +73,7 @@ function skeletonDraft() {
         id: '',
         name: '',
       },
-      assertions: [
-        {
-          id: 'A1',
-          kind: '',
-          target: '',
-          description: '',
-          expect: {},
-          supported_by: [],
-        },
-      ],
+      assertions: [],
     },
     questions: [
       {
@@ -72,13 +105,7 @@ function skeletonRecord() {
   return {
     schema_version: '1.0.0',
     authored_by: '',
-    claims: [
-      {
-        id: 'C1',
-        claim: '',
-        status: 'not_established',
-      },
-    ],
+    claims: [],
   };
 }
 
@@ -94,8 +121,17 @@ export function cmdDraft(ctx) {
   if (sub === 'new') return draftNew(ctx);
   if (sub === 'list' || sub === undefined) return draftList(ctx);
   if (sub === 'status') return draftStatus(ctx);
+  // D36: reachable at any time, not only at the moment a draft is scaffolded.
+  if (sub === 'kinds') {
+    out.heading('Assertion vocabulary');
+    renderVocabulary(out);
+    out.detail('');
+    out.detail('WHERE to reach the thing -- a URL, a command -- is an execution');
+    out.detail('binding, not part of the assertion. See `release-harness bind`.');
+    return EXIT.OK;
+  }
 
-  out.error(`Unknown draft subcommand "${sub}". Expected: new, list, status.`);
+  out.error(`Unknown draft subcommand "${sub}". Expected: new, list, status, kinds.`);
   return EXIT.USAGE_OR_CONTRACT;
 }
 
@@ -144,10 +180,7 @@ function draftNew(ctx) {
   // D19: an agent had to learn these by submitting invalid values, because
   // strict validation arrived without visible vocabulary.
   out.info('An assertion names a kind and what must hold of it:');
-  for (const k of describeAssertionKinds()) {
-    out.detail(`${k.kind}`);
-    out.detail(`  expect: ${k.expect.map((e) => e.field).join(', ')}`);
-  }
+  renderVocabulary(out);
   out.detail('WHERE to reach the thing -- a URL, a command -- is an execution');
   out.detail('binding, not part of the assertion. See `release-harness bind`.');
   out.blank();

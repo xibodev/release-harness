@@ -359,12 +359,46 @@ export function contractSemanticFindings(contract) {
  */
 export function describeAssertionKinds() {
   const defs = AssertionKinds.definitions ?? {};
-  return EXECUTABLE_KINDS.filter((kind) => defs[kind]).map((kind) => ({
-    kind,
-    description: defs[kind].description ?? '',
-    expect: Object.entries(defs[kind].properties ?? {}).map(([field, spec]) => ({
-      field,
-      description: spec.description ?? '',
-    })),
-  }));
+  return EXECUTABLE_KINDS.filter((kind) => defs[kind]).map((kind) => {
+    const def = defs[kind];
+    const required = new Set(def.required ?? []);
+    return {
+      kind,
+      description: def.description ?? '',
+      // At least one expectation is always needed, or the assertion promises
+      // nothing -- that is minProperties on the kind, not a per-field rule.
+      minProperties: def.minProperties ?? 0,
+      expect: Object.entries(def.properties ?? {}).map(([field, spec]) => ({
+        field,
+        // D26/D41: the type was the missing half. An author shown only
+        // "args, exit_code, stdout_contains" reads `args` as plural, writes an
+        // array, and is rejected. Both a synthetic run and the real transfer
+        // run made exactly that guess -- the real one called it out as the one
+        // thing it had to guess at and got wrong.
+        type: describeType(spec),
+        required: required.has(field),
+        description: spec.description ?? '',
+      })),
+    };
+  });
+}
+
+/**
+ * A field's type, in the words an author would write it in JSON.
+ *
+ * Derived from the schema so it cannot drift: there is no second place where a
+ * type is stated, which is the rule that made the vocabulary trustworthy in the
+ * first place.
+ */
+function describeType(spec) {
+  if (Array.isArray(spec.enum)) return spec.enum.map((v) => JSON.stringify(v)).join(' | ');
+  const t = spec.type;
+  if (t === 'integer' || t === 'number') {
+    const lo = spec.minimum;
+    const hi = spec.maximum;
+    if (typeof lo === 'number' && typeof hi === 'number') return `${t} (${lo}-${hi})`;
+    return String(t);
+  }
+  if (t === 'string' && spec.minLength === 1) return 'string (non-empty)';
+  return typeof t === 'string' ? t : 'value';
 }

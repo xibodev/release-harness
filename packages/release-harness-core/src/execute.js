@@ -109,19 +109,41 @@ async function executeHttp(assertion, location, timeoutMs) {
     };
   }
 
-  const matched = result.status === expectedStatus;
+  const statusMatched = result.status === expectedStatus;
+
+  // D39. A body expectation is checked only when the author wrote one, so an
+  // assertion that promises nothing about the body is unchanged by this.
+  const wantsBody = typeof expect.body_contains === 'string' ? expect.body_contains : null;
+  const body = typeof result.body === 'string' ? result.body : '';
+  const bodyMatched = wantsBody === null || body.includes(wantsBody);
+
+  const matched = statusMatched && bodyMatched;
+
+  const detail = {
+    location,
+    request_path: requestPath,
+    status: result.status,
+    expected_status: expectedStatus,
+    elapsed_ms: result.elapsedMs,
+    subject_reached: true,
+  };
+  if (wantsBody !== null) {
+    detail.expected_body_contains = wantsBody;
+    // Evidence of what actually answered, bounded like every other capture.
+    detail.body = body.slice(0, 4000);
+  }
+
+  const observed = !statusMatched
+    ? `HTTP ${result.status} from ${requestPath}, expected ${expectedStatus}`
+    : bodyMatched
+      ? `HTTP ${result.status} from ${requestPath}`
+      : `HTTP ${result.status} from ${requestPath}, but the body did not contain ${JSON.stringify(wantsBody)}`;
+
   return {
     passed: matched,
     cause: matched ? 'NONE' : CAUSE.PRODUCT,
-    observed: `HTTP ${result.status} from ${requestPath}, expected ${expectedStatus}`,
-    detail: {
-      location,
-      request_path: requestPath,
-      status: result.status,
-      expected_status: expectedStatus,
-      elapsed_ms: result.elapsedMs,
-      subject_reached: true,
-    },
+    observed,
+    detail,
   };
 }
 
@@ -374,9 +396,14 @@ async function executeProcess(assertion, location, timeoutMs, cwd) {
       }
 
       const contains = typeof expect.stdout_contains === 'string' ? expect.stdout_contains : null;
+      // D40. Asserted only when the author wrote the expectation. The streams
+      // stay separately captured: stdout_contains never sees stderr, and
+      // stderr_contains never sees stdout.
+      const errContains = typeof expect.stderr_contains === 'string' ? expect.stderr_contains : null;
       const exitMatched = code === expectedExit;
       const textMatched = contains === null || stdout.includes(contains);
-      const passed = exitMatched && textMatched;
+      const errMatched = errContains === null || stderr.includes(errContains);
+      const passed = exitMatched && textMatched && errMatched;
 
       const detail = {
         location,
@@ -384,6 +411,8 @@ async function executeProcess(assertion, location, timeoutMs, cwd) {
         expected_exit_code: expectedExit,
         stdout: stdout.slice(0, 4000),
         stderr: stderr.slice(0, 4000),
+        ...(contains === null ? {} : { expected_stdout_contains: contains }),
+        ...(errContains === null ? {} : { expected_stderr_contains: errContains }),
         // Preflight proved the executable and every named file exist, and the
         // process ran to a normal exit. The subject was reached.
         subject_reached: true,
@@ -396,13 +425,20 @@ async function executeProcess(assertion, location, timeoutMs, cwd) {
 
       const what = !exitMatched
         ? `exit ${code}, expected ${expectedExit}`
-        : `exit ${code}, but stdout did not contain ${JSON.stringify(contains)}`;
+        : !textMatched
+          ? `exit ${code}, but stdout did not contain ${JSON.stringify(contains)}`
+          : `exit ${code}, but stderr did not contain ${JSON.stringify(errContains)}`;
 
       // The decisive branch. Preflight established that the executable and every
       // file the binding names exist, and the process ran to a normal exit --
       // so this exit code is the subject's own behaviour and may be attributed.
-      // Note what is NOT consulted: stderr. A subject that fails while printing
-      // "Cannot find module" is still a subject that failed.
+      // Note what stderr is still NOT used for: guessing a cause. The harness
+      // never reads stderr to decide whether a failure is the product's fault
+      // -- that regex-over-stderr attribution was removed from the trust
+      // boundary on purpose. An author explicitly promising a diagnostic is a
+      // different act: the expectation came from a person, not a pattern.
+      // A subject that fails while printing "Cannot find module" is still a
+      // subject that failed.
       resolve({ passed: false, cause: CAUSE.PRODUCT, observed: what, detail });
     });
   });
@@ -421,6 +457,12 @@ export { EXECUTABLE_KINDS as SUPPORTED_KINDS } from './contract.js';
  * and the gap is invisible in the result.
  */
 export async function executeAssertion(assertion, resolvedTargets, { timeoutMs = 15000, cwd } = {}) {
+  // An omitted working directory means "here", not a directory literally named
+  // undefined. Without this the preflight existence check reported `The working
+  // directory undefined does not exist` and attributed a BINDING_INVALID -- a
+  // confusing accusation aimed at the caller for not passing an optional
+  // argument the signature declares as optional.
+  const workingDir = cwd ?? process.cwd();
   const location = resolvedTargets[assertion.target];
 
   if (location === undefined) {
@@ -448,7 +490,7 @@ export async function executeAssertion(assertion, resolvedTargets, { timeoutMs =
   const outcome =
     assertion.kind === 'http'
       ? await executeHttp(assertion, location, timeoutMs)
-      : await executeProcess(assertion, location, timeoutMs, cwd);
+      : await executeProcess(assertion, location, timeoutMs, workingDir);
 
   return { id: assertion.id, ...outcome };
 }

@@ -291,12 +291,38 @@ const run = (location, expect) =>
 
   // stderr may be RECORDED as evidence; it may never be tested to decide a cause.
   assert.ok(/stderr: stderr\.slice/.test(code), 'stderr is still captured as evidence');
+
+  // C4 draws a line this check previously did not need. There are two entirely
+  // different acts that both touch stderr:
+  //
+  //   ATTRIBUTION  the harness reads stderr and decides whose fault a failure
+  //                was. Banned, permanently. That was a regex deciding whether
+  //                software deserved a PRODUCT accusation.
+  //
+  //   ASSERTION    an author writes `stderr_contains` and the executor checks
+  //                it. The expectation came from a person who chose it; the
+  //                harness is comparing against a stated promise, not guessing
+  //                a cause from output it did not expect.
+  //
+  // So the ban is now expressed precisely: stderr may be compared ONLY against
+  // a value the author supplied, and the cause must never be derived from it.
+  const stderrReads = code.match(/stderr\.(includes|match|test)\([^)]*\)/g) ?? [];
+  for (const read of stderrReads) {
+    assert.ok(
+      /errContains/.test(read),
+      `stderr may only be compared against an author-supplied expectation; found: ${read}`
+    );
+  }
+  assert.ok(!/\.test\(stderr\)/.test(code), 'no regex may be run over stderr');
+
+  // And the cause must not be chosen by looking at stderr: every branch that
+  // yields a cause reads exit codes, errnos or preflight facts.
   assert.ok(
-    !/\.test\(stderr\)|stderr\.match|stderr\.includes/.test(code),
-    'but stderr must never be pattern-matched to decide attribution'
+    !/cause[^\n]*stderr|stderr[^\n]*CAUSE\./.test(code),
+    'no cause may be derived from stderr'
   );
 
-  pass('E-11', 'stderr is recorded as evidence and never consulted for attribution');
+  pass('E-11', 'stderr is asserted only against an author expectation, never used to attribute');
 }
 
 fs.rmSync(workspace, { recursive: true, force: true });

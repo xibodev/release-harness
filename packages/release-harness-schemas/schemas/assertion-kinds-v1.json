@@ -25,6 +25,11 @@
           "type": "integer",
           "minimum": 100,
           "maximum": 599
+        },
+        "body_contains": {
+          "description": "Substring that must appear in the response body. D39: the real transfer test found the highest-value proposition available -- that the deployed service is running the revision intended for this release -- unwritable, because the service exposes it in the body and this kind could only read a status code. A substring test is the smallest primitive that closes it; anything richer is a query language, which this is deliberately not.",
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -47,6 +52,11 @@
         },
         "stdout_contains": {
           "description": "Substring that must appear in stdout.",
+          "type": "string",
+          "minLength": 1
+        },
+        "stderr_contains": {
+          "description": "Substring that must appear in stderr. D40: well-behaved CLIs put diagnostics on stderr, so \"the validator refuses for the expected reason\" degraded to an exit-code check that any unrelated crash could satisfy. Note the distinction this preserves: stderr may be ASSERTED by an author who chose the expectation, but it is still never READ to attribute a cause -- the thing removed from the trust boundary was the harness guessing from stderr, not an author promising about it.",
           "type": "string",
           "minLength": 1
         }

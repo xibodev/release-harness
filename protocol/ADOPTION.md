@@ -151,7 +151,7 @@ are pinning to:
 
 ```json
 "requires": [
-  { "ref": "usage-schema", "digest": "<64 hex chars>" }
+  { "ref": "example-upstream-contract", "digest": "<64 hex chars>" }
 ]
 ```
 

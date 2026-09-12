@@ -85,6 +85,7 @@ export function cmdDoctor(ctx) {
       // Summarised through the shared renderer. D17 was this command printing
       // 916-character lines while `validate` summarised at 180.
       blockers: assessment.blockers.map((b) => `[${b.kind}] ${summariseBlocker(b.detail)}`),
+      truncated: assessment.blockers.some((b) => String(b.detail).length > 150),
     });
   }
 
@@ -155,6 +156,14 @@ export function cmdDoctor(ctx) {
     } else {
       out.detail(`${d.name}: well-formed, ${d.blockers.length} unresolved`);
       for (const b of d.blockers) out.detail(`  ${b}`);
+      // D31: the summary clips a question mid-word, and doctor was the one
+      // reporting command that offered no way to read the rest -- so its
+      // output alone could never show a complete question. The protocol asks
+      // authors to write detailed, self-contained questions; a reporting
+      // surface that hides them penalises exactly the behaviour it asks for.
+      if (d.truncated) {
+        out.detail(`  full text: release-harness draft status ${d.name} --json`);
+      }
     }
   }
 
