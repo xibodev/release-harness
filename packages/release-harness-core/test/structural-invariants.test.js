@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
 import { Schemas } from '../../release-harness-schemas/index.js';
 import { auditClosure } from '../../../scripts/schema-closure-audit.mjs';
-import { EXECUTABLE_KINDS } from '../src/contract.js';
+import { EXECUTABLE_KINDS, describeAssertionKinds } from '../src/contract.js';
+import { assessDraft } from '../src/assess.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -288,5 +289,183 @@ console.log('\nStructural invariants (C2)\n');
 
   pass('S-7', 'anything that renders a blocker uses the one shared renderer');
 }
+
+// ---------------------------------------------------------------------------
+// S-8  Every command that reports draft readiness consumes one assessment.
+//
+// D23: `draft status` called checkAcceptability directly, so it never saw the
+// contract-standard blockers and reported 4 where validate reported 5. An
+// operator working from `status` was told there was less to do than acceptance
+// would enforce. D10 was the same class in different commands, so this asserts
+// the property rather than the instance.
+// ---------------------------------------------------------------------------
+{
+  const cliDir = path.join(REPO, 'packages', 'release-harness-core', 'src', 'cli');
+  const readiness = ['draft.js', 'validate.js', 'accept.js', 'doctor.js'];
+
+  for (const file of readiness) {
+    const code = fs.readFileSync(path.join(cliDir, file), 'utf8');
+
+    assert.match(
+      code,
+      /assessDraft/,
+      `${file} reports draft readiness and must consume the shared assessment`
+    );
+
+    // Reconstructing acceptability from the lower-level checks is how two
+    // answers drift apart in the first place.
+    for (const bypass of ['checkAcceptability', 'checkContractSemantics', 'contractSemanticFindings']) {
+      assert.ok(
+        !new RegExp(bypass + '\\s*\\(').test(code),
+        `${file} must not call ${bypass} directly; assessDraft is the authority`
+      );
+    }
+  }
+
+  pass('S-8', 'draft status, validate, accept and doctor share one assessment');
+}
+
+// ---------------------------------------------------------------------------
+// S-9  One blocker per semantic violation -- and distinct ones survive.
+//
+// D24: a scaffold reported both "assertions[0] has no kind yet" and
+// "assertions[0] must declare a kind" -- two layers finding one fact. Dedup
+// keys on semantic identity, never on wording, so improving a message cannot
+// silently reintroduce the duplicate.
+// ---------------------------------------------------------------------------
+{
+  const scaffold = assessDraft(
+    {
+      schema_version: '1.0.0',
+      proposition: { subject: { id: '' }, assertions: [{ id: 'A1', kind: '', target: '' }] },
+      questions: [],
+    },
+    { schema_version: '1.0.0', claims: [] }
+  );
+
+  const keys = scaffold.blockers.map((b) => `${b.code}|${b.path}|${b.entity ?? ''}`);
+  assert.strictEqual(
+    new Set(keys).size,
+    keys.length,
+    `the same semantic violation must be reported once; got ${keys.join(', ')}`
+  );
+  assert.ok(
+    scaffold.blockers.every((b) => b.code),
+    'every blocker must carry a machine identity, or it cannot be deduplicated'
+  );
+
+  // Distinct conditions on the same field must BOTH survive: a missing kind and
+  // an unexecutable one have different remedies, and collapsing them by path
+  // would hide one.
+  const unsupported = assessDraft(
+    {
+      schema_version: '1.0.0',
+      proposition: { subject: { id: 's' }, assertions: [{ id: 'A1', kind: 'process', target: '' }] },
+      questions: [],
+    },
+    { schema_version: '1.0.0', claims: [] }
+  );
+  const codes = unsupported.blockers.map((b) => b.code);
+  assert.ok(codes.includes('ASSERTION_KIND_UNSUPPORTED'), 'an unexecutable kind must be reported');
+  assert.ok(
+    codes.includes('ASSERTION_TARGET_MISSING'),
+    'and a different violation on a sibling field must survive alongside it'
+  );
+
+  pass('S-9', 'blockers deduplicate by semantic identity, not by wording');
+}
+
+// ---------------------------------------------------------------------------
+// S-10  The assertion vocabulary is rendered from the schema, not restated.
+//
+// D19: C2 made the vocabulary strict without making it visible, and an agent
+// learned it by submitting invalid values. Help must derive from the same file
+// validation compiles, so the two cannot drift.
+// ---------------------------------------------------------------------------
+{
+  const kinds = describeAssertionKinds();
+  assert.ok(kinds.length > 0, 'the vocabulary must be describable');
+
+  const schema = JSON.parse(
+    fs.readFileSync(
+      path.join(REPO, 'packages', 'release-harness-schemas', 'schemas', 'assertion-kinds-v1.json'),
+      'utf8'
+    )
+  );
+
+  for (const { kind, expect } of kinds) {
+    const declared = Object.keys(schema.definitions[kind].properties);
+    assert.deepStrictEqual(
+      expect.map((e) => e.field).sort(),
+      declared.sort(),
+      `the described vocabulary for "${kind}" must be exactly what the schema declares`
+    );
+  }
+
+  // And the CLI must not carry its own copy of any field name.
+  const draftCli = fs.readFileSync(
+    path.join(REPO, 'packages', 'release-harness-core', 'src', 'cli', 'draft.js'),
+    'utf8'
+  );
+  // Matching bare field names would be wrong: `status` is an http expect field
+  // AND the name of the `draft status` subcommand. What must not appear is a
+  // hardcoded expect VOCABULARY -- a list of those names together.
+  const kindVocabularies = kinds.map((k) => k.expect.map((e) => e.field));
+  for (const fields of kindVocabularies) {
+    if (fields.length < 2) continue;
+    const restated = fields.every((f) => new RegExp(`['"\`]${f}['"\`]`).test(draftCli));
+    assert.ok(
+      !restated,
+      `draft.js contains the whole expect vocabulary (${fields.join(', ')}); render it from the authority instead`
+    );
+  }
+
+  pass('S-10', 'assertion vocabulary is derived from the schema, not duplicated in the CLI');
+}
+
+// ---------------------------------------------------------------------------
+// S-11  Normative references resolve through one authority.
+//
+// D25: the run built its own resolution map and `doctor` called readiness
+// without one, so doctor reported every reference unresolved -- including ones
+// whose referent was on disk. A readiness command that cannot see an available
+// dependency teaches the operator to disbelieve it.
+// ---------------------------------------------------------------------------
+{
+  const cliDir = path.join(REPO, 'packages', 'release-harness-core', 'src', 'cli');
+
+  for (const file of ['run.js', 'doctor.js']) {
+    const code = fs.readFileSync(path.join(cliDir, file), 'utf8');
+    assert.match(
+      code,
+      /resolveNormativeReferences/,
+      `${file} decides on normative references and must use the shared resolver`
+    );
+  }
+
+  // Resolution is by exact identity, and must never execute anything.
+  const resolver = fs.readFileSync(
+    path.join(REPO, 'packages', 'release-harness-core', 'src', 'normative.js'),
+    'utf8'
+  );
+  // Strip comments before checking: the file's own prose explains that it does
+  // not execute anything, and matching that text would have the test report a
+  // defect in its own documentation.
+  const resolverCode = resolver
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split(String.fromCharCode(10))
+    .filter((l) => !l.trim().startsWith('//'))
+    .join(String.fromCharCode(10));
+
+  for (const forbidden of ['spawn(', 'exec(', 'execSync', 'executeAssertion', 'probeHttp']) {
+    assert.ok(
+      !resolverCode.includes(forbidden),
+      `the resolver must not call ${forbidden}: observing readiness may not run the subject`
+    );
+  }
+
+  pass('S-11', 'one read-only normative-reference resolver, shared by run and doctor');
+}
+
 
 console.log(`\n  ${results.length} structural invariants passed\n`);

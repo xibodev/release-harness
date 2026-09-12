@@ -23,6 +23,9 @@
  */
 
 import crypto from 'node:crypto';
+import { Schemas } from '../../release-harness-schemas/index.js';
+
+const AssertionKinds = Schemas.AssertionKindsV1;
 
 export const CONTRACT_SCHEMA_VERSION = '1.0.0';
 
@@ -245,4 +248,123 @@ export function checkContractSemantics(contract) {
   }
 
   return errors;
+}
+
+/**
+ * The same semantic checks, with machine identity attached.
+ *
+ * `checkContractSemantics` returns prose, which is what a reader wants and what
+ * every existing caller consumes. But two layers can discover the SAME
+ * violation -- an assertion with no `kind` is both "incomplete" to acceptability
+ * and "must declare a kind" to the contract standard -- and deduplicating those
+ * by their wording is brittle: it breaks the moment someone improves a message.
+ *
+ * So each violation also gets a stable code and a path. Deduplication keys on
+ * those, and rendering stays free to change.
+ */
+export function contractSemanticFindings(contract) {
+  const findings = [];
+  const at = (code, path, detail, entity) => findings.push({ code, path, detail, entity });
+
+  if (!contract || typeof contract !== 'object') {
+    at('CONTRACT_NOT_OBJECT', 'contract', 'Contract must be an object');
+    return findings;
+  }
+
+  const subject = contract.subject;
+  if (!subject || typeof subject !== 'object') {
+    at('SUBJECT_MISSING', 'subject', 'Contract must declare a "subject"');
+  } else {
+    if (typeof subject.id !== 'string' || !subject.id.trim()) {
+      // Same semantic violation as checkAcceptability's SUBJECT_ID_MISSING.
+      at('SUBJECT_ID_MISSING', 'proposition.subject.id', 'subject.id must be a non-empty string');
+    }
+    if (subject.name !== undefined && typeof subject.name !== 'string') {
+      at('SUBJECT_NAME_TYPE', 'subject.name', 'subject.name must be a string when present');
+    }
+  }
+
+  const assertions = contract.assertions;
+  if (!Array.isArray(assertions) || assertions.length === 0) {
+    at('ASSERTIONS_EMPTY', 'proposition.assertions', 'Contract must declare a non-empty "assertions" array');
+  } else {
+    const seen = new Set();
+    assertions.forEach((a, i) => {
+      if (!a || typeof a !== 'object') {
+        at('ASSERTION_NOT_OBJECT', `proposition.assertions[${i}]`, `assertions[${i}] must be an object`);
+        return;
+      }
+      if (typeof a.id !== 'string' || !a.id.trim()) {
+        at('ASSERTION_ID_MISSING', `proposition.assertions[${i}].id`, `assertions[${i}].id must be a non-empty string`);
+      } else if (seen.has(a.id)) {
+        at('ASSERTION_ID_DUPLICATE', `proposition.assertions[${i}].id`, `Duplicate assertion id "${a.id}"`, a.id);
+      } else {
+        seen.add(a.id);
+      }
+      if (typeof a.kind !== 'string' || !a.kind.trim()) {
+        at('ASSERTION_KIND_MISSING', `proposition.assertions[${i}].kind`, `assertions[${i}] must declare a "kind"`, a.id);
+      } else if (!EXECUTABLE_KINDS.includes(a.kind)) {
+        // Deliberately a DIFFERENT code from the missing case: an absent kind is
+        // unfinished work, an unexecutable one is wrong. Both may apply to the
+        // same path and both must survive deduplication.
+        at(
+          'ASSERTION_KIND_UNSUPPORTED',
+          `proposition.assertions[${i}].kind`,
+          `assertions[${i}] has kind "${a.kind}", which this version cannot exercise ` +
+            `(it knows: ${EXECUTABLE_KINDS.join(', ')}). An assertion that cannot be ` +
+            'checked is a promise nobody can keep.',
+          a.id
+        );
+      }
+      if (typeof a.target !== 'string' || !a.target.trim()) {
+        at('ASSERTION_TARGET_MISSING', `proposition.assertions[${i}].target`, `assertions[${i}] must declare a symbolic "target"`, a.id);
+      }
+    });
+  }
+
+  const requires = contract.requires;
+  if (requires !== undefined) {
+    if (!Array.isArray(requires)) {
+      at('REQUIRES_NOT_ARRAY', 'proposition.requires', '"requires" must be an array when present');
+    } else {
+      requires.forEach((r, i) => {
+        if (!r || typeof r !== 'object') {
+          at('REQUIRE_NOT_OBJECT', `proposition.requires[${i}]`, `requires[${i}] must be an object`);
+          return;
+        }
+        if (typeof r.ref !== 'string' || !r.ref.trim()) {
+          at('REQUIRE_REF_MISSING', `proposition.requires[${i}].ref`, `requires[${i}].ref must be a non-empty string`);
+        }
+        if (typeof r.digest !== 'string' || !/^[0-9a-f]{64}$/.test(r.digest)) {
+          at('REQUIRE_DIGEST_INVALID', `proposition.requires[${i}].digest`, `requires[${i}].digest must be a sha256 hex digest`, r.ref);
+        }
+      });
+    }
+  }
+
+  return findings;
+}
+
+/**
+ * The assertion vocabulary, for showing an author.
+ *
+ * Derived from the published assertion-kind schema -- the same file validation
+ * compiles -- so help can never drift from what is enforced. D19 was the
+ * opposite: C2 made the vocabulary strict without making it visible, and an
+ * adoption agent had to learn `{http, cli}` by deliberately submitting invalid
+ * values and reading the rejections.
+ *
+ * Nothing here restates a field name. If a kind gains an `expect` field, this
+ * reports it on the next run with no edit.
+ */
+export function describeAssertionKinds() {
+  const defs = AssertionKinds.definitions ?? {};
+  return EXECUTABLE_KINDS.filter((kind) => defs[kind]).map((kind) => ({
+    kind,
+    description: defs[kind].description ?? '',
+    expect: Object.entries(defs[kind].properties ?? {}).map(([field, spec]) => ({
+      field,
+      description: spec.description ?? '',
+    })),
+  }));
 }

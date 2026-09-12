@@ -439,6 +439,8 @@ export function checkAcceptability(draft, record) {
   if (typeof subjectId !== 'string' || !subjectId.trim()) {
     blockers.push({
       kind: 'incomplete',
+      code: 'SUBJECT_ID_MISSING',
+      path: 'proposition.subject.id',
       detail: 'The subject has no id yet. Name what is being certified.',
     });
   }
@@ -448,6 +450,9 @@ export function checkAcceptability(draft, record) {
       if (typeof a?.[field] !== 'string' || !a[field].trim()) {
         blockers.push({
           kind: 'incomplete',
+          code: `ASSERTION_${field.toUpperCase()}_MISSING`,
+          path: `proposition.assertions[${i}].${field}`,
+          entity: a?.id,
           detail: `assertions[${i}] has no ${field} yet.`,
         });
       }
@@ -458,6 +463,9 @@ export function checkAcceptability(draft, record) {
     if (typeof c?.claim !== 'string' || !c.claim.trim()) {
       blockers.push({
         kind: 'incomplete',
+        code: 'CLAIM_TEXT_MISSING',
+        path: `claims[${i}].claim`,
+        entity: c?.id,
         detail: `claims[${i}] states nothing yet. Say what is being claimed, or remove it.`,
       });
     }
@@ -468,6 +476,9 @@ export function checkAcceptability(draft, record) {
     if (q.blocking === true && !resolved) {
       blockers.push({
         kind: 'unresolved_question',
+        code: 'QUESTION_UNRESOLVED',
+        path: `questions[${q.id}]`,
+        entity: q.id,
         detail: `Blocking question "${q.id}" is unresolved: ${q.question}`,
       });
     }
@@ -483,6 +494,9 @@ export function checkAcceptability(draft, record) {
       if (!claim) {
         blockers.push({
           kind: 'missing_claim',
+          code: 'CLAIM_NOT_FOUND',
+          path: `proposition.assertions[${assertion.id}].supported_by`,
+          entity: claimId,
           detail: `Assertion "${assertion.id}" cites claim "${claimId}", which the authoring record does not contain`,
         });
         continue;
@@ -504,6 +518,9 @@ export function checkAcceptability(draft, record) {
 
         blockers.push({
           kind: contested ? 'contested_claim' : 'unsupported_claim',
+          code: contested ? 'CLAIM_CONTESTED' : 'CLAIM_UNSUPPORTED',
+          path: `proposition.assertions[${assertion.id}].supported_by`,
+          entity: claimId,
           detail: contested
             ? `Assertion "${assertion.id}" is held on claim "${claimId}", which records an ` +
               'unresolved contradiction between sources. This is a deliberate hold, not an ' +

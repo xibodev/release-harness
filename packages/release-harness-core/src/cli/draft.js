@@ -10,8 +10,10 @@
 import fs from 'node:fs';
 import { paths, writeJson, readJson, listDrafts, isInstalled } from './layout.js';
 import { EXIT } from './exit-codes.js';
-import { checkAcceptability, describeStatuses } from '../draft.js';
-import { renderBlockers } from './blockers.js';
+import { describeStatuses } from '../draft.js';
+import { describeAssertionKinds } from '../contract.js';
+import { assessDraft, DRAFT_STATE } from '../assess.js';
+import { renderBlockers, describeState } from './blockers.js';
 
 /**
  * A skeleton draft.
@@ -138,6 +140,17 @@ function draftNew(ctx) {
     out.detail(`${status.padEnd(17)} needs ${requires}`);
   }
   out.blank();
+  // Rendered from the same schema validation compiles, never a second list.
+  // D19: an agent had to learn these by submitting invalid values, because
+  // strict validation arrived without visible vocabulary.
+  out.info('An assertion names a kind and what must hold of it:');
+  for (const k of describeAssertionKinds()) {
+    out.detail(`${k.kind}`);
+    out.detail(`  expect: ${k.expect.map((e) => e.field).join(', ')}`);
+  }
+  out.detail('WHERE to reach the thing -- a URL, a command -- is an execution');
+  out.detail('binding, not part of the assertion. See `release-harness bind`.');
+  out.blank();
   out.info('A blocking question is resolved by editing it in the draft:');
   out.detail('{ "id": "Q1", "question": "...", "blocking": true,');
   out.detail('  "resolution": "the answer", "resolved_by": "your name" }');
@@ -189,9 +202,15 @@ function draftStatus(ctx) {
     return EXIT.USAGE_OR_CONTRACT;
   }
 
-  const { acceptable, blockers } = checkAcceptability(draft.value, record.value ?? { claims: [] });
+  // The same assessment validate, accept and doctor consume. This command used
+  // to call checkAcceptability directly, so it never saw the contract-standard
+  // blockers and reported a shorter list than acceptance would enforce -- an
+  // operator working from `status` was told there was less to do than there was.
+  const assessment = assessDraft(draft.value, record.value ?? { claims: [] });
+  const { acceptable, blockers } = assessment;
 
   out.data('draft', name);
+  out.data('state', assessment.state);
   out.data('acceptable', acceptable);
   out.data('blockers', blockers);
 
@@ -203,7 +222,7 @@ function draftStatus(ctx) {
     return EXIT.OK;
   }
 
-  out.info(`Not ready to accept -- ${blockers.length} thing${blockers.length === 1 ? '' : 's'} to settle:`);
+  out.info(describeState(name, assessment));
   out.blank();
   renderBlockers(out, blockers, { fullTextAt: paths(cwd).draft(name) });
 

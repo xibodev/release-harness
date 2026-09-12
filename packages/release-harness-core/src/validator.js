@@ -3,6 +3,7 @@ import { Schemas } from '../../release-harness-schemas/index.js';
 import { checkContractSemantics } from './contract.js';
 import { checkDraft, checkAuthoringRecord } from './draft.js';
 import { verifyAcceptedContract } from './acceptance.js';
+import { renderSchemaErrors } from './cli/schema-errors.js';
 
 /**
  * Lightweight deterministic schema and structure validation for Release Harness documents.
@@ -41,10 +42,17 @@ export function validateAgainstSchema(schema, data, label) {
     compiledSchemas.set(schema, validate);
   }
   if (!validate(data)) {
-    const errors = (validate.errors || []).map(
-      (e) => `${e.instancePath || '/'} ${e.message}${e.params && e.params.allowedValues ? ` (allowed: ${e.params.allowedValues.join('|')})` : ''}`
+    // Rendered for a reader; the raw AJV errors ride along on the exception so
+    // --json keeps the structured form. AJV remains the authority on validity --
+    // this only decides how the failure is described.
+    const raw = validate.errors || [];
+    const errors = renderSchemaErrors(raw, label.toLowerCase());
+    const err = new ValidationError(
+      `${label} failed schema validation`,
+      errors.length > 0 ? errors : raw.map((e) => `${e.instancePath || '/'} ${e.message}`)
     );
-    throw new ValidationError(`${label} failed schema validation: ${errors.join('; ')}`, errors);
+    err.schemaErrors = raw;
+    throw err;
   }
 }
 

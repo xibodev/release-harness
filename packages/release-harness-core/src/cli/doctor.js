@@ -25,6 +25,7 @@ import { validateDraft, validateAuthoringRecord, validateAcceptedContract } from
 import { assessDraft, DRAFT_STATE } from '../assess.js';
 import { summariseBlocker } from './blockers.js';
 import { describeReadiness } from '../bindings.js';
+import { resolveNormativeReferences } from '../normative.js';
 
 function safe(fn) {
   try {
@@ -118,7 +119,14 @@ export function cmdDoctor(ctx) {
     const contract = readJson(p.contract(c.digest)).value;
     for (const b of bindingNames) {
       const binding = readJson(p.binding(b)).value;
-      const readiness = describeReadiness({ contract, bindings: binding });
+      // D25: doctor used to call this without a resolution map, so every
+      // normative reference read as unresolved even when its referent was on
+      // disk. It now consults the same authority the run gate uses.
+      const { resolved: resolvedRefs } = resolveNormativeReferences(contract, {
+        contractPath: p.contract,
+        readJson,
+      });
+      const readiness = describeReadiness({ contract, bindings: binding, resolvedRefs });
       eligibility.push({
         digest: c.digest,
         binding: b,

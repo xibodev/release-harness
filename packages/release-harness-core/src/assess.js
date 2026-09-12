@@ -27,7 +27,7 @@
  */
 
 import { checkDraft, checkAuthoringRecord, checkAcceptability } from './draft.js';
-import { checkContractSemantics } from './contract.js';
+import { contractSemanticFindings } from './contract.js';
 
 export const DRAFT_STATE = {
   INVALID: 'INVALID',
@@ -57,7 +57,34 @@ function contractProblems(draft) {
     ...(proposition.requires !== undefined ? { requires: proposition.requires } : {}),
   };
 
-  return checkContractSemantics(candidate);
+  return contractSemanticFindings(candidate);
+}
+
+/**
+ * One blocker per semantic violation.
+ *
+ * Two layers legitimately discover the same fact -- acceptability sees an
+ * assertion with no `kind` as unfinished, the contract standard sees it as
+ * undeclared -- and a reader should be told once. Deduplication keys on the
+ * violation's identity (code + path + entity), never on its wording, so
+ * improving a message cannot silently reintroduce the duplicate.
+ *
+ * Distinct violations on the same field survive: a missing kind and an
+ * unsupported kind are different conditions with different remedies, and
+ * collapsing them by path would hide one of them.
+ */
+function dedupe(blockers) {
+  const seen = new Set();
+  const out = [];
+  for (const b of blockers) {
+    // A blocker with no code cannot be identified semantically, so it is kept
+    // as-is rather than guessed at.
+    const key = b.code ? `${b.code}|${b.path ?? ''}|${b.entity ?? ''}` : null;
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    out.push(b);
+  }
+  return out;
 }
 
 /**
@@ -80,8 +107,26 @@ function contractProblems(draft) {
 export function assessDraft(draft, record) {
   // 1. Is it well-formed? A draft may be incomplete -- that is what makes it a
   //    draft -- but it may not be malformed.
+  // `checkDraft` reports shape problems as prose. Where a problem is ALSO a
+  // contract-semantics violation -- an unexecutable assertion kind is both --
+  // the structured finding carries the identity, so the two are deduplicated
+  // rather than reported twice under different wordings.
+  const semanticByDetail = new Map(
+    contractSemanticFindings({
+      schema_version: '1.0.0',
+      subject: draft?.proposition?.subject,
+      assertions: (draft?.proposition?.assertions ?? []).map(({ supported_by, ...r }) => r),
+      ...(draft?.proposition?.requires !== undefined ? { requires: draft.proposition.requires } : {}),
+    }).map((f) => [f.detail, f])
+  );
+
   const structural = [
-    ...checkDraft(draft).map((detail) => ({ kind: 'draft_invalid', detail })),
+    ...checkDraft(draft).map((detail) => {
+      const f = semanticByDetail.get(detail);
+      return f
+        ? { kind: 'draft_invalid', code: f.code, path: f.path, entity: f.entity, detail }
+        : { kind: 'draft_invalid', detail };
+    }),
     ...checkAuthoringRecord(record ?? { claims: [] }).map((detail) => ({
       kind: 'record_invalid',
       detail,
@@ -95,7 +140,13 @@ export function assessDraft(draft, record) {
       shape_valid: false,
       semantic_valid: false,
       errors: structural.map((b) => b.detail),
-      blockers: structural,
+      blockers: dedupe([...structural, ...contractProblems(draft).filter((f) => f.code !== undefined).map((f) => ({
+        kind: 'contract_invalid',
+        code: f.code,
+        path: f.path,
+        entity: f.entity,
+        detail: f.detail,
+      }))]),
     };
   }
 
@@ -117,29 +168,48 @@ export function assessDraft(draft, record) {
   //
   // What IS invalid: something written down that cannot be right however much
   // more is written. A kind nothing can execute. A reference nothing pins.
-  const EMPTINESS = /must declare a non-empty "assertions"|subject\.id must be|must declare a "kind"|must declare a symbolic "target"|\.id must be a non-empty/;
-  const genuinelyInvalid = contractErrors.filter((e) => !EMPTINESS.test(e));
+  //
+  // Classified by CODE rather than by matching message text, which was the
+  // previous approach and would have silently misclassified every finding the
+  // moment a message was reworded.
+  const INCOMPLETENESS = new Set([
+    'SUBJECT_ID_MISSING',
+    'SUBJECT_MISSING',
+    'ASSERTIONS_EMPTY',
+    'ASSERTION_ID_MISSING',
+    'ASSERTION_KIND_MISSING',
+    'ASSERTION_TARGET_MISSING',
+  ]);
+
+  const genuinelyInvalid = contractErrors.filter((f) => !INCOMPLETENESS.has(f.code));
 
   if (genuinelyInvalid.length > 0) {
-    const asBlockers = genuinelyInvalid.map((detail) => ({ kind: 'contract_invalid', detail }));
+    const asBlockers = genuinelyInvalid.map((f) => ({
+      kind: 'contract_invalid',
+      code: f.code,
+      path: f.path,
+      entity: f.entity,
+      detail: f.detail,
+    }));
     return {
       state: DRAFT_STATE.INVALID,
       acceptable: false,
       shape_valid: true,
       semantic_valid: false,
-      errors: genuinelyInvalid,
-      blockers: [...asBlockers, ...blockers],
+      errors: genuinelyInvalid.map((f) => f.detail),
+      blockers: dedupe([...asBlockers, ...blockers]),
     };
   }
 
   // Anything the contract standard rejects that is merely emptiness surfaces as
   // work remaining, phrased as what to fill in.
   const emptiness = contractErrors
-    .filter((e) => !genuinelyInvalid.includes(e))
-    .filter((e) => !incomplete.some((b) => b.detail.includes('subject') && /subject/.test(e)))
-    .map((detail) => ({ kind: 'incomplete', detail }));
+    .filter((f) => INCOMPLETENESS.has(f.code))
+    .map((f) => ({ kind: 'incomplete', code: f.code, path: f.path, entity: f.entity, detail: f.detail }));
 
-  const all = [...blockers, ...emptiness];
+  // `blockers` first: acceptability's wording is written for an author
+  // ("has no kind yet"), the contract standard's for a validator.
+  const all = dedupe([...blockers, ...emptiness]);
 
   return {
     state: all.length === 0 ? DRAFT_STATE.ACCEPTABLE : DRAFT_STATE.BLOCKED,

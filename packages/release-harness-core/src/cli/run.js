@@ -23,6 +23,7 @@ import path from 'node:path';
 import { paths, readJson, writeJson, resolveAccepted, isInstalled } from './layout.js';
 import { EXIT } from './exit-codes.js';
 import { decideMode, resolveBindings } from '../bindings.js';
+import { resolveNormativeReferences } from '../normative.js';
 import { MODE } from '../attribution.js';
 import { adjudicate, exitCodeForVerdict } from '../adjudicate.js';
 import { buildRunManifest } from '../run-manifest.js';
@@ -129,16 +130,13 @@ export async function cmdRun(ctx) {
   }
   const bindings = bindingDoc.value;
 
-  // Normative references are resolved against what is accepted here and now. A
-  // reference that has moved means this contract was accepted against a
-  // proposition that no longer exists.
-  const resolvedRefs = {};
-  for (const req of contract?.requires ?? []) {
-    const refFile = p.contract(req.ref);
-    const referenced = readJson(refFile);
-    if (referenced.found && referenced.value?.digest) resolvedRefs[req.ref] = referenced.value.digest;
-    else if (fs.existsSync(p.contract(req.digest))) resolvedRefs[req.ref] = req.digest;
-  }
+  // Resolved through the one shared authority, which `doctor` also uses -- so
+  // the readiness view and the gate can never disagree about whether a
+  // dependency is available (D25).
+  const { resolved: resolvedRefs } = resolveNormativeReferences(contract, {
+    contractPath: p.contract,
+    readJson,
+  });
 
   // -------------------------------------------------------------------------
   // THE GATE. Mode is fixed here, from data alone.

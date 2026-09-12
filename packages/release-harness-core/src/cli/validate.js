@@ -145,7 +145,12 @@ export function cmdValidate(ctx) {
       out.info(`ok      ${r.label}`);
     } else {
       out.info(`FAILED  ${r.label}`);
-      for (const e of r.errors) out.detail(e);
+      // A rendered schema error is a small block -- location, then what is
+      // wrong, then what was allowed -- so each of its lines is indented as one
+      // unit rather than only the first.
+      for (const e of r.errors) {
+        for (const line of String(e).split(String.fromCharCode(10))) out.detail(line);
+      }
     }
   }
 

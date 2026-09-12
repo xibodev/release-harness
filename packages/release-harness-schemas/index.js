@@ -30,6 +30,7 @@ export const Schemas = {
   DraftV1: loadSchema('draft-v1'),
   AuthoringRecordV1: loadSchema('authoring-record-v1'),
   ContractV1: loadSchema('contract-v1'),
+  AssertionKindsV1: loadSchema('assertion-kinds-v1'),
   RunManifestV1: loadSchema('run-manifest-v1'),
   EvidenceManifestV1: loadSchema('evidence-manifest-v1'),
   VerdictV1: loadSchema('verdict-v1'),

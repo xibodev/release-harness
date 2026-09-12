@@ -19,6 +19,12 @@ const PUBLISHED = [
   'DraftV1',
   'AuthoringRecordV1',
   'ContractV1',
+  // What each assertion kind may promise, and which fields the executor reads.
+  // One authority, consumed by the draft schema, the contract schema, the
+  // execution adapter, and the help text -- so a field the schema accepts is a
+  // field something consumes, and an author can discover it without provoking
+  // a validation error.
+  'AssertionKindsV1',
   'RunManifestV1',
   'EvidenceManifestV1',
   'VerdictV1',
@@ -37,7 +43,7 @@ for (const name of PUBLISHED) {
 assert.deepStrictEqual(
   Object.keys(Schemas).sort(),
   [...PUBLISHED].sort(),
-  'the published set must be exactly these six -- no more, and none missing'
+  'the published set must be exactly these -- no more, and none missing'
 );
 
 // The removed schemas must stay removed. A file left behind would be loadable
@@ -58,7 +64,7 @@ for (const gone of [
   );
 }
 
-console.log('✓ the six published schemas load and the removed ones are gone');
+console.log('✓ the published schemas load and the removed ones are gone');
 
 // --- verdict ---------------------------------------------------------------
 
