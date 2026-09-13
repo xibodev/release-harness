@@ -3,110 +3,99 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Release-Harness — Deterministic Release Gates</title>
-  <meta name="description" content="A deterministic quality-gate and release adjudication engine for software projects.">
+  <title>Release-Harness — Accepted propositions, deterministic evidence</title>
+  <meta name="description" content="Certify deliberately accepted HTTP and CLI release propositions with deterministic, sealed evidence.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="landing-page">
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <header class="site-header" data-od-id="site-header">
-    <a href="index.html" class="brand" data-od-id="brand-home">
-      <span class="brand-badge">RH</span>
-      <span class="brand-name">RELEASE-HARNESS</span>
-    </a>
-    <nav class="site-nav" aria-label="Primary navigation" data-od-id="landing-navigation">
+  <header class="site-header">
+    <a href="index.html" class="brand"><span class="brand-badge">RH</span><span class="brand-name">RELEASE-HARNESS</span></a>
+    <nav class="site-nav" aria-label="Primary navigation">
       <a class="nav-current" href="index.html" aria-current="page">Overview</a>
-      <a href="docs.html#onboarding-project">Onboard</a>
+      <a href="docs.html#getting-started">Get started</a>
       <a href="docs.html">Documentation</a>
     </nav>
-    <button id="theme-toggle-btn" class="toggle-btn" type="button" aria-label="Switch to dark theme" data-od-id="theme-toggle">DARK</button>
+    <button id="theme-toggle-btn" class="toggle-btn" type="button" aria-label="Switch to dark theme">DARK</button>
   </header>
 
-  <main id="main-content" class="landing-content" data-od-id="landing-content">
-    <section class="landing-hero" data-od-id="landing-hero">
+  <main id="main-content" class="landing-content">
+    <section class="landing-hero">
       <div class="hero-copy">
-        <p class="eyebrow">DETERMINISTIC RELEASE ADJUDICATION</p>
-        <h1 data-od-id="landing-title">A release cannot be talked into green.</h1>
-        <p class="hero-lede">Release-Harness is a portable, non-polluting test harness and release adjudication engine. It computes verdicts by pure functions from sealed evidence.</p>
-        <div class="hero-actions" data-od-id="landing-actions">
-          <a class="button-primary" href="docs.html" data-od-id="read-documentation">Read the documentation <span aria-hidden="true">→</span></a>
-          <a class="button-link" href="docs.html#onboarding-project" data-od-id="onboard-project">Onboard a project</a>
+        <p class="eyebrow">BETA · DETERMINISTIC RELEASE ADJUDICATION</p>
+        <h1>A release cannot be talked into green.</h1>
+        <p class="hero-lede">Release-Harness certifies deliberately accepted release propositions with deterministic evidence. Humans and agents can author; only the accepted contract and recorded observations decide.</p>
+        <div class="hero-actions">
+          <a class="button-primary" href="docs.html#getting-started">Start with the beta <span aria-hidden="true">→</span></a>
+          <a class="button-link" href="docs.html#trust-boundary">Read the trust boundary</a>
         </div>
       </div>
-      <div class="hero-terminal" data-od-id="verdict-terminal">
-        <div class="terminal-chrome"><span>release-harness / adjudicator</span><span>sealed evidence</span></div>
-        <pre aria-label="Release-Harness verdict output"><code><span class="t-cyan">$ npx release-harness run-local</span>
-Materializing detached source workspace...
-Executing declarative scenarios...
-Sealing evidence directory...
-Evaluating deterministic gate verdict...
+      <div class="hero-terminal">
+        <div class="terminal-chrome"><span>release-harness / certifying run</span><span>sealed evidence</span></div>
+        <pre aria-label="Release-Harness verdict output"><code><span class="t-cyan">$ npx release-harness run --binding local</span>
+Certifying run run-2026-09-13
+  contract  8a31c9b44d1e…
+  binding   local
+  evidence  sealed
 
-<span class="t-green t-bold">=== Verdict: PASS (Integrity: COMPLETE, Exit: 0) ===</span></code></pre>
+<span class="t-green t-bold">1/1 passed. Status: PASS.</span>
+
+<span class="t-cyan">$ npx release-harness verify</span>
+<span class="t-green">ok  contract · evidence · verdict</span>
+The whole chain verifies.</code></pre>
       </div>
     </section>
 
-    <section class="release-notice" data-od-id="release-notice">
-      <div class="notice-mark">v1.2.0</div>
-      <div>
-        <h2>UPGRADING FROM 1.1.0 — READ FIRST</h2>
-        <p>v1.2.0 corrects behaviour that was previously wrong. <strong>A run that was green on 1.1.0 may legitimately fail on 1.2.0.</strong> Each of these is a correction, not a regression.</p>
-      </div>
-      <a href="docs.html#installation" data-od-id="read-upgrade-notice">Read upgrade details</a>
+    <section class="release-notice">
+      <div class="notice-mark">1.2.0-beta.1</div>
+      <div><h2>PRERELEASE CANDIDATE</h2><p>Beta focuses on deterministic HTTP and CLI assertions and trustworthy contract authoring and adjudication. It is not a stable release.</p></div>
+      <a href="docs.html#beta-scope">Read beta scope</a>
     </section>
 
-    <section class="landing-section trust-section" data-od-id="trust-model">
-      <div class="section-label">THE TRUST MODEL</div>
+    <section class="landing-section trust-section" id="trust-boundary">
+      <div class="section-label">THE MODEL</div>
       <div class="section-intro">
-        <h2>Intelligence can investigate. Only evidence can decide.</h2>
-        <p>Release-Harness pairs an <strong>AI Intelligence Layer</strong> with a <strong>Deterministic Core Engine</strong> — pure Node.js/Playwright/Docker with zero prompts and zero hallucinations.</p>
+        <h2>Accept intent. Bind execution. Seal what happened.</h2>
+        <p>The contract says what must hold. Bindings say where to look. Keeping those identities separate lets one proposition run locally and in CI without changing its meaning.</p>
       </div>
-      <ol class="evidence-chain" data-od-id="evidence-chain">
-        <li><span>01</span><strong>Project source</strong><small>.git tree (immutable)</small></li>
-        <li><span>02</span><strong>Materializer</strong><small>Isolated scratchpad</small></li>
-        <li><span>03</span><strong>Compose &amp; Playwright</strong><small>Origins + Egress Filter</small></li>
-        <li><span>04</span><strong>Sealer &amp; verdict</strong><small>SHA-256 Manifest</small></li>
+      <ol class="evidence-chain">
+        <li><span>01</span><strong>Author</strong><small>Draft + evidence record</small></li>
+        <li><span>02</span><strong>Accept</strong><small>Immutable proposition</small></li>
+        <li><span>03</span><strong>Execute</strong><small>HTTP or CLI binding</small></li>
+        <li><span>04</span><strong>Adjudicate</strong><small>Seal + verify chain</small></li>
       </ol>
-      <p class="boundary-note">An AI agent cannot prompt or talk a release into being green. If an agent modifies an evidence file or injects fake results, the SHA-256 evidence manifest checksum mismatch triggers an immediate <code>EVIDENCE_INVALID (Exit 4)</code>.</p>
+      <p class="boundary-note">A missing executable, unreachable endpoint, unresolved reference, or harness fault cannot become a PRODUCT accusation because of text printed by a process. Attribution is structural and conservative.</p>
     </section>
 
-    <section class="landing-section verdict-section" data-od-id="verdict-register">
-      <div class="section-label">VERDICT REGISTER</div>
-      <div class="section-intro">
-        <h2>Five exit codes. No ambiguous green.</h2>
-        <p>The evaluator derives the outcome from what happened, not from a report of what happened.</p>
-      </div>
+    <section class="landing-section verdict-section">
+      <div class="section-label">EXIT CONTRACT</div>
+      <div class="section-intro"><h2>Five exits. No ambiguous green.</h2><p>Automation receives the same decision a person reads.</p></div>
       <div class="verdict-grid">
-        <article class="verdict-row verdict-pass" data-od-id="landing-exit-0"><span class="verdict-code">0</span><div><strong>PASS</strong><p>All required &amp; conditional scenarios passed with verified side effects.</p></div><span>Ready for promotion / deployment.</span></article>
-        <article class="verdict-row verdict-fail" data-od-id="landing-exit-1"><span class="verdict-code">1</span><div><strong>FAIL</strong><p>One or more required scenarios failed due to product bugs or missing dependencies.</p></div><span>Patch code.</span></article>
-        <article class="verdict-row verdict-unproven" data-od-id="landing-exit-2"><span class="verdict-code">2</span><div><strong>UNPROVEN</strong><p>Preconditions unmet, active waivers present, or dirty git tree with <code>--allow-dirty</code>.</p></div><span>Stage missing fixtures or commit changes.</span></article>
-        <article class="verdict-row verdict-error" data-od-id="landing-exit-3"><span class="verdict-code">3</span><div><strong>HARNESS_ERROR</strong><p>Malformed scenario, missing runtime environment, or Docker Compose crash.</p></div><span>Verify prerequisites and Compose configuration.</span></article>
-        <article class="verdict-row verdict-invalid" data-od-id="landing-exit-4"><span class="verdict-code">4</span><div><strong>EVIDENCE_INVALID</strong><p>Evidence file tampering, injected logs, or SHA-256 checksum mismatch.</p></div><span>Clean corrupted workspace.</span></article>
+        <article class="verdict-row verdict-pass"><span class="verdict-code">0</span><div><strong>PASS</strong><p>An eligible certifying run held.</p></div><span>Verify the chain; promotion remains your decision.</span></article>
+        <article class="verdict-row verdict-fail"><span class="verdict-code">1</span><div><strong>ASSERTION VIOLATED</strong><p>A reached subject violated an accepted assertion.</p></div><span>Investigate the subject.</span></article>
+        <article class="verdict-row verdict-unproven"><span class="verdict-code">2</span><div><strong>UNPROVEN</strong><p>A draft is blocked or a run is exploratory.</p></div><span>Resolve evidence or semantic questions.</span></article>
+        <article class="verdict-row verdict-error"><span class="verdict-code">3</span><div><strong>USAGE / CONTRACT / BINDING</strong><p>Nothing valid was executed.</p></div><span>Correct the declaration or binding.</span></article>
+        <article class="verdict-row verdict-invalid"><span class="verdict-code">4</span><div><strong>HARNESS / INTEGRITY</strong><p>The run or its evidence cannot be trusted.</p></div><span>Preserve and investigate the evidence.</span></article>
       </div>
-      <a class="button-link" href="docs.html#core-invariants" data-od-id="read-exit-code-reference">Read exit-code reference</a>
     </section>
 
-    <section class="landing-section start-section" data-od-id="start-here">
-      <div class="section-label">START HERE</div>
+    <section class="landing-section start-section">
+      <div class="section-label">GET STARTED</div>
       <div class="start-grid">
-        <div>
-          <h2>Bring the harness into your project.</h2>
-          <p>Install the package into your project as a development dependency, verify the host, then scaffold project-owned contracts.</p>
-        </div>
+        <div><h2>Nothing is assumed at install time.</h2><p><code>init</code> installs the protocol and empty authoring space. It does not infer your subject, ports, URLs, repository roles, or assertions.</p></div>
         <div class="install-panel">
-          <div class="code-header"><span>TERMINAL</span><button class="copy-btn" type="button" data-od-id="copy-install">COPY</button></div>
-          <pre id="install-command"><code>npm install -D @xibodev/release-harness
+          <div class="code-header"><span>TERMINAL</span><button class="copy-btn" type="button">COPY</button></div>
+          <pre><code>npm install -D @xibodev/release-harness@1.2.0-beta.1
 npx release-harness doctor
-npx release-harness init</code></pre>
-          <a href="docs.html#onboarding-project">Follow the onboarding guide <span aria-hidden="true">→</span></a>
+npx release-harness init
+npx release-harness draft new example-tool</code></pre>
+          <a href="docs.html#getting-started">Follow the short lifecycle <span aria-hidden="true">→</span></a>
         </div>
       </div>
     </section>
   </main>
 
-  <footer class="site-footer" data-od-id="footer">
-    <span>RELEASED UNDER THE MIT LICENSE. COPYRIGHT © 2026 XIBODEV.</span>
-    <span><a href="https://github.com/xibodev/release-harness">GITHUB</a> · <a href="https://www.npmjs.com/package/@xibodev/release-harness">NPM</a></span>
-  </footer>
+  <footer class="site-footer"><span>MIT LICENSE · COPYRIGHT © 2026 XIBODEV</span><span><a href="https://github.com/xibodev/release-harness">GITHUB</a> · <a href="https://www.npmjs.com/package/@xibodev/release-harness">NPM</a></span></footer>
   <script src="app.js"></script>
 </body>
 </html>

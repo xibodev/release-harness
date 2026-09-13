@@ -25,7 +25,7 @@ import { cmdDoctor } from './doctor.js';
 
 export const COMMANDS = {
   init: { run: cmdInit, summary: 'install the harness; assert nothing about your project' },
-  draft: { run: cmdDraft, summary: 'create or inspect a proposal (new, list, status)' },
+  draft: { run: cmdDraft, summary: 'create or inspect a proposal (new, list, status, kinds)' },
   validate: { run: cmdValidate, summary: 'check artifacts against their schemas and semantics' },
   accept: { run: cmdAccept, summary: 'take responsibility for a resolved proposition' },
   bind: { run: cmdBind, summary: 'say where to reach the things a contract names' },
@@ -57,6 +57,7 @@ const HELP = {
     'release-harness draft new <name>     write an empty proposal',
     'release-harness draft list           show existing drafts',
     'release-harness draft status <name>  what is left to settle',
+    'release-harness draft kinds          assertion fields, types and values',
     '',
     'A draft is mutable and may be incomplete -- that is what distinguishes it',
     'from an accepted contract. Edit the two files it creates directly.',

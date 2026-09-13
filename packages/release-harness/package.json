@@ -1,7 +1,7 @@
 {
   "name": "@xibodev/release-harness",
-  "version": "1.2.0",
-  "description": "Portable, versioned release-harness assistant and quality gate runner for software projects",
+  "version": "1.2.0-beta.1",
+  "description": "Certify deliberately accepted release propositions with deterministic evidence",
   "type": "module",
   "main": "./index.js",
   "bin": {
@@ -16,8 +16,8 @@
     "index.js"
   ],
   "dependencies": {
-    "@xibodev/release-harness-core": "1.2.0",
-    "@xibodev/release-harness-schemas": "1.2.0"
+    "@xibodev/release-harness-core": "1.2.0-beta.1",
+    "@xibodev/release-harness-schemas": "1.2.0-beta.1"
   },
   "peerDependencies": {
     "playwright": ">=1.40.0"
@@ -32,10 +32,10 @@
   },
   "keywords": [
     "release-harness",
-    "quality-gate",
-    "uat",
-    "playwright",
-    "docker",
+    "release-contracts",
+    "deterministic",
+    "evidence",
+    "adjudication",
     "testing"
   ],
   "author": "XiboDev",

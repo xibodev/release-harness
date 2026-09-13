@@ -235,7 +235,20 @@ const runOut = execSync(`${npxCmd} release-harness run --binding local`, {
 });
 assert.match(runOut, /Certifying run/, 'the run must certify');
 assert.match(runOut, /Status: PASS/, 'and pass');
-console.log('  ✓ certifying run passed');
+
+// The facade version is the engine identity a consumer sees and the run seals.
+// A prerelease bump that updates package.json but not the run manifest would
+// produce a certificate misidentifying the engine that created it.
+const runId = fs.readdirSync(path.join(harnessDir, 'runs'))[0];
+const manifest = JSON.parse(
+  fs.readFileSync(path.join(harnessDir, 'runs', runId, 'manifest.json'), 'utf8')
+);
+assert.strictEqual(
+  manifest.harness_version,
+  corePkgVersion,
+  `run manifest must seal the installed engine version ${corePkgVersion}`
+);
+console.log(`  ✓ certifying run passed and sealed engine ${manifest.harness_version}`);
 
 const verifyOut = execSync(`${npxCmd} release-harness verify`, {
   cwd: consumerRepoDir,
