@@ -152,19 +152,62 @@ async function executeHttp(assertion, location, timeoutMs) {
 // ---------------------------------------------------------------------------
 
 /**
- * Characters that hand the string to a shell rather than to a program.
+ * Syntax that asks a shell to compose processes or redirect streams.
  *
- * A binding containing any of these is a pipeline, not a command: the failure
- * could come from any stage, and nothing structural can say which. Such a
- * binding cannot be preflighted, so its failures cannot be attributed.
+ * The process adapter never invokes a shell. This check therefore does not
+ * exist to escape punctuation; it catches a binding whose author meant a
+ * pipeline or redirection, because passing those tokens literally to the first
+ * executable would exercise something other than what they wrote.
+ *
+ * D42: the old character blacklist included backslash, quotes, parentheses,
+ * wildcards and other characters that are ordinary path data. On Windows it
+ * rejected every absolute executable path before `spawn(..., { shell:false })`
+ * had a chance to preserve it. Structure decides this now: an exact path is one
+ * executable, while actual composition operators are refused in command text.
  */
-const SHELL_METACHARACTERS = /[|&;<>()$`\\"'*?[\]{}~\n]/;
+const SHELL_COMPOSITION = /(?:&&|\|\||[|&;<>]|\$\(|`|\r|\n)/;
 
-/** Split a plain command into an executable and its operands. */
-function decompose(location) {
+/**
+ * Is the whole binding structurally an executable path?
+ *
+ * `path.win32` is used explicitly so Windows paths remain recognisable in
+ * cross-platform tests and tools. Existence is not required here: a missing
+ * absolute executable still needs to reach preflight unchanged so it can be
+ * reported as a structural binding failure rather than corrupted by parsing.
+ */
+function isExecutablePath(text, cwd, { allowMissingAbsolute = true } = {}) {
+  const absolute = path.isAbsolute(text) || path.win32.isAbsolute(text);
+  if (absolute && allowMissingAbsolute) return true;
+  const candidate = absolute ? text : path.resolve(cwd, text);
+  return fs.existsSync(candidate);
+}
+
+/** Split a direct-execution binding into an executable and its fixed operands. */
+function decompose(location, cwd) {
   const text = String(location).trim();
   if (!text) return { ok: false, reason: 'the binding is empty' };
-  if (SHELL_METACHARACTERS.test(text)) {
+
+  // Exact path identity wins before any command-line tokenisation. Spaces,
+  // backslashes, colons and parentheses are path data, and no shell ever sees
+  // them. No transport-layer quotes are stored or needed.
+  //
+  // Existing bindings may also carry fixed operands after an executable path.
+  // Find the longest whitespace-delimited prefix that is an existing
+  // executable first; only when none exists can an absolute string containing
+  // spaces be a missing executable path in its entirety.
+  const boundaries = [...text.matchAll(/\s+/g)].map((m) => m.index);
+  for (let i = boundaries.length - 1; i >= 0; i -= 1) {
+    const executable = text.slice(0, boundaries[i]);
+    if (!isExecutablePath(executable, cwd, { allowMissingAbsolute: false })) continue;
+    const operands = text.slice(boundaries[i]).trim().split(/\s+/).filter(Boolean);
+    return { ok: true, executable, operands };
+  }
+
+  if (isExecutablePath(text, cwd)) {
+    return { ok: true, executable: text, operands: [] };
+  }
+
+  if (SHELL_COMPOSITION.test(text) || /["']/.test(text)) {
     return {
       ok: false,
       reason:
@@ -172,6 +215,10 @@ function decompose(location) {
         'from outside',
     };
   }
+
+  // Fixed arguments in an existing string binding retain the established
+  // whitespace-token model. Assertion `expect.args` remains a string by design;
+  // D42 does not expand that model into quoting or shell parsing.
   const parts = text.split(/\s+/);
   return { ok: true, executable: parts[0], operands: parts.slice(1) };
 }
@@ -236,7 +283,7 @@ function preflight(location, cwd) {
     };
   }
 
-  const parts = decompose(location);
+  const parts = decompose(location, cwd);
   if (!parts.ok) {
     // Not a filesystem problem -- the command may well be valid. What it is is
     // unattributable, which the caller turns into a refusal to execute.
@@ -409,6 +456,12 @@ async function executeProcess(assertion, location, timeoutMs, cwd) {
         location,
         exit_code: code,
         expected_exit_code: expectedExit,
+        // D42: these are also structural evidence that parsing never changed
+        // the executable identity before direct launch.
+        executable_requested: pre.executable,
+        executable_spawned: pre.executable,
+        argv,
+        shell: false,
         stdout: stdout.slice(0, 4000),
         stderr: stderr.slice(0, 4000),
         ...(contains === null ? {} : { expected_stdout_contains: contains }),

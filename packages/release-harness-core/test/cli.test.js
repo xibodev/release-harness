@@ -278,6 +278,74 @@ function authorGreeterDraft(dir, { resolved = true } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// C3b  A Windows absolute executable survives the PUBLIC bind/run path.
+//
+// D42 lived below the CLI, but a library-only test is not enough: earlier
+// failures existed only after packaging or command parsing. This goes through
+// the product an operator gets -- bind, accepted contract, run, sealed evidence.
+// ---------------------------------------------------------------------------
+if (process.platform === 'win32') {
+  const dir = tmpProject('cli-win-absolute-');
+  const executable = String.raw`C:\Windows\System32\cmd.exe`;
+
+  rh(dir, ['init'], { expectOk: true });
+  rh(dir, ['draft', 'new', 'windows-tool'], { expectOk: true });
+
+  const draft = readJson(dir, `${DRAFT}/windows-tool.draft.json`);
+  draft.proposition.subject = { id: 'windows-tool', name: 'Windows command processor' };
+  draft.proposition.assertions = [
+    {
+      id: 'A1',
+      kind: 'cli',
+      target: 'tool',
+      description: 'the exact bound executable receives direct argv and exits as requested',
+      expect: { args: '/d /s /c exit 7', exit_code: 7 },
+      supported_by: ['system-executable'],
+    },
+  ];
+  draft.questions = [
+    {
+      id: 'Q1',
+      question: 'Is this the exact Windows executable this contract should exercise?',
+      blocking: true,
+      resolution: 'Yes. This focused regression deliberately certifies the system cmd.exe path.',
+      resolved_by: 'd42-regression',
+    },
+  ];
+  writeJson(dir, `${DRAFT}/windows-tool.draft.json`, draft);
+
+  const record = readJson(dir, `${DRAFT}/windows-tool.record.json`);
+  record.authored_by = 'd42-regression';
+  record.claims = [
+    {
+      id: 'system-executable',
+      claim: 'the Windows command processor exists at the bound absolute path',
+      status: 'observed',
+      evidence: { source: executable },
+    },
+  ];
+  writeJson(dir, `${DRAFT}/windows-tool.record.json`, record);
+
+  rh(dir, ['validate'], { expectOk: true });
+  rh(dir, ['accept', '--draft', 'windows-tool', '--by', 'd42-regression'], { expectOk: true });
+  rh(dir, ['bind', 'windows', '--target', `tool=${executable}`], { expectOk: true });
+
+  const run = rh(dir, ['run', '--binding', 'windows'], { expectOk: true });
+  assert.match(run.all, /Status: PASS/, 'the public run path reaches cmd.exe and sees exit 7');
+
+  const runId = fs.readdirSync(path.join(dir, '.release-harness', 'runs'))[0];
+  const evidence = readJson(dir, `.release-harness/runs/${runId}/evidence/probes/A1.json`);
+  assert.strictEqual(evidence.detail.executable_requested, executable);
+  assert.strictEqual(evidence.detail.executable_spawned, executable);
+  assert.deepStrictEqual(evidence.detail.argv, ['/d', '/s', '/c', 'exit', '7']);
+  assert.strictEqual(evidence.detail.shell, false);
+  assert.strictEqual(evidence.detail.subject_reached, true);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  pass('C3b', 'Windows absolute executable survives bind, run and sealed evidence unchanged');
+}
+
+// ---------------------------------------------------------------------------
 // C4  An exploratory run executes, and can never certify.
 // ---------------------------------------------------------------------------
 {
