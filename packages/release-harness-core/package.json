@@ -1,7 +1,7 @@
 {
   "name": "@xibodev/release-harness-core",
-  "version": "2.0.0",
-  "description": "Deterministic release-harness core engine and adjudication CLI",
+  "version": "1.2.0-beta.1",
+  "description": "Deterministic execution, evidence sealing, and adjudication for accepted release propositions",
   "type": "module",
   "bin": {
     "release-harness": "./bin/release-harness.js"
@@ -9,34 +9,32 @@
   "main": "./src/index.js",
   "exports": {
     ".": "./src/index.js",
-    "./cli": "./src/cli.js",
-    "./evaluator": "./src/evaluator.js",
-    "./runner": "./src/runner.js",
-    "./scenario-runner": "./src/scenario-runner.js",
-    "./playwright-adapter": "./src/playwright-adapter.js",
-    "./probes": "./src/probes.js",
+    "./cli": "./src/cli/index.js",
+    "./contract": "./src/contract.js",
+    "./draft": "./src/draft.js",
+    "./acceptance": "./src/acceptance.js",
+    "./attribution": "./src/attribution.js",
+    "./bindings": "./src/bindings.js",
+    "./run-manifest": "./src/run-manifest.js",
+    "./validator": "./src/validator.js",
     "./sealer": "./src/sealer.js",
-    "./redactor": "./src/redactor.js",
     "./materializer": "./src/materializer.js",
-    "./toolchain": "./src/toolchain.js",
-    "./validator": "./src/validator.js"
+    "./probes": "./src/probes.js",
+    "./redactor": "./src/redactor.js",
+    "./adjudicate": "./src/adjudicate.js",
+    "./execute": "./src/execute.js"
   },
   "files": [
     "bin",
     "src",
-    "templates"
+    "generated"
   ],
   "scripts": {
-    "test": "node test/index.js"
-  },
-  "dependencies": {
-    "@xibodev/release-harness-schemas": "2.0.0",
-    "ajv": "^8.17.1",
-    "playwright": "^1.50.0",
-    "yaml": "^2.7.0"
+    "test": "node test/index.js",
+    "prepack": "node ../../scripts/sync-protocol.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=18"
   },
   "keywords": [
     "release-harness",
@@ -51,5 +49,10 @@
     "type": "git",
     "url": "https://github.com/xibodev/release-harness.git",
     "directory": "packages/release-harness-core"
+  },
+  "dependencies": {
+    "@xibodev/release-harness-schemas": "1.2.0-beta.1",
+    "ajv": "^8.17.1",
+    "yaml": "^2.7.0"
   }
 }

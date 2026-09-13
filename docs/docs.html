@@ -3,416 +3,187 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Documentation | Release-Harness</title>
-  <meta name="description" content="Install Release-Harness, define project contracts, run local quality gates, and use sealed evidence in CI. Manual and AI-assisted guides.">
+  <title>Release-Harness Documentation</title>
+  <meta name="description" content="Beta documentation for accepted release propositions, deterministic execution, evidence sealing, and verification.">
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="docs-page">
+<body>
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <aside class="sidebar" aria-label="Documentation sidebar">
-    <a href="index.html" class="brand"><span class="brand-badge">RH</span><span class="brand-name">RELEASE-HARNESS</span></a>
-    <nav class="sidebar-site-nav" aria-label="Site navigation">
-      <a href="index.html">Overview</a><a href="#installation">Start here</a><a class="nav-current" href="docs.html" aria-current="page">Docs</a>
+  <aside class="sidebar">
+    <a href="index.html" class="brand"><div class="brand-badge">RH</div><div class="brand-name">RELEASE-HARNESS</div></a>
+    <div class="search-container"><label class="visually-hidden" for="search-input">Search documentation</label><span class="search-icon" aria-hidden="true">⌕</span><input type="search" id="search-input" class="search-input" placeholder="Search documentation…" autocomplete="off"><span class="search-shortcut" aria-hidden="true">/</span></div>
+    <nav class="sidebar-site-nav" aria-label="Site navigation"><a href="index.html">Overview</a><a class="nav-current" href="docs.html" aria-current="page">Documentation</a></nav>
+    <nav class="documentation-nav" aria-label="Documentation navigation">
+      <div class="nav-section"><div class="nav-header">Start</div><ul class="nav-links"><li><a href="#introduction" class="nav-link active">Introduction</a></li><li><a href="#getting-started" class="nav-link">Getting started</a></li><li><a href="#example" class="nav-link">CLI example</a></li></ul></div>
+      <div class="nav-section"><div class="nav-header">Model</div><ul class="nav-links"><li><a href="#authoring" class="nav-link">Authoring & acceptance</a></li><li><a href="#bindings" class="nav-link">Bindings & runs</a></li><li><a href="#references" class="nav-link">Normative references</a></li><li><a href="#trust-boundary" class="nav-link">Trust boundary</a></li></ul></div>
+      <div class="nav-section"><div class="nav-header">Reference</div><ul class="nav-links"><li><a href="#assertions" class="nav-link">Assertion vocabulary</a></li><li><a href="#commands" class="nav-link">Commands</a></li><li><a href="#exit-codes" class="nav-link">Exit codes</a></li><li><a href="#beta-scope" class="nav-link">Beta scope</a></li><li><a href="#feedback" class="nav-link">Feedback</a></li></ul></div>
     </nav>
-    <button id="contents-toggle" class="toggle-btn contents-toggle" type="button" aria-expanded="false" aria-controls="docs-navigation" hidden>Contents</button>
-    <div id="docs-navigation" class="docs-navigation">
-      <div class="search-container">
-        <label class="visually-hidden" for="search-input">Find a section</label>
-        <span class="search-icon" aria-hidden="true">⌕</span>
-        <input type="search" id="search-input" class="search-input" placeholder="Find a section..." autocomplete="off" aria-controls="search-results" aria-describedby="search-status">
-        <span class="search-shortcut" aria-hidden="true">/</span>
-      </div>
-      <p id="search-status" class="search-status" role="status"></p>
-      <ul id="search-results" class="nav-links search-results" aria-label="Matching sections" hidden></ul>
-      <nav class="documentation-nav" aria-label="Documentation navigation">
-        <div class="nav-section">
-          <div class="nav-header">Start</div>
-          <ul class="nav-links">
-            <li><a href="#introduction" class="nav-link">What it does</a></li>
-            <li><a href="#installation" class="nav-link">Install &amp; manual quickstart</a></li>
-            <li><a href="#ai-agent-onboarding" class="nav-link">Use with an AI agent</a></li>
-            <li><a href="#use-modes" class="nav-link">Development &amp; certification</a></li>
-          </ul>
-        </div>
-        <div class="nav-section">
-          <div class="nav-header">Use</div>
-          <ul class="nav-links">
-            <li><a href="#cli-commands" class="nav-link">CLI commands</a></li>
-            <li><a href="#project-contracts" class="nav-link">Project contracts</a></li>
-            <li><a href="#scenario-dsl" class="nav-link">Scenarios &amp; probes</a></li>
-            <li><a href="#playwright-adapter-guide" class="nav-link">Playwright adapter</a></li>
-            <li><a href="#ci-usage" class="nav-link">CI usage</a></li>
-            <li><a href="#core-invariants" class="nav-link">Verdicts &amp; evidence</a></li>
-          </ul>
-        </div>
-        <div class="nav-section">
-          <div class="nav-header">Understand &amp; extend</div>
-          <ul class="nav-links">
-            <li><a href="#architecture-pipeline" class="nav-link">Architecture &amp; security</a></li>
-            <li><a href="#contributing" class="nav-link">Contributing</a></li>
-            <li><a href="#roadmap-levels" class="nav-link">Capabilities &amp; roadmap</a></li>
-            <li><a href="#upgrades" class="nav-link">Versions &amp; upgrades</a></li>
-            <li><a href="#troubleshooting" class="nav-link">Troubleshooting</a></li>
-          </ul>
-        </div>
-      </nav>
-    </div>
-    <div class="sidebar-actions">
-      <div class="theme-toggle-bar"><span>THEME</span><button id="theme-toggle-btn" class="toggle-btn" type="button" aria-label="Switch to dark theme">DARK</button></div>
-      <div class="repository-labels"><a href="https://github.com/xibodev/release-harness">GitHub</a><a href="https://www.npmjs.com/package/@xibodev/release-harness">npm package</a></div>
-    </div>
+    <div class="sidebar-actions"><div class="theme-toggle-bar"><span>THEME:</span><button id="theme-toggle-btn" class="toggle-btn" type="button" aria-label="Switch to dark theme">DARK</button></div><div class="repository-labels"><a href="https://github.com/xibodev/release-harness">GitHub ↗</a><a href="https://www.npmjs.com/package/@xibodev/release-harness">npm ↗</a></div></div>
   </aside>
 
-  <main id="main-content" class="content">
+  <main class="content" id="main-content">
     <header class="hero">
-      <p class="eyebrow">PRODUCT DOCUMENTATION</p>
-      <h1>From project contracts to a local gate.</h1>
-      <p class="subtitle">Define what your product must do. Run it in a detached workspace. Inspect a deterministic verdict backed by sealed evidence.</p>
-      <a class="button-primary" href="#installation">Start manually <span aria-hidden="true">→</span></a>
-      <a class="button-link" href="#ai-agent-onboarding">Use an AI agent</a>
+      <div class="status-pill"><span class="status-dot"></span><span>1.2.0-beta.1 · PUBLIC BETA</span></div>
+      <h1>Deliberate propositions. Deterministic evidence.</h1>
+      <p class="subtitle">Release-Harness gives human and agent authors one contract model and gives automation a deterministic adjudicator that cannot be talked into green.</p>
+      <div class="code-header"><span>INSTALL THE PUBLIC BETA</span><button class="copy-btn" type="button">COPY</button></div>
+      <pre><code>npm install -D @xibodev/release-harness@1.2.0-beta.1</code></pre>
     </header>
 
     <section id="introduction">
-      <h2>What it does</h2>
-      <p>Release-Harness is an npm development dependency for project-owned quality gates. <code>check-pr</code> validates contracts and runs configured checks; <code>run-local</code> runs declarative browser scenarios and side-effect probes, then evaluates sealed evidence.</p>
-      <p>Use it directly in a terminal or let an AI coding agent prepare contracts and run commands. AI assistance is optional. A local <code>PASS</code> proves the declared gate, not production readiness beyond that gate.</p>
-      <p>This site documents the published <a href="https://github.com/xibodev/release-harness/releases/tag/v2.0.0">2.0.0 release</a>. See <a href="#upgrades">versions &amp; upgrades</a> for migration from 1.2.0.</p>
+      <h2>Introduction</h2>
+      <p>Agents and people author the same contract artifacts under the frozen model <code>subject + assertions + requires + execution bindings</code>. The deterministic core decides from accepted identity and sealed evidence.</p>
+      <div class="grid-2">
+        <div class="tech-card"><div class="card-tag">AUTHORING</div><div class="card-title">Evidence before acceptance</div><div class="card-desc">Drafts remain mutable and may be incomplete. Claims distinguish observed facts, bounded absence, source-asserted absence, inference, and what is not established.</div></div>
+        <div class="tech-card"><div class="card-tag">IDENTITY</div><div class="card-title">Content-addressed contracts</div><div class="card-desc">Acceptance freezes the proposition. Changing an assertion or normative reference creates a different digest; changing a local binding does not.</div></div>
+        <div class="tech-card"><div class="card-tag">EXECUTION</div><div class="card-title">HTTP and CLI</div><div class="card-desc">The beta supports deterministic status/body checks and direct command exit/stdout/stderr checks with independently captured streams.</div></div>
+        <div class="tech-card"><div class="card-tag">CHAIN OF CUSTODY</div><div class="card-title">Sealed and verifiable</div><div class="card-desc">Evidence is sealed before adjudication. Verification checks the contract, evidence, verdict, and links between them.</div></div>
+      </div>
     </section>
 
-    <section id="installation">
-      <h2>Install &amp; manual quickstart</h2>
-      <p>No AI host is required. Start in your product's Git repository with npm and Git. Version 2.0.0 requires Node.js 20+; Node.js 20 is the CI-tested baseline, not a guarantee that every newer runtime is tested. Local Compose UAT also needs a running Docker Engine, Compose, and Playwright Chromium.</p>
-      <div class="code-header"><span>INSTALL IN YOUR PRODUCT</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>npm install -D @xibodev/release-harness@2.0.0 playwright
-npx playwright install chromium
-npx release-harness --version
-npx release-harness doctor
-npx release-harness init --contracts-only</code></pre>
-      <p><code>init</code> writes contracts only, just like <code>init --contracts-only</code>. It does not discover your app, start services, or generate passing tests. Read doctor warnings even when it exits successfully.</p>
-      <h3 id="onboarding-project">Configure your product</h3>
+    <section id="getting-started">
+      <h2>Getting started</h2>
+      <p>The short lifecycle is:</p>
+      <pre><code>init → draft → inspect / resolve questions → validate → accept → bind → run → verify</code></pre>
       <ol>
-        <li>Edit <code>.release-harness/topology.json</code> to describe your services and real HTTP or TCP health probes.</li>
-        <li>Set <code>origins.json</code> URLs to your test services. Match each scenario's <code>origin_id</code> to an origin.</li>
-        <li>Replace the generated smoke scenario with an assertion your application actually satisfies. Add independent probes for important side effects.</li>
-        <li>Provide <code>docker-compose.test.yml</code> in the project root for an isolated test stack. The runner falls back to <code>docker-compose.yml</code>; review that file before running it. Without either file, it uses services you have already started.</li>
-        <li>Review the <a href="#project-contracts">contracts</a>, then run a development baseline below. Commit non-secret contracts, fixtures, and dependency changes before clean certification.</li>
+        <li><strong>Initialize:</strong> <code>release-harness init</code> installs the protocol and empty authoring directories. It asserts nothing about the project.</li>
+        <li><strong>Draft:</strong> run <code>release-harness draft new example-tool</code>, inspect the project, and edit the draft plus record. A draft may be valid but incomplete.</li>
+        <li><strong>Validate:</strong> <code>release-harness validate</code> checks schema and semantics. <code>release-harness draft status example-tool</code> lists unresolved blockers.</li>
+        <li><strong>Accept:</strong> <code>release-harness accept --draft example-tool --by "release owner"</code> records responsibility and freezes identity. It is not proof.</li>
+        <li><strong>Bind and run:</strong> bind each symbolic target to a URL or direct executable, then run the accepted contract. Only an eligible accepted contract can certify.</li>
+        <li><strong>Verify:</strong> <code>release-harness verify</code> checks chain of custody after the run.</li>
       </ol>
-      <p>Existing files are preserved. <strong><code>init --force</code> and <code>init --overwrite</code> reset contracts as well as agent files.</strong> They are not upgrade commands. Use <code>init --dry-run</code> to preview scaffolding.</p>
+      <div class="callout"><div class="callout-title">AGENT-ASSISTED ADOPTION</div><p>An agent follows the same installed <code>.release-harness/protocol/ADOPTION.md</code>, authors the same artifacts, and encounters the same acceptance blockers. It cannot override adjudication or answer operator questions on its own.</p></div>
     </section>
 
-    <section id="ai-agent-onboarding">
-      <h2>Use with an AI agent</h2>
-      <p>The same contracts and CLI apply. <code>init --with-agents</code> adds the <code>release-conductor</code> persona, <code>AI-ADOPTION.md</code>, and namespaced skill playbooks. Installing the npm dependency alone does not copy them into your project.</p>
-      <div class="code-header"><span>OPTIONAL AGENT SCAFFOLDING</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>npx release-harness init --with-agents</code></pre>
-      <p id="release-conductor-agent">Templates support Claude Code, GitHub Copilot, opencode, and shared agent instructions for Cursor/Codex. Use your host's documented agent selection and reload mechanism; disk files are not proof of host registration.</p>
-      <h3 id="skill-catalog">Skill discovery</h3>
-      <p>Version 2.0.0 includes 18 playbooks, read-only discovery, and the shared <code>.agents/skills/</code> scaffold target. With the package installed in your product, inspect:</p>
-      <div class="code-header"><span>FROM YOUR PRODUCT DIRECTORY</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>npx release-harness skills list
-npx release-harness skills info project-cartographer</code></pre>
-      <p><code>info</code> accepts bare or prefixed names. Invoke playbooks by their <code>release-harness-*</code> names. Reload the host if needed and verify its catalog; <code>/init</code> is not a portable reload command.</p>
-      <h3 id="ai-prompts">Delegate work, review artifacts</h3>
-      <div class="code-header"><span>EXAMPLE PROMPT FOR A HOST WITH THE BUNDLE LOADED</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre class="prose-code"><code>Use release-harness-project-cartographer to derive topology and origins from our services. Use release-harness-scenario-compiler to compile journeys with independent side-effect probes. Present the contract diff for review. Then use release-conductor to run the local gate with an external evidence root and report its verdict and causes. Propose targeted fixes before changing code; preserve unrelated working changes.</code></pre>
-      <p>Playbooks guide discovery, scenario design, audits, and remediation. They are not executable scanners or infrastructure installers. They need host file/shell tools; screenshot review also needs image input. Missing tools mean deferred checks, not passes.</p>
-      <p id="deterministic-boundary"><strong>Authority boundary:</strong> AI review, risk scores, and verbal approval cannot replace the deterministic CLI result or weaken the contracts to make a run green.</p>
+    <section id="example">
+      <h2>One honest CLI example</h2>
+      <p>This fictional command is deliberately generic:</p>
+      <pre><code>// example-tool.js
+const name = process.argv[2] ?? 'world';
+console.log(`hello, ${name}`);</code></pre>
+      <p>The evidence record cites what was actually inspected:</p>
+      <pre><code>{
+  "id": "prints-greeting",
+  "claim": "example-tool.js prints a greeting and exits 0",
+  "status": "observed",
+  "evidence": { "source": "example-tool.js:1-2" }
+}</code></pre>
+      <p>The draft asserts only what that evidence supports:</p>
+      <pre><code>{
+  "id": "A1",
+  "kind": "cli",
+  "target": "tool",
+  "description": "the CLI prints a greeting and exits cleanly",
+  "expect": {
+    "args": "Ada",
+    "exit_code": 0,
+    "stdout_contains": "hello, Ada"
+  },
+  "supported_by": ["prints-greeting"]
+}</code></pre>
+      <pre><code>release-harness validate --draft example-tool
+release-harness accept --draft example-tool --by "release owner"
+release-harness bind local --target "tool=node example-tool.js"
+release-harness run --binding local
+release-harness verify</code></pre>
+      <p>A PASS proves that accepted assertion held at that binding. It proves nothing else about the program.</p>
     </section>
 
-    <section id="use-modes">
-      <h2>Development &amp; certification</h2>
-      <p>Choose an evidence root <strong>outside your product repository</strong>. The following examples use a sibling directory. Run IDs must be unique: replace these example IDs for every new run; reusing one can mix or overwrite evidence.</p>
-      <h3 id="interactive-demo">Example commands</h3>
-      <p>Run these commands from your configured product directory.</p>
-      <div class="code-header"><span>DEVELOPMENT: UNCOMMITTED CHANGES ALLOWED</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>npx release-harness run-local --allow-dirty --evidence-dir ../rh-evidence --run-id dev-001</code></pre>
-      <p>A dirty development run is non-certifying: a would-be pass or product failure becomes <code>UNPROVEN</code> (exit 2). Inspect the underlying failures. Harness and integrity faults still return exits 3 and 4. A clean tree is not made dirty merely by passing the flag.</p>
-      <div class="code-header"><span>CERTIFICATION: CLEAN, REVIEWED SOURCE</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>npx release-harness check-pr
-npx release-harness run-local --evidence-dir ../rh-evidence --run-id release-001</code></pre>
-      <p>Ignored files do not reach the detached workspace. Nonignored untracked files are included only with <code>--allow-dirty</code>. Supply secrets through approved runtime configuration, never committed fixtures.</p>
+    <section id="authoring">
+      <h2>Authoring and acceptance</h2>
+      <p>The authoring plane keeps mutable drafts separate from immutable contracts. A claim has one of five statuses:</p>
+      <table class="tech-table"><thead><tr><th>Status</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td><code>observed</code></td><td>A cited source or completed probe directly establishes the claim.</td></tr>
+        <tr><td><code>observed_absent</code></td><td>A bounded, completed search records its method, roots, exclusions, and completion.</td></tr>
+        <tr><td><code>asserted_absent</code></td><td>A source or test explicitly says something must not exist.</td></tr>
+        <tr><td><code>inferred</code></td><td>A reasoned conclusion, never silently upgraded to observation.</td></tr>
+        <tr><td><code>not_established</code></td><td>The available inspection cannot establish the proposition.</td></tr>
+      </tbody></table>
+      <p>Blocking semantic questions remain open until evidence or an accountable operator resolves them. Acceptance records that responsibility and emits an immutable content-addressed contract. It does not say the software has passed.</p>
     </section>
 
-    <section id="cli-commands">
+    <section id="bindings">
+      <h2>Bindings, exploratory runs, and certification</h2>
+      <p>Assertions name symbolic targets. A binding resolves those symbols for one environment:</p>
+      <pre><code>release-harness bind local \
+  --target "api=http://127.0.0.1:8080" \
+  --target "tool=node example-tool.js"</code></pre>
+      <p>Bindings are recorded in run identity but excluded from proposition identity. Direct CLI execution uses an executable plus argv with <code>shell: false</code>. Windows absolute paths, paths with spaces, POSIX paths, and PATH command names are supported; shell composition belongs in an explicitly reviewed wrapper script.</p>
+      <p><code>run --draft ... --exploratory</code> provides authoring feedback but always remains UNPROVEN. A certifying run requires an accepted contract, complete bindings, and resolvable normative references before any assertion executes.</p>
+    </section>
+
+    <section id="references">
+      <h2>Normative references and multiple repositories</h2>
+      <p>If another exact accepted contract changes what this subject's assertions mean, record its <code>{ ref, digest }</code> under <code>requires</code>. That digest participates in contract identity. A package dependency or adjacent repository is not automatically normative.</p>
+      <p>Authors may inspect another repository when local evidence establishes relevance: a manifest dependency, workflow reference, generated schema source, deployment input, or explicit documentation pointer. If the relationship is real but no exact accepted digest can be established, leave the question unresolved. Do not invent a topology, repository role, or placeholder digest.</p>
+    </section>
+
+    <section id="trust-boundary">
+      <h2>Trust boundary</h2>
+      <ul>
+        <li>Only a reached subject violating an accepted assertion may receive a PRODUCT finding.</li>
+        <li>Missing executables, missing file operands, unreachable endpoints, unresolved references, and harness faults retain non-product causes.</li>
+        <li>stderr may satisfy an author-written assertion, but unexpected stderr never determines attribution.</li>
+        <li>Evidence is sealed before adjudication; post-seal writes and broken chain links fail closed.</li>
+        <li>Neither a human explanation nor an AI recommendation can override the deterministic verdict.</li>
+      </ul>
+    </section>
+
+    <section id="assertions">
+      <h2>Assertion vocabulary</h2>
+      <p>Use <code>release-harness draft kinds</code> for the installed schema-derived vocabulary.</p>
+      <table class="tech-table"><thead><tr><th>Kind</th><th>Expectation fields</th><th>What it proves</th></tr></thead><tbody>
+        <tr><td><code>http</code></td><td><code>method</code>, <code>path</code>, <code>status</code>, <code>body_contains</code></td><td>A reached HTTP target returned the accepted deterministic status/body property.</td></tr>
+        <tr><td><code>cli</code></td><td><code>args</code>, <code>exit_code</code>, <code>stdout_contains</code>, <code>stderr_contains</code></td><td>A directly launched executable returned the accepted exit/output property.</td></tr>
+      </tbody></table>
+      <p>stdout and stderr stay separate. The vocabulary is intentionally small; additions require a demonstrated proposition, not a repository taxonomy.</p>
+    </section>
+
+    <section id="commands">
       <h2>CLI commands</h2>
-      <p>Run <code>npx release-harness --help</code> for the CLI you installed. Flags are command-specific.</p>
-      <table class="tech-table">
-        <thead><tr><th scope="col">Command</th><th scope="col">Purpose &amp; options</th></tr></thead>
-        <tbody>
-          <tr><td><code>doctor</code></td><td>Inspect host tools and discovered contracts. Takes no arguments; read warnings.</td></tr>
-          <tr><td><code>init</code></td><td>Contracts by default. Options: <code>--contracts-only</code> or <code>--with-agents</code> (mutually exclusive), <code>--dry-run</code>, <code>--force</code>/<code>--overwrite</code>.</td></tr>
-          <tr><td><code>skills list</code><br><code>skills info &lt;name&gt;</code></td><td>Inspect bundled playbooks and local scaffold files without writing. Does not query the host registry.</td></tr>
-          <tr><td><code>check-pr</code></td><td>Validate contracts/provenance and run <code>pr_gate.commands</code> in the product working directory. Option: <code>--allow-dirty</code>. Dirty mode can return early before commands execute.</td></tr>
-          <tr><td><code>run-local</code></td><td>Detached local UAT. Options: <code>--evidence-dir &lt;root&gt;</code>, <code>--run-id &lt;id&gt;</code>, <code>--port-offset &lt;integer&gt;</code>, <code>--allow-dirty</code>, <code>--time &lt;ISO timestamp&gt;</code>.</td></tr>
-          <tr><td><code>evaluate</code></td><td>Replay sealed evidence. Requires <code>--evidence-dir &lt;run evidence directory&gt;</code>; use the original <code>--run-id</code> and <code>--time</code> for a repeatable comparison.</td></tr>
-          <tr><td><code>clean</code></td><td>Remove a run's workspace and labelled containers. Supply both <code>--run-id &lt;id&gt;</code> and <code>--evidence-dir &lt;root&gt;</code> to keep cleanup scoped.</td></tr>
-        </tbody>
-      </table>
-      <p><code>--port-offset</code> shifts browser and health/probe ports. It does not rewrite Compose port mappings: your test stack must publish the corresponding ports. The runner provides <code>RUN_ID</code> and <code>PORT_OFFSET</code> to Compose.</p>
+      <table class="tech-table"><thead><tr><th>Command</th><th>Purpose</th></tr></thead><tbody>
+        <tr><td><code>doctor</code></td><td>Report installed artifacts and whether anything is currently certifiable.</td></tr>
+        <tr><td><code>init</code></td><td>Install harness-owned bootstrap state without describing the project.</td></tr>
+        <tr><td><code>draft</code></td><td>Create or inspect proposals and show the assertion vocabulary.</td></tr>
+        <tr><td><code>validate</code></td><td>Check schemas and readiness without accepting anything.</td></tr>
+        <tr><td><code>accept</code></td><td>Take responsibility for a resolved proposition and freeze its identity.</td></tr>
+        <tr><td><code>bind</code></td><td>Resolve symbolic targets outside the contract.</td></tr>
+        <tr><td><code>run</code></td><td>Exercise an accepted contract or an explicitly exploratory draft.</td></tr>
+        <tr><td><code>verify</code></td><td>Check the run's contract, evidence, verdict, and links.</td></tr>
+      </tbody></table>
     </section>
 
-    <section id="project-contracts">
-      <h2>Project contracts</h2>
-      <p>Keep contracts under <code>.release-harness/</code>. The CLI reads these standard paths; a schema field is not by itself a promise that every runtime consumes it. The <a href="https://github.com/xibodev/release-harness/tree/main/packages/release-harness-schemas/schemas">JSON schemas</a> define accepted shapes.</p>
-      <h3>Topology</h3>
-      <p>This example assumes a project-root application serving <code>Welcome</code> at <code>http://127.0.0.1:3000/</code>. Start it yourself or provide the Compose file described in the quickstart. Replace this assumption with your real application; these contracts do not implement a server.</p>
-      <div class="code-header"><span>.release-harness/topology.json</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre data-contract="topology"><code>{
-  "schema_version": "1.0.0",
-  "product_slug": "my-project",
-  "topology_type": "monorepo",
-  "network_policy": { "mode": "sealed", "allowed_egress": [] },
-  "nodes": [{
-    "id": "web",
-    "path": ".",
-    "type": "browser_app",
-    "served_origin_id": "web-app",
-    "health_probe": {
-      "type": "http", "host": "127.0.0.1", "port": 3000,
-      "path": "/", "expected_status": 200
-    }
-  }]
-}</code></pre>
-      <h3>Origins</h3>
-      <p>An origin resolves to an HTTP(S) URL, either directly or through <code>env:APP_URL (default http://127.0.0.1:3000)</code>. <code>safe_for_live</code> is a declaration, not authorization to test production.</p>
-      <div class="code-header"><span>.release-harness/origins.json</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre data-contract="origins"><code>[{
-  "origin_id": "web-app",
-  "type": "browser_app",
-  "auth": "none",
-  "url_source": "http://127.0.0.1:3000",
-  "route_families": ["/"],
-  "safe_for_live": false,
-  "evidence": ["package.json"]
-}]</code></pre>
-      <h3>Harness configuration</h3>
-      <p>Keep the generated <code>schema_version</code>, <code>harness_version</code>, and <code>port_block</code>. Set <code>product_slug</code> to match topology (<code>my-project</code> for the example). To enable PR checks, merge this fragment into <code>harness.config.json</code>, using scripts your product defines:</p>
-      <div class="code-header"><span>CONFIG FRAGMENT: PRODUCT MUST DEFINE npm test</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre data-contract="config-fragment"><code>{
-  "pr_gate": {
-    "commands": [{
-      "id": "tests", "cmd": "npm test",
-      "timeout_seconds": 120, "expected_exit_code": 0
-    }]
-  }
-}</code></pre>
-      <p><code>check-pr</code> does not infer lint or test scripts. Configure the commands you need. These commands execute in your checkout, not the detached UAT workspace.</p>
+    <section id="exit-codes">
+      <h2>Exit codes</h2>
+      <table class="tech-table"><thead><tr><th>Exit</th><th>Meaning</th></tr></thead><tbody>
+        <tr class="exit-code exit-0"><td><code>0</code></td><td>Command succeeded; for a run, an eligible certifying run passed.</td></tr>
+        <tr class="exit-code exit-1"><td><code>1</code></td><td>An accepted assertion against a reached subject was violated.</td></tr>
+        <tr class="exit-code exit-2"><td><code>2</code></td><td>Nothing was proven: a valid draft may be blocked, or a run exploratory.</td></tr>
+        <tr class="exit-code exit-3"><td><code>3</code></td><td>Usage, contract, or binding problem; nothing ran.</td></tr>
+        <tr class="exit-code exit-4"><td><code>4</code></td><td>Harness, environment, or evidence-integrity failure.</td></tr>
+      </tbody></table>
     </section>
 
-    <section id="scenario-dsl">
-      <h2>Scenarios &amp; probes</h2>
-      <p>Each JSON or YAML scenario in <code>.release-harness/scenarios/</code> declares an ID, origin, tier, policy, and browser steps. This smoke scenario matches the topology and origin above.</p>
-      <div class="code-header"><span>.release-harness/scenarios/smoke.json</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre data-contract="scenario"><code>{
-  "id": "SMOKE-001",
-  "name": "Landing page availability",
-  "origin_id": "web-app",
-  "tier": "smoke",
-  "policy": "required",
-  "steps": [
-    { "action": "navigate", "target": "/" },
-    { "action": "assert", "target": "text:Welcome" },
-    { "action": "screenshot" }
-  ]
-}</code></pre>
-      <p>Supported actions: <code>navigate</code>, <code>fill</code>, <code>click</code>, <code>select</code>, <code>check</code>, <code>upload</code>, <code>wait-for</code>, <code>assert</code>, and <code>screenshot</code>. Assertions accept a selector, <code>text:...</code>, or <code>url:...</code>. Upload paths are passed directly to Playwright: relative paths resolve from the CLI working directory, not the detached workspace. Use reviewed nonsecret fixtures and do not assume upload contents are bound to detached-source provenance.</p>
-      <h3 id="negative-controls">Negative controls</h3>
-      <p>Prove an expected rejection, not just a successful happy path. Add the following fragment to a scenario whose steps submit invalid credentials to your app. Both the observed status and rejection reason must match.</p>
-      <pre data-contract="negative-fragment"><code>{
-  "negative_control": {
-    "expected_http_status": 401,
-    "expected_rejection_reason": "invalid_credentials"
-  }
-}</code></pre>
-      <h3 id="side-effects">Independent side-effect probes</h3>
-      <p>Supported service probes cover MinIO/S3 object presence or absence, Redis keys/values, and Mailpit messages. Add <code>expected_side_effects</code> to the scenario that produces the effect. Seed isolated test services first; do not point these examples at customer data.</p>
-      <div class="code-header"><span>SCENARIO FRAGMENT: LOCAL TEST OBJECT</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre data-contract="s3-fragment"><code>{
-  "expected_side_effects": [{
-    "service": "minio",
-    "probe_type": "s3_object_exists",
-    "params": {
-      "host": "127.0.0.1", "port": 9000,
-      "bucket": "test-documents", "key": "sample.txt"
-    }
-  }]
-}</code></pre>
-      <p>The S3 probe uses <code>key</code>, not a prefix, and performs an HTTP object read without AWS request signing. Use an isolated readable test endpoint, not private production storage.</p>
-      <h3>Custom probes</h3>
-      <p>Use a reviewed project script to assert on a generated file or query test database state. This fragment assumes <code>scripts/probe-artifact.mjs</code> exists in your product and can access <code>output/report.pdf</code> from the detached workspace.</p>
-      <div class="code-header"><span>SCENARIO FRAGMENT: PROJECT-OWNED ASSERTION</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre data-contract="custom-fragment"><code>{
-  "expected_side_effects": [{
-    "service": "custom",
-    "probe_type": "custom",
-    "params": {
-      "command": "node",
-      "args": ["scripts/probe-artifact.mjs", "output/report.pdf"],
-      "expect_exit_code": 0,
-      "timeoutMs": 60000
-    }
-  }]
-}</code></pre>
-      <p>The command runs without shell interpolation, with the materialized workspace as its default working directory. Its numeric exit is compared with <code>expect_exit_code</code> (default 0); a mismatch is a product assertion failure. Invalid configuration, inability to start the command, timeouts, output overflow, and evidence-write failures are harness errors, not failed product assertions.</p>
-      <p>Captured output is bounded and stored under <code>evidence/probes/</code>. Keep diagnostics free of secrets. Custom commands are trusted code, not sandboxed or made offline by the harness. There is no <code>expect_stdout_contains</code>; assert inside your script.</p>
-      <p><strong><code>sql_query</code> is not implemented.</strong> It fails closed as a harness configuration error. Use a custom probe with your own query tool to verify database state.</p>
+    <section id="beta-scope">
+      <h2>Beta scope and limitations</h2>
+      <div class="callout warning"><div class="callout-title">BETA, NOT STABLE</div><p>Beta focuses on deterministic HTTP and CLI release assertions and on trustworthy contract authoring and adjudication. The assertion vocabulary will expand from demonstrated certification needs rather than repository taxonomy.</p></div>
+      <p>A PASS is scoped to the accepted assertions, exact normative references, source, and binding recorded for that run. It is not proof of complete coverage, security, production readiness, or authorization to deploy. Release-Harness directly executes trusted project commands and is not a sandbox.</p>
     </section>
 
-    <section id="playwright-adapter-guide">
-      <h2>Playwright adapter</h2>
-      <p><code>PlaywrightSuiteAdapter</code> is an exported <strong>programmatic adapter</strong> for existing suites. It executes Playwright's JSON reporter and returns normalized results. It is not wired into <code>run-local</code> and does not produce a sealed gate by itself.</p>
-      <div class="code-header"><span>NODE.JS MODULE: RUN FROM YOUR PRODUCT ROOT</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>import { PlaywrightSuiteAdapter } from
-  '@xibodev/release-harness-core/playwright-adapter';
-
-const adapter = new PlaywrightSuiteAdapter({
-  workingDir: './e2e',
-  configPath: './e2e/playwright.config.ts',
-});
-const result = await adapter.executeSuite();
-console.log(result);</code></pre>
-      <p>Install the core package directly for programmatic use, along with your suite's Playwright dependencies. <code>workingDir</code> and <code>configPath</code> resolve from the calling process's directory. Supply <code>expectedTestIds</code> only using IDs confirmed in your JSON report.</p>
-      <p>Attachment paths are returned in <code>evidence_files</code>; files are not copied or sealed. Your integration must collect attachments, bind the policy and expected inventory, seal evidence, and invoke evaluation. Skipped results are recorded, not automatically rejected as required-test failures by the adapter.</p>
-    </section>
-
-    <section id="ci-usage">
-      <h2>CI usage</h2>
-      <p>Run <code>check-pr</code> on pull requests and local UAT on reviewed release changes. Pin dependencies with your lockfile. Use isolated runners with only test credentials: project scripts and Compose files execute code.</p>
-      <p>This GitHub Actions example assumes committed contracts, a test Compose stack, <code>playwright</code> in dev dependencies, and configured <code>pr_gate.commands</code>. Separate PR and release jobs if their trust levels differ.</p>
-      <div class="code-header"><span>EXAMPLE .github/workflows/quality.yml</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>name: Quality gate
-on: [push, pull_request]
-permissions:
-  contents: read
-jobs:
-  local-uat:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npx release-harness check-pr
-      - name: Run local UAT
-        run: &gt;-
-          npx release-harness run-local
-          --evidence-dir "${{ runner.temp }}/rh-evidence"
-          --run-id "ci-${{ github.run_id }}-${{ github.run_attempt }}"
-      - name: Retain evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-evidence
-          path: ${{ runner.temp }}/rh-evidence/runs
-          retention-days: 7</code></pre>
-      <p>Keep evidence access restricted and choose retention deliberately. Screenshots, request data, and probe output may contain sensitive data. An early failure may leave no verdict or artifact; don't report a pass because an upload succeeded.</p>
-    </section>
-
-    <section id="core-invariants">
-      <h2>Verdicts &amp; evidence</h2>
-      <table class="tech-table">
-        <thead><tr><th scope="col">Status</th><th scope="col">Exit</th><th scope="col">Meaning &amp; next action</th></tr></thead>
-        <tbody>
-          <tr class="exit-code exit-0"><td><code>PASS</code></td><td><code>0</code></td><td>The declared gate passed. This is not a deployment command or proof of checks you did not declare.</td></tr>
-          <tr class="exit-code exit-1"><td><code>FAIL</code></td><td><code>1</code></td><td>A gate failed, or the CLI rejected the run before a verdict. Inspect causes and diagnostics.</td></tr>
-          <tr class="exit-code exit-2"><td><code>UNPROVEN</code></td><td><code>2</code></td><td>Unmet conditions, waivers, or dirty development. Resolve underlying failures before clean certification.</td></tr>
-          <tr class="exit-code exit-3"><td><code>HARNESS_ERROR</code></td><td><code>3</code></td><td>Configuration, environment, probe, or startup fault. UNKNOWN means unresolved attribution, not proof of a product bug.</td></tr>
-          <tr class="exit-code exit-4"><td><code>EVIDENCE_INVALID</code></td><td><code>4</code></td><td>Evidence failed integrity verification. Preserve the run; investigate before cleanup. Do not edit or reseal it to force a pass.</td></tr>
-        </tbody>
-      </table>
-      <p>For <code>--evidence-dir ../rh-evidence --run-id release-001</code>, inspect <code>../rh-evidence/runs/release-001/verdict.json</code>, its sibling <code>run.manifest.json</code>, and sealed files in <code>evidence/</code>.</p>
-      <div class="code-header"><span>REPLAY AN EXISTING RUN</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>npx release-harness evaluate --evidence-dir ../rh-evidence/runs/release-001/evidence --run-id release-001</code></pre>
-      <p>For time-sensitive policy comparisons, add <code>--time</code> with the original evaluation timestamp. Unlike <code>run-local</code>, <code>evaluate</code> takes the evidence directory itself, not the output root. It prints a verdict; it does not rerun the application.</p>
-      <p>Startup observations are sealed when finalization succeeds, and replay preserves recorded network/harness faults. Arbitrary startup logs are omitted for secret safety. If no verdict was produced, report the diagnostic rather than inventing a result.</p>
-      <div class="code-header"><span>SCOPED CLEANUP, AFTER EVIDENCE REVIEW</span><button class="copy-btn" type="button">COPY</button></div>
-      <pre><code>npx release-harness clean --run-id release-001 --evidence-dir ../rh-evidence</code></pre>
-      <p>Omitting <code>--run-id</code> broadens container cleanup to other harness runs. Cleanup is not evidence repair.</p>
-    </section>
-
-    <section id="architecture-pipeline">
-      <h2>Architecture &amp; security</h2>
-      <p>The public <code>@xibodev/release-harness</code> CLI delegates to <code>@xibodev/release-harness-core</code>. The core provides materialization, runners, probes, sealing, and evaluation; <code>@xibodev/release-harness-schemas</code> defines the contracts.</p>
-      <ol class="architecture-steps">
-        <li><strong>Read project intent.</strong> Validate topology, origins, and scenarios.</li>
-        <li><strong>Materialize source.</strong> Copy eligible source into an external workspace and record provenance.</li>
-        <li><strong>Run local checks.</strong> Start the selected Compose stack, drive Chromium, and collect observations and probes.</li>
-        <li><strong>Seal and evaluate.</strong> Hash evidence and derive the verdict from recorded facts and policy.</li>
-      </ol>
-      <h3 id="multi-repo-guide">Multi-repository products &amp; image records</h3>
-      <p>A <code>multi_repo</code> topology lets an integration-owner repository describe component repositories. The materializer resolves their source revisions and computes a product graph digest. Review the <a href="https://github.com/xibodev/release-harness/blob/main/packages/release-harness-schemas/schemas/topology-v1.json">topology schema</a> for repository fields.</p>
-      <p>The local Compose runner records available OCI repository digests, with image-ID fallback. That is local provenance, not registry promotion, remote deployment verification, or a guarantee that production uses the same image.</p>
-      <h3>Trust boundaries</h3>
+    <section id="feedback">
+      <h2>Beta feedback</h2>
       <ul>
-        <li><strong>Trusted input:</strong> contracts, Compose files, PR commands, custom probes, and the execution host must be reviewed. Detached source is not a sandbox for hostile code.</li>
-        <li><strong>Evidence integrity:</strong> hashes detect changes relative to the seal. They do not establish an independent signer or defend against an attacker controlling the collector and all evidence.</li>
-        <li><strong>Network scope:</strong> browser egress filtering does not isolate containers, custom probes, build processes, or the host. Apply infrastructure controls separately.</li>
-        <li><strong>Browser transport:</strong> topology policy is canonical; legacy config policy is accepted and conflicts are rejected. HTTPS/WSS checks tunnel destination host, port, and transport, not encrypted content, SNI, or certificate identity. Allowed relays remain outside this boundary. Non-proxied WebRTC UDP is suppressed without per-attempt verdict violations.</li>
-        <li><strong>Private evidence:</strong> use synthetic data and restricted storage. Redaction is not a guarantee that every artifact is safe to publish.</li>
+        <li><strong>Trust/correctness:</strong> possible false certification, attribution, identity, evidence, or acceptance failure.</li>
+        <li><strong>Expressiveness:</strong> an exact certification proposition cannot be written with current primitives.</li>
+        <li><strong>Adoption:</strong> discovery, protocol, evidence, or semantic-question friction.</li>
+        <li><strong>UX:</strong> messages and discoverability.</li>
+        <li><strong>Compatibility:</strong> OS, runtime, package manager, shell, or filesystem behavior.</li>
       </ul>
-      <p>Read the <a href="https://github.com/xibodev/release-harness/blob/main/SECURITY.md">security policy</a> for reporting vulnerabilities and the supported security boundary.</p>
+      <p>A proposed model expansion needs a concrete proposition, proof that <code>subject + assertions + requires + execution bindings</code> cannot represent it, and proof that an assertion primitive cannot solve it.</p>
     </section>
 
-    <section id="contributing">
-      <h2>Contributing</h2>
-      <p>Contributions can improve scenarios, adapters, documentation, or the deterministic engine. Start with the <a href="https://github.com/xibodev/release-harness/blob/main/CONTRIBUTING.md">contributor guide</a>. Include a reproduction and a regression test for behavior changes; never replace a deterministic gate with an AI judgment.</p>
-      <p>In a source checkout, install dependencies with <code>npm ci</code> and run <code>npm test</code>. The full gate includes schema, core, neutral-fixture, smoke, and fresh-install tests, and needs Docker, Chromium, tar, and OpenSSL. See the contributor guide for platform prerequisites and skipped coverage.</p>
-    </section>
-
-    <section id="roadmap-levels">
-      <h2>Capabilities &amp; roadmap</h2>
-      <table class="tech-table">
-        <thead><tr><th scope="col">Status</th><th scope="col">Capability</th></tr></thead>
-        <tbody>
-          <tr><td>Implemented</td><td>PR checks, detached local UAT, declarative Chromium scenarios, supported side-effect probes, evidence sealing/replay, multi-repo materialization, local image digest records, and the programmatic Playwright adapter.</td></tr>
-          <tr><td>Implemented</td><td>Read-only skill discovery, shared skill targets, runtime-specific agent scaffolding, sealed startup observations, replay and browser transport hardening.</td></tr>
-          <tr><td>Planned, not enabled</td><td>Ephemeral environment gates (<code>run-ephemeral</code>) and production canary verification (reserved CLI name <code>verify-canary</code>). Neither is available for deployment or certification today.</td></tr>
-          <tr><td>Not implemented</td><td>Built-in SQL query assertions. Use a project-owned custom probe.</td></tr>
-        </tbody>
-      </table>
-      <p>Planned capabilities have no promised release version or delivery date. Follow <a href="https://github.com/xibodev/release-harness/blob/main/CHANGELOG.md">the changelog</a> for released behavior.</p>
-    </section>
-
-    <section id="upgrades">
-      <h2>Versions &amp; upgrades</h2>
-      <p>Check <code>npx release-harness --version</code> and your lockfile before following examples. These docs cover the published <a href="https://github.com/xibodev/release-harness/releases/tag/v2.0.0">2.0.0 release</a>. Version-tagged files preserve historical documentation and may retain pre-publication labels; use this guide for 2.0.0 installation and migration.</p>
-      <h3>Breaking migration from 1.2.0 to 2.0.0</h3>
-      <ul>
-        <li>Upgrade local Node, CI runners, and container images to Node.js 20+; 1.2.0 metadata declared Node.js 18+. The optional Playwright peer minimum is 1.50.0, matching core; install Chromium for the resolved version. The open-ended peer range does not certify untested future releases.</li>
-        <li>Sealed replay ignores caller-only overrides and uses manifest-covered facts. Rerun corrected contracts to change inputs; preserve old archives rather than editing or resealing them. Historical bundles missing required facts or containing linked evidence can be rejected.</li>
-        <li>Replace unsupported health probes with implemented HTTP or TCP probes. Probe configuration errors return exit 3, not silent success. Built-in SQL query assertions remain unsupported.</li>
-        <li>Use <code>topology.json.network_policy</code> as canonical. Remove conflicting legacy config policy and fix malformed fields. Config-only policy remains supported; missing policy remains open with a warning.</li>
-        <li>HTTPS/WSS filtering checks tunnel destinations, not encrypted content, TLS SNI, or certificate identity. Allowed relays and container-wide isolation are outside this boundary; suppressed WebRTC UDP attempts have no individual violation records.</li>
-      </ul>
-      <h3>Run from source (contributors)</h3>
-      <p>Clone the repository separately from your product and run <code>npm ci</code> in that checkout. There is no compilation step for the JavaScript CLI. From your product directory, invoke that checkout's CLI instead of <code>npx release-harness</code>, replacing the path below. This uses source code, not the published npm package.</p>
-      <pre><code>node /path/to/release-harness/packages/release-harness/bin/release-harness.js --help</code></pre>
-      <h3>Preserve project intent</h3>
-      <ul>
-        <li>Review the changelog and lockfile diff. Test upgraded gates before relying on their verdicts.</li>
-        <li>Keep existing contracts and host customizations. Repair individual files; do not blanket-run <code>init --overwrite</code>.</li>
-        <li>Update <code>product_slug</code> in topology and config together. Declare network policy explicitly rather than assuming absence means sealed.</li>
-        <li>Preserve old evidence. Stricter validation or missing historical facts may require a fresh run, not a modified archive.</li>
-      </ul>
-      <p><strong>Historical migration from 1.1.0 to 1.2.0:</strong> account for ignored-file exclusion, fail-closed SQL probes, harness faults returning exit 3, integrity faults staying exit 4 in dirty mode, and namespaced skills. See <a href="https://github.com/xibodev/release-harness/blob/main/CHANGELOG.md">release notes</a> for detail.</p>
-    </section>
-
-    <section id="troubleshooting">
-      <h2>Troubleshooting</h2>
-      <h3>Chromium is missing</h3>
-      <p>Install Playwright in the product and run <code>npx playwright install chromium</code> for that installation. On Linux CI, use <code>--with-deps</code>. A cache directory alone does not prove that the matching browser can launch.</p>
-      <h3>The smoke test fails after init</h3>
-      <p>The template expects <code>Welcome</code> at the configured origin. Replace it with your actual application assertion and verify the service URL, fixtures, and Compose health probe.</p>
-      <h3>A skill is on disk but absent from the host</h3>
-      <p>Reload or restart your AI host from the product repository, then inspect its catalog. Preserve your session context first. If reloading is unavailable, read the scaffolded <code>SKILL.md</code> directly and follow the procedure.</p>
-      <h3>A build file is missing in the workspace</h3>
-      <p>Inspect <code>git status</code>, <code>git check-ignore</code>, and materialization warnings. Keep non-secret required assets tracked; provide sensitive configuration at runtime.</p>
-      <p>For other failures, start with <a href="#core-invariants">the exit code and evidence</a>. Preserve invalid evidence and use a new run ID after resolving the cause.</p>
-    </section>
-    <footer class="docs-footer"><span>MIT LICENSE · XIBODEV</span><a href="https://github.com/xibodev/release-harness">GitHub</a><a href="#main-content">Back to top</a></footer>
+    <footer><div>MIT LICENSE · COPYRIGHT © 2026 XIBODEV</div><div><a class="text-link" href="https://github.com/xibodev/release-harness">GITHUB</a> · <a class="text-link" href="https://www.npmjs.com/package/@xibodev/release-harness">NPM</a></div></footer>
   </main>
   <script src="app.js"></script>
 </body>

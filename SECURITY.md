@@ -1,80 +1,72 @@
 # Security
 
-Release-Harness evaluates declared quality gates. It is not a sandbox for
-untrusted repositories, an independent evidence authority, or a deployment
-approval system.
+Release-Harness executes deliberately accepted HTTP and CLI assertions, seals
+the resulting evidence, and adjudicates it deterministically. It is not a
+sandbox, an independent evidence authority, or a deployment authorization
+system.
 
-## Trusted Execution
+## Trusted execution
 
-Run only repositories, contracts, dependencies, fixtures, and container images
-you trust. Build scripts, configured PR commands, and custom probes can execute
-on the host with the invoking user's permissions. Docker access can grant broad
-host privileges through mounts, privileged containers, or the daemon socket.
-Detached source workspaces do not isolate these capabilities.
+Run only contracts, bindings, repositories, executables, and fixtures you trust.
+A CLI binding starts the declared executable directly with `shell: false`, but
+that executable still has the invoking user's filesystem, process, and network
+permissions. It may start other programs or explicitly invoke a shell.
 
-Custom probes use `shell: false` to pass arguments without implicit shell parsing.
-This is not trusted isolation: a declared executable can still read files, access
-the network, execute other programs, or explicitly invoke a shell. Review commands
-and Compose definitions before execution. Use disposable test environments with
-least-privilege credentials; do not expose production secrets to untrusted PRs.
+The binding parser rejects shell composition such as pipelines and redirections
+in the normal execution path. Windows and POSIX executable paths are structured
+path data: separators, drive letters, spaces, and parentheses are not shell
+syntax and do not require transport-layer quoting.
 
-## Evidence Integrity And Confidentiality
+Use disposable environments and least-privilege credentials. Do not expose
+production secrets to untrusted branches or executables.
 
-SHA-256 hashes and sealed manifests detect inconsistency against recorded evidence.
-They do not provide independent authenticity: someone able to replace both the
-evidence and its manifest can construct a new consistent bundle. Protect the
-producer, source provenance, evidence store, and artifact access separately.
+## Failure attribution
 
-Evidence may contain PII, credentials, URLs, screenshots, traces, attachments,
-custom-probe stdout/stderr, and command arguments. Redaction is pattern-based and
-does not guarantee removal of every secret or personal datum from every format.
-Avoid secrets in arguments and outputs; use nonsecret fixtures and review all
-artifacts before sharing. Restrict access and retention for evidence and CI logs.
-Hashing does not encrypt data or make it safe to publish.
+Only a failed accepted assertion against a subject that was structurally reached
+may become a PRODUCT finding. Missing executables, nonexistent file operands,
+unreachable HTTP targets, unresolved normative references, harness failures, and
+abnormal termination retain non-product causes.
 
-Version 2.0.0 startup diagnostics omit arbitrary build/Compose logs to reduce secret
-capture. That does not make other evidence automatically confidential or safe.
-If a secret is exposed, revoke or rotate it; redacting a later copy does not undo
-the disclosure. Preserve original invalid evidence securely for investigation
-rather than editing or resealing it to obtain a different verdict.
+stdout and stderr may be compared with an expectation the contract author chose,
+and both are sealed separately. The harness never pattern-matches unexpected
+stderr to decide whether software deserves a PRODUCT accusation.
 
-## Browser Network Boundary
+## Evidence integrity and confidentiality
 
-The destination-filtering proxy behavior described here is included in **2.0.0**;
-do not assume these transport protections from `1.2.0`.
-See [CHANGELOG.md](CHANGELOG.md) for migration guidance.
+SHA-256 manifests detect inconsistency against recorded evidence. They do not
+provide independent authenticity: someone able to replace evidence and its
+manifest can construct a different internally consistent bundle. Protect the
+producer, accepted contracts, source provenance, evidence storage, and access to
+artifacts separately.
 
-In sealed mode, harness-managed Chromium HTTP and WebSocket traffic uses a
-destination-filtering proxy. HTTPS/WSS tunnels are checked by destination host,
-port, and transport, not by decrypted request content, TLS SNI, or certificate
-identity. An allowed service that relays traffic is outside this boundary.
+Evidence can contain credentials, personal data, internal URLs, response bodies,
+and command output. Hashing does not encrypt it or make it safe to publish. Avoid
+secrets in command arguments and outputs, use nonsecret fixtures, restrict
+retention, and review artifacts before sharing. If a secret is exposed, rotate
+or revoke it; redacting a later copy does not undo disclosure.
 
-Non-proxied WebRTC UDP is suppressed, but blocked attempts do not produce
-individual verdict violations. Suppression is not per-attempt audit coverage.
-The browser policy is not a container firewall and does not constrain arbitrary
-host commands, custom probes, builds, or other processes. Missing policy retains
-legacy open behavior with a warning; configure policy explicitly and use separate
-OS/container/network controls where isolation is required.
+Preserve invalid evidence for investigation rather than editing or resealing it
+to obtain another verdict.
 
-## Verdict Scope
+## Contract and verdict scope
 
-`PASS` means the evaluator's declared requirements were met by the accepted
-evidence. It does not prove complete test coverage, absence of vulnerabilities,
-production safety, or permission to deploy. An AI review or advisory score cannot
-override a deterministic verdict. Unsupported probes such as `sql_query` cannot
-serve as successful checks; use a trusted probe that makes the required assertion.
+Acceptance records responsibility for an exact proposition. It is not proof,
+authentication, or authorization. A PASS means the accepted assertions held for
+the recorded bindings, exact normative references, and source in that run. It
+does not prove complete coverage, absence of vulnerabilities, production safety,
+or permission to deploy.
 
-## Reporting A Vulnerability
+An exploratory run is never a certificate. An AI recommendation cannot override
+the deterministic verdict or supply a missing acceptance decision.
 
-Check the repository's [Security page](https://github.com/xibodev/release-harness/security)
+## Reporting a vulnerability
+
+Use the repository's [Security page](https://github.com/xibodev/release-harness/security)
 and [Security Advisories](https://github.com/xibodev/release-harness/security/advisories)
-for reporting options and published notices. GitHub private vulnerability
-reporting is not currently enabled for this repository; these links are not a
-promise of an available private submission channel.
+for current reporting options. GitHub private vulnerability reporting is not
+currently promised. If no private channel is available, request one without
+including vulnerability details in a public issue.
 
-Contact a maintainer privately using a contact method they have published, if one
-is available. If no private route is listed, ask for a secure contact method
-without including vulnerability details. Do not post secrets, sensitive evidence,
-or exploit details in a public issue. Once a private route is agreed, include the
-affected version, impact, and a minimal reproduction using synthetic data. No
-response-time or supported-version guarantee is stated here.
+Once a private route is agreed, include the affected version, impact, and a
+minimal reproduction using synthetic data. Do not post secrets, sensitive
+evidence, or working exploit details publicly.

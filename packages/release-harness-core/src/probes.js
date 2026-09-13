@@ -1,65 +1,59 @@
+/**
+ * Network probes.
+ *
+ * Two primitives, both of which answer one question: did something respond at
+ * this address, and what did it say? Interpreting that answer -- deciding
+ * whether a response constitutes a broken promise -- is deliberately not done
+ * here. It belongs to attribution, where the rules about what may be blamed on
+ * the subject live.
+ *
+ * The larger probe set that used to live in this file (S3, Postgres, Redis,
+ * Mailpit, custom side effects) was written for the scenario architecture and
+ * emitted the old PRODUCT_BUG vocabulary directly, deciding attribution at the
+ * point of observation. That is the defect this release removes, so those
+ * probes went with it rather than being carried forward unreachable. Their
+ * replacements will be assertion kinds, which have to state what they are
+ * asserting before anyone can be blamed for failing it.
+ */
+
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
-import { execFile } from 'node:child_process';
 
-/**
- * Independent side-effect and health probes.
- */
-
-export async function probeHttp({ host = '127.0.0.1', port = 80, path = '/', scheme = 'http', method = 'GET', headers = {}, expectedStatus = 200, timeoutMs = 5000, maxBodyBytes = Infinity }) {
+export async function probeHttp({ host = '127.0.0.1', port = 80, path = '/', scheme = 'http', method = 'GET', headers = {}, expectedStatus = 200, timeoutMs = 5000 }) {
   const client = scheme === 'https' ? https : http;
-  const url = `${scheme}://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${port}${path}`;
+  const url = `${scheme}://${host}:${port}${path}`;
   const start = Date.now();
 
   return new Promise((resolve) => {
-    let settled = false;
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-    // Bound total response time, not just socket inactivity (a trickle can keep a socket alive).
-    const timer = setTimeout(() => {
-      finish({ ok: false, status: 0, error_code: 'ETIMEDOUT', elapsedMs: Date.now() - start, message: `HTTP probe timed out after ${timeoutMs}ms` });
+    const req = client.request(url, { method, headers, timeout: timeoutMs, rejectUnauthorized: false }, (res) => {
+      const elapsed = Date.now() - start;
+      const resHeaders = res.headers;
+      let body = '';
+      res.on('data', (chunk) => (body += chunk));
+      res.on('end', () => {
+        const ok = res.statusCode === expectedStatus || (expectedStatus === 200 && res.statusCode >= 200 && res.statusCode < 400);
+        resolve({
+          ok,
+          status: res.statusCode,
+          headers: resHeaders,
+          body,
+          elapsedMs: elapsed,
+          message: `HTTP ${res.statusCode} in ${elapsed}ms`,
+        });
+      });
+    });
+
+    req.on('timeout', () => {
       req.destroy();
-    }, timeoutMs);
-    let req;
-    try {
-      req = client.request(url, { method, headers, timeout: timeoutMs, rejectUnauthorized: false }, (res) => {
-        const elapsed = Date.now() - start;
-        const resHeaders = res.headers;
-        let body = '';
-        let bodyBytes = 0;
-        res.on('data', (chunk) => {
-          bodyBytes += chunk.length;
-          if (bodyBytes <= maxBodyBytes) body += chunk;
-          else {
-            finish({ ok: false, status: res.statusCode, error_code: 'RESPONSE_TOO_LARGE', elapsedMs: Date.now() - start, message: 'HTTP probe response exceeded size limit' });
-            req.destroy();
-          }
-        });
-        res.on('error', (err) => finish({ ok: false, status: 0, error_code: err.code || 'RESPONSE_ERROR', elapsedMs: Date.now() - start, message: err.message }));
-        res.on('end', () => {
-          const ok = res.statusCode === expectedStatus || (expectedStatus === 200 && res.statusCode >= 200 && res.statusCode < 400);
-          finish({ ok, status: res.statusCode, headers: resHeaders, body, elapsedMs: elapsed, message: `HTTP ${res.statusCode} in ${elapsed}ms` });
-        });
-      });
-      req.on('timeout', () => {
-        req.destroy();
-        finish({ ok: false, status: 0, error_code: 'ETIMEDOUT', elapsedMs: Date.now() - start, message: `HTTP probe timed out after ${timeoutMs}ms` });
-      });
-      req.on('error', (err) => {
-        finish({ ok: false, status: 0, error_code: err.code || 'REQUEST_ERROR', elapsedMs: Date.now() - start, message: err.message });
-      });
-      req.end();
-    } catch (err) {
-      finish({ ok: false, status: 0, error_code: err.code || 'INVALID_REQUEST', elapsedMs: Date.now() - start, message: err.message });
-    }
+      resolve({ ok: false, status: 0, elapsedMs: Date.now() - start, message: `HTTP probe timed out after ${timeoutMs}ms` });
+    });
+
+    req.on('error', (err) => {
+      resolve({ ok: false, status: 0, elapsedMs: Date.now() - start, message: err.message });
+    });
+
+    req.end();
   });
 }
 
@@ -77,12 +71,12 @@ export async function probeTcp({ host = '127.0.0.1', port, timeoutMs = 5000 }) {
 
     socket.on('timeout', () => {
       socket.destroy();
-      resolve({ ok: false, error_code: 'ETIMEDOUT', elapsedMs: Date.now() - start, message: `TCP timeout after ${timeoutMs}ms` });
+      resolve({ ok: false, elapsedMs: Date.now() - start, message: `TCP timeout after ${timeoutMs}ms` });
     });
 
     socket.on('error', (err) => {
       socket.destroy();
-      resolve({ ok: false, error_code: err.code || 'CONNECT_ERROR', elapsedMs: Date.now() - start, message: err.message });
+      resolve({ ok: false, elapsedMs: Date.now() - start, message: err.message });
     });
   });
 }
@@ -90,522 +84,3 @@ export async function probeTcp({ host = '127.0.0.1', port, timeoutMs = 5000 }) {
 /**
  * MinIO / S3 Storage Probe with digest, content-type, and local-path bypass verification.
  */
-export async function probeS3({ host = '127.0.0.1', port = 9000, scheme = 'http', bucket, key, probe_type = 's3_object_exists', expected_content_type, expected_sha256, forbidden_paths, observed_storage_path, timeoutMs = 4000 }) {
-  if (!bucket || !key) {
-    return { ok: false, message: 'S3 probe requires "bucket" and "key" parameters', cause: 'HARNESS_CONFIGURATION', isHarnessError: true };
-  }
-
-  // 1. Enforce local bypass control (e.g. database stores /tmp/* or local filesystem path instead of S3)
-  if (Array.isArray(forbidden_paths) && observed_storage_path) {
-    for (const pattern of forbidden_paths) {
-      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-      if (regex.test(observed_storage_path)) {
-        return {
-          ok: false,
-          message: `Storage bypass violation: observed storage path "${observed_storage_path}" matches forbidden local pattern "${pattern}"`,
-          cause: 'PRODUCT_BUG',
-        };
-      }
-    }
-  }
-
-  const s3Path = `/${bucket}/${key}`;
-  const res = await probeHttp({ host, port, path: s3Path, scheme, timeoutMs });
-
-  if (probe_type === 's3_object_exists') {
-    if (!res.ok) {
-      return { ok: false, message: `S3 object "${bucket}/${key}" absent (expected HTTP 200, got ${res.status || res.message})`, cause: 'PRODUCT_BUG' };
-    }
-
-    if (expected_content_type) {
-      const actualType = res.headers['content-type'];
-      if (actualType && !actualType.includes(expected_content_type)) {
-        return { ok: false, message: `S3 object content-type mismatch: expected "${expected_content_type}", got "${actualType}"`, cause: 'PRODUCT_BUG' };
-      }
-    }
-
-    if (expected_sha256) {
-      const computedSha = crypto.createHash('sha256').update(res.body).digest('hex');
-      if (computedSha !== expected_sha256) {
-        return { ok: false, message: `S3 object SHA-256 digest mismatch: expected "${expected_sha256}", computed "${computedSha}"`, cause: 'PRODUCT_BUG' };
-      }
-    }
-
-    return { ok: true, message: `S3 object "${bucket}/${key}" verified (HTTP ${res.status} in ${res.elapsedMs}ms)` };
-  } else if (probe_type === 's3_object_absent') {
-    if (res.status === 404) {
-      return { ok: true, message: `S3 object "${bucket}/${key}" confirmed absent (HTTP 404 in ${res.elapsedMs}ms)` };
-    }
-    return { ok: false, message: `S3 object "${bucket}/${key}" unexpectedly exists (HTTP ${res.status})`, cause: 'PRODUCT_BUG' };
-  }
-
-  return { ok: false, message: `Unsupported S3 probe_type: ${probe_type}`, cause: 'HARNESS_CONFIGURATION', isHarnessError: true };
-}
-
-/**
- * PostgreSQL Probe -- unimplemented, and says so.
- *
- * The harness ships no SQL client. This probe previously opened a TCP socket,
- * dropped `expected_rows_count` and `forbidden_values` into an empty block, and
- * returned `ok: true` claiming "read-only query assertion satisfied" whenever
- * the port answered. An open port is not an executed query, so every green it
- * produced was unearned.
- *
- * An advertised-and-stubbed probe returning green is worse than one that
- * refuses: it launders an unverified claim into a signed verdict. It now fails
- * closed as a harness configuration fault and names the custom probe as the
- * supported way to assert database state.
- *
- * `host` and `port` are kept because the message names the target the scenario
- * declared -- that is how an operator locates the offending side-effect, and how
- * a port-shifted run can prove the offset reached the probe.
- * `expected_rows_count`, `forbidden_values` and `timeoutMs` are gone from the
- * signature: accepting a parameter you discard is the defect being fixed.
- */
-export async function probePostgres({ host = '127.0.0.1', port = 5432, query, probe_type = 'sql_query' }) {
-  // The read-only policy rejection stays FIRST. A mutating query is a distinct
-  // and more specific misconfiguration than an unimplemented probe, and an
-  // author who wrote DROP TABLE needs to be told exactly that -- not pointed at
-  // a custom probe that would happily run it.
-  if (typeof query === 'string') {
-    const dangerousKeywords = ['insert', 'update', 'delete', 'drop', 'alter', 'truncate', 'grant', 'revoke', 'create'];
-    const normalizedQuery = query.toLowerCase().trim();
-    if (dangerousKeywords.some((kw) => normalizedQuery.startsWith(kw) || normalizedQuery.includes(` ${kw} `))) {
-      return {
-        ok: false,
-        message: 'PostgreSQL assertion rejected: mutating SQL queries are strictly forbidden in read-only release probes',
-        cause: 'HARNESS_CONFIGURATION',
-        isHarnessError: true,
-      };
-    }
-  }
-
-  return {
-    ok: false,
-    message:
-      `PostgreSQL probe "${probe_type}" against ${host}:${port} is not implemented: the harness ships no ` +
-      'SQL client, so it cannot execute the query or evaluate expected_rows_count / forbidden_values. ' +
-      'Assert database state with a custom probe that runs your own query tool ' +
-      '(service: "custom", probe_type: "custom", params.command).',
-    cause: 'HARNESS_CONFIGURATION',
-    isHarnessError: true,
-  };
-}
-
-/**
- * Redis Key/Value Probe using Redis RESP protocol.
- */
-export async function probeRedis({ host = '127.0.0.1', port = 6379, probe_type = 'redis_key_exists', key, expected_value, timeoutMs = 3000 }) {
-  if (!key) {
-    return { ok: false, message: 'Redis probe requires "key" parameter', cause: 'HARNESS_CONFIGURATION', isHarnessError: true };
-  }
-
-  const start = Date.now();
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    socket.setTimeout(timeoutMs);
-
-    socket.connect(port, host, () => {
-      // Send Redis EXISTS or GET command formatted as RESP
-      if (probe_type === 'redis_key_exists' || probe_type === 'redis_key_absent') {
-        socket.write(`*2\r\n$6\r\nEXISTS\r\n$${Buffer.byteLength(key)}\r\n${key}\r\n`);
-      } else {
-        socket.write(`*2\r\n$3\r\nGET\r\n$${Buffer.byteLength(key)}\r\n${key}\r\n`);
-      }
-    });
-
-    socket.on('data', (data) => {
-      const elapsed = Date.now() - start;
-      const resp = data.toString('utf8');
-      socket.destroy();
-
-      if (probe_type === 'redis_key_exists') {
-        const exists = resp.startsWith(':1');
-        resolve({
-          ok: exists,
-          message: exists ? `Redis key "${key}" exists (${elapsed}ms)` : `Redis key "${key}" absent`,
-          cause: exists ? 'NONE' : 'PRODUCT_BUG',
-        });
-      } else if (probe_type === 'redis_key_absent') {
-        const absent = resp.startsWith(':0');
-        resolve({
-          ok: absent,
-          message: absent ? `Redis key "${key}" confirmed absent (${elapsed}ms)` : `Redis key "${key}" unexpectedly exists`,
-          cause: absent ? 'NONE' : 'PRODUCT_BUG',
-        });
-      } else if (probe_type === 'redis_key_value_equals') {
-        const match = expected_value !== undefined ? resp.includes(String(expected_value)) : true;
-        resolve({
-          ok: match,
-          message: match ? `Redis key "${key}" value matched expected (${elapsed}ms)` : `Redis key "${key}" value mismatch`,
-          cause: match ? 'NONE' : 'PRODUCT_BUG',
-        });
-      } else {
-        resolve({ ok: false, message: `Unsupported Redis probe_type: ${probe_type}`, cause: 'HARNESS_CONFIGURATION', isHarnessError: true });
-      }
-    });
-
-    socket.on('timeout', () => {
-      socket.destroy();
-      resolve({ ok: false, message: `Redis probe timed out after ${timeoutMs}ms`, cause: 'HARNESS_ENVIRONMENT', isHarnessError: true });
-    });
-
-    socket.on('error', (err) => {
-      resolve({ ok: false, message: `Redis probe error: ${err.message}`, cause: 'HARNESS_ENVIRONMENT', isHarnessError: true });
-    });
-  });
-}
-
-/**
- * Mailpit Message Probe.
- */
-export async function probeMailpit({ host = '127.0.0.1', port = 8025, probe_type = 'mail_received', to, subject, contains_text, timeoutMs = 3000 }) {
-  const res = await probeHttp({ host, port, path: '/api/v1/messages', timeoutMs });
-  if (!res.ok) {
-    return { ok: false, message: `Mailpit API unreachable at ${host}:${port} (${res.message})`, cause: 'HARNESS_ENVIRONMENT', isHarnessError: true };
-  }
-
-  let messages = [];
-  try {
-    const data = JSON.parse(res.body);
-    messages = data.messages || [];
-  } catch {
-    return { ok: false, message: 'Failed to parse Mailpit messages response', cause: 'HARNESS_ENVIRONMENT', isHarnessError: true };
-  }
-
-  if (probe_type === 'mailpit_inbox_empty') {
-    const empty = messages.length === 0;
-    return { ok: empty, message: empty ? 'Mailpit inbox empty' : `Mailpit inbox contains ${messages.length} unexpected messages`, cause: empty ? 'NONE' : 'PRODUCT_BUG' };
-  }
-
-  if (probe_type === 'mail_received') {
-    let matched = messages.some((m) => {
-      const toMatch = to ? (m.To || []).some((rec) => rec.Address === to) : true;
-      const subjMatch = subject ? (m.Subject || '').includes(subject) : true;
-      const textMatch = contains_text ? (m.Snippet || '').includes(contains_text) : true;
-      return toMatch && subjMatch && textMatch;
-    });
-
-    return {
-      ok: matched,
-      message: matched ? `Email to "${to || '*'}" with subject "${subject || '*'}" verified in Mailpit` : `No matching email found in Mailpit (Total: ${messages.length})`,
-      cause: matched ? 'NONE' : 'PRODUCT_BUG',
-    };
-  }
-
-  return { ok: false, message: `Unsupported Mailpit probe_type: ${probe_type}`, cause: 'HARNESS_CONFIGURATION', isHarnessError: true };
-}
-
-/**
- * Project-Owned Custom Probe.
- *
- * Every other probe here is web-service-shaped. A product whose real deliverable
- * is a FILE -- a rendered video, a compiled binary, a generated PDF, an exported
- * dataset -- had no way to assert on its actual output, so the gate could drive
- * the UI green while saying nothing about whether the artifact was valid.
- *
- * The harness holds no opinion about what is asserted. The project declares a
- * command; the harness runs it, compares the exit code, and seals stdout/stderr
- * as evidence.
- *
- * SECURITY BOUNDARY -- the reason this is safe to ship:
- *
- *   `command` and `args` come from the project's committed .release-harness/
- *   contract and nowhere else. The agent authors it, a human sees it in the
- *   diff, git binds it to a reviewed revision, and the run executes what was
- *   committed. The harness never accepts a command synthesized at run time,
- *   derived from probe output, or read from the product under test.
- *
- *   That direction is the whole point. If the thing being certified could
- *   author its own assertion, it would be grading its own exam and
- *   certification would mean nothing. `shell: false` keeps it there: argv is
- *   passed as a vector with no shell in between, so a contract value cannot
- *   smuggle in `; rm -rf` or `&& curl evil` through interpolation.
- *
- * @returns {{ok: boolean, message: string, cause?: string, isHarnessError?: boolean, evidencePath?: string|null}}
- */
-export async function probeCustom({
-  command,
-  args = [],
-  expect_exit_code = 0,
-  timeoutMs = 60000,
-  cwd,
-  evidenceDir,
-  probeId = 'custom',
-}) {
-  if (typeof command !== 'string' || command.trim() === '') {
-    return {
-      ok: false,
-      message:
-        'Custom probe requires params.command (a non-empty string) declared in the committed .release-harness/ contract',
-      cause: 'HARNESS_CONFIGURATION',
-      isHarnessError: true,
-    };
-  }
-  if (!Array.isArray(args)) {
-    return {
-      ok: false,
-      message: `Custom probe params.args must be an array of strings (got ${typeof args})`,
-      cause: 'HARNESS_CONFIGURATION',
-      isHarnessError: true,
-    };
-  }
-  // execFile throws a synchronous RangeError on a non-integer timeout. A typo in
-  // the contract must be reported as the configuration error it is, rather than
-  // escaping as an unhandled rejection that the runner's catch would file as a
-  // PRODUCT_BUG -- blaming the adopter's product for their own contract typo.
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 0) {
-    return {
-      ok: false,
-      message: `Custom probe params.timeoutMs must be a non-negative integer (got ${JSON.stringify(timeoutMs)})`,
-      cause: 'HARNESS_CONFIGURATION',
-      isHarnessError: true,
-    };
-  }
-  if (!Number.isInteger(expect_exit_code)) {
-    return {
-      ok: false,
-      message: `Custom probe params.expect_exit_code must be an integer (got ${JSON.stringify(expect_exit_code)})`,
-      cause: 'HARNESS_CONFIGURATION',
-      isHarnessError: true,
-    };
-  }
-
-  const stringArgs = args.map(String);
-  const started = Date.now();
-
-  const result = await new Promise((resolve) => {
-    execFile(
-      command,
-      stringArgs,
-      {
-        cwd: cwd || process.cwd(),
-        timeout: timeoutMs,
-        encoding: 'utf8',
-        maxBuffer: 8 * 1024 * 1024,
-        shell: false,
-        windowsHide: true,
-      },
-      (err, stdout, stderr) => {
-        // Never trust what comes back: on some failure paths execFile hands the
-        // callback undefined streams, and String() on those yields "undefined",
-        // which would then be sealed as if the process had printed it.
-        const out = typeof stdout === 'string' ? stdout : '';
-        const errOut = typeof stderr === 'string' ? stderr : '';
-
-        if (!err) {
-          resolve({ kind: 'exited', code: 0, stdout: out, stderr: errOut });
-          return;
-        }
-        // Order matters. A timeout kill and a numeric exit are distinguished by
-        // `killed`/`signal`, not by `code` -- a killed process reports code null,
-        // and testing `typeof err.code === 'number'` first would misfile a
-        // maxBuffer abort (whose code is a string) as a spawn failure.
-        if (err.killed || err.signal) {
-          resolve({ kind: 'timeout', code: null, signal: err.signal || null, stdout: out, stderr: errOut });
-          return;
-        }
-        if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-          resolve({ kind: 'overflow', code: null, stdout: out, stderr: errOut, detail: err.message });
-          return;
-        }
-        if (typeof err.code === 'number') {
-          resolve({ kind: 'exited', code: err.code, stdout: out, stderr: errOut });
-          return;
-        }
-        // ENOENT, EACCES, EPERM: the command never ran at all.
-        resolve({ kind: 'spawn_error', code: null, stdout: out, stderr: errOut, detail: err.message });
-      }
-    );
-  });
-
-  const elapsedMs = Date.now() - started;
-  const STREAM_CAP = 256 * 1024;
-
-  // Seal the outcome BEFORE adjudicating it, so a failing probe leaves behind
-  // the same evidence a passing one does. Evidence only of successes is not
-  // evidence.
-  let evidencePath = null;
-  let evidenceError = null;
-  if (evidenceDir) {
-    try {
-      const probesDir = path.join(evidenceDir, 'probes');
-      fs.mkdirSync(probesDir, { recursive: true });
-      // A probeId is assembled from scenario and service ids, which may contain
-      // path separators or characters no filesystem accepts. Collapse it to a
-      // safe basename so the write cannot escape probes/.
-      const safeId = String(probeId).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120) || 'custom';
-      const target = path.join(probesDir, `${safeId}.json`);
-      fs.writeFileSync(
-        target,
-        JSON.stringify(
-          {
-            probe_id: probeId,
-            command,
-            args: stringArgs,
-            expect_exit_code,
-            exit_code: result.code,
-            timed_out: result.kind === 'timeout',
-            elapsed_ms: elapsedMs,
-            stdout: result.stdout.slice(0, STREAM_CAP),
-            stderr: result.stderr.slice(0, STREAM_CAP),
-            stdout_truncated: result.stdout.length > STREAM_CAP,
-            stderr_truncated: result.stderr.length > STREAM_CAP,
-          },
-          null,
-          2
-        ) + '\n',
-        'utf8'
-      );
-      evidencePath = target;
-    } catch (err) {
-      // Fail loudly or not at all. A swallowed write failure would leave the
-      // verdict claiming sealed evidence for a file that is not on disk, which
-      // surfaces later as an unexplained manifest mismatch.
-      evidenceError = err.message;
-    }
-  }
-
-  if (evidenceError) {
-    return {
-      ok: false,
-      message: `Custom probe "${command}" ran but its evidence could not be sealed under ${evidenceDir}: ${evidenceError}`,
-      cause: 'HARNESS_ENVIRONMENT',
-      isHarnessError: true,
-      evidencePath: null,
-    };
-  }
-
-  if (result.kind === 'spawn_error') {
-    return {
-      ok: false,
-      message: `Custom probe could not execute "${command}": ${result.detail}. The command must exist and be executable from the run workspace.`,
-      cause: 'HARNESS_CONFIGURATION',
-      isHarnessError: true,
-      evidencePath,
-    };
-  }
-
-  if (result.kind === 'timeout') {
-    return {
-      ok: false,
-      message: `Custom probe "${command}" exceeded its ${timeoutMs}ms timeout and was killed${result.signal ? ` (${result.signal})` : ''}`,
-      cause: 'HARNESS_ENVIRONMENT',
-      isHarnessError: true,
-      evidencePath,
-    };
-  }
-
-  if (result.kind === 'overflow') {
-    return {
-      ok: false,
-      message: `Custom probe "${command}" produced more output than the harness can capture: ${result.detail}. A probe should assert, not stream.`,
-      cause: 'HARNESS_CONFIGURATION',
-      isHarnessError: true,
-      evidencePath,
-    };
-  }
-
-  if (result.code !== expect_exit_code) {
-    // A failed project assertion is a PRODUCT failure, deliberately carrying no
-    // isHarnessError: the harness did its job correctly and the answer was no.
-    const excerpt = result.stderr.trim() ? ` -- ${result.stderr.trim().slice(0, 300)}` : '';
-    return {
-      ok: false,
-      message: `Custom probe "${command}" exited ${result.code}, expected ${expect_exit_code}${excerpt}`,
-      cause: 'PRODUCT_BUG',
-      evidencePath,
-    };
-  }
-
-  return {
-    ok: true,
-    message: `Custom probe "${command}" exited ${result.code} as expected (${elapsedMs}ms)`,
-    cause: 'NONE',
-    evidencePath,
-  };
-}
-
-export async function verifySecurityHeaders(originUrl, securityHeaderContract) {
-  if (!securityHeaderContract) return { ok: true };
-  const parsed = new URL(originUrl);
-  const res = await probeHttp({
-    host: parsed.hostname,
-    port: parseInt(parsed.port || (parsed.protocol === 'https:' ? '443' : '80'), 10),
-    path: parsed.pathname || '/',
-    scheme: parsed.protocol.replace(':', ''),
-  });
-
-  if (!res.ok) {
-    return { ok: false, error: `Failed to probe origin for headers: ${res.message}` };
-  }
-
-  const headers = res.headers;
-  const errors = [];
-
-  for (const reqHeader of securityHeaderContract.required || []) {
-    const lower = reqHeader.toLowerCase();
-    if (!headers[lower]) {
-      errors.push(`Missing required security header: ${reqHeader}`);
-    }
-  }
-
-  for (const forbHeader of securityHeaderContract.forbidden || []) {
-    const lower = forbHeader.toLowerCase();
-    if (headers[lower]) {
-      errors.push(`Found forbidden security header: ${forbHeader} (${headers[lower]})`);
-    }
-  }
-
-  for (const [key, val] of Object.entries(securityHeaderContract.exact || {})) {
-    const actual = headers[key.toLowerCase()];
-    if (actual !== val) {
-      errors.push(`Header "${key}" mismatch: expected exact "${val}", got "${actual}"`);
-    }
-  }
-
-  return {
-    ok: errors.length === 0,
-    errors,
-    headers,
-  };
-}
-
-/**
- * Universal Fail-Closed Side-Effect Verifier.
- */
-export async function verifySideEffect(sideEffect) {
-  if (!sideEffect || typeof sideEffect !== 'object') {
-    return { ok: false, message: 'Invalid side effect specification', cause: 'HARNESS_CONFIGURATION', isHarnessError: true };
-  }
-
-  const { service, probe_type, params = {} } = sideEffect;
-
-  if (service === 'minio' || service === 's3') {
-    return probeS3({ ...params, probe_type });
-  }
-
-  if (service === 'postgres') {
-    return probePostgres({ ...params, probe_type });
-  }
-
-  if (service === 'redis') {
-    return probeRedis({ ...params, probe_type });
-  }
-
-  if (service === 'mailpit') {
-    return probeMailpit({ ...params, probe_type });
-  }
-
-  if (service === 'custom') {
-    return probeCustom({ ...params, probe_type });
-  }
-
-  // Fail-closed on unknown services or unsupported combinations (no optimistic stubs allowed)
-  return {
-    ok: false,
-    message: `Unsupported side-effect probe combination: service "${service}", probe_type "${probe_type}". Unsupported probes fail closed.`,
-    cause: 'HARNESS_CONFIGURATION',
-    isHarnessError: true,
-  };
-}

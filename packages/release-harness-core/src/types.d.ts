@@ -1,91 +1,63 @@
-export type CertificationStatus = 'PASS' | 'FAIL' | 'UNPROVEN';
-export type RunIntegrity = 'COMPLETE' | 'HARNESS_ERROR' | 'EVIDENCE_INVALID';
+// The vocabulary of the contract model.
+//
+// Every type here names something a person decides or the harness observes.
+// There is deliberately no PRODUCT_BUG: attribution is a conclusion reached by
+// `attributeFailure` from evidence and eligibility, never a label a probe gets
+// to apply at the point of observation.
 
-export type ScenarioStatus = 'PASS' | 'FAIL' | 'UNPROVEN' | 'ERROR' | 'SKIPPED';
-export type ScenarioDisposition = 'EXECUTED' | 'CONDITION_UNMET' | 'MANUAL_APPROVED' | 'WAIVED' | 'NOT_APPLICABLE';
-export type ScenarioCause =
-  | 'PRODUCT_BUG'
+/** What is known about a claim, and whether an accepted assertion may rest on it. */
+export type EpistemicStatus =
+  | 'observed'
+  | 'observed_absent'
+  | 'asserted_absent'
+  | 'inferred'
+  | 'not_established';
+
+/** Who or what is responsible for a failure. Only PRODUCT accuses the subject. */
+export type Cause =
+  | 'PRODUCT'
+  | 'CONTRACT_INVALID'
+  | 'BINDING_INVALID'
   | 'HARNESS_ENVIRONMENT'
-  | 'HARNESS_FIXTURE_MISSING'
-  | 'HARNESS_CANARY_MISMATCH'
-  | 'HARNESS_CONFIGURATION'
-  | 'UNKNOWN'
-  | 'NONE';
+  | 'HARNESS_INTERNAL'
+  | 'EVIDENCE_INVALID'
+  | 'UNKNOWN';
 
-export type ScenarioPolicy = 'required' | 'conditional' | 'manual' | 'unsupported';
-export type ScenarioTier = 'smoke' | 'core' | 'full';
+/** Whether a run is entitled to certify. Decided before execution begins. */
+export type Mode = 'CERTIFYING' | 'EXPLORATORY';
+
+/** The outcome of a run. An exploratory run never reaches PASS. */
+export type RunStatus = 'PASS' | 'FAIL' | 'UNPROVEN';
 
 export type EvidenceCategory = 'log' | 'trace' | 'screenshot' | 'probe' | 'result' | 'other';
 export type EvidenceLifecycleState = 'COLLECTING' | 'SANITIZING' | 'SEALED' | 'EVALUATING' | 'FINALIZED';
 
-export interface EvidenceFile {
-  path: string;
-  sha256: string;
-  bytes: number;
-  mime_type?: string;
-  category: EvidenceCategory;
-}
-
-export interface EvidenceManifest {
-  schema_version: '1.0.0';
-  run_id: string;
-  sealed_at: string;
-  files: EvidenceFile[];
-}
-
-export interface ScenarioResult {
+export interface Subject {
   id: string;
-  name: string;
-  origin_id: string;
-  policy: ScenarioPolicy;
-  status: ScenarioStatus;
-  disposition: ScenarioDisposition;
-  cause: ScenarioCause;
-  duration_ms?: number;
-  evidence_files?: string[];
-  error_message?: string;
+  name?: string;
+  description?: string;
 }
 
-export interface OriginSummary {
-  total: number;
-  passed: number;
-  failed: number;
-  unproven: number;
-  skipped: number;
-  status: CertificationStatus;
+export interface Assertion {
+  id: string;
+  kind: string;
+  /** A symbolic name. What it resolves to is an execution binding, not part of the contract. */
+  target: string;
+  description?: string;
+  expect?: Record<string, unknown>;
 }
 
-export interface VerdictSummary {
-  total: number;
-  passed: number;
-  failed: number;
-  unproven: number;
-  error: number;
-  skipped: number;
-  by_origin: Record<string, OriginSummary>;
+export interface NormativeReference {
+  ref: string;
+  digest: string;
+  description?: string;
 }
 
-export interface Verdict {
-  schema_version: '1.0.0';
-  run_id: string;
-  evaluation_time: string;
-  certification_status: CertificationStatus;
-  run_integrity: RunIntegrity;
-  exit_code: number;
-  causes: ScenarioCause[];
-  scenarios: ScenarioResult[];
-  summary: VerdictSummary;
-  evidence_manifest_sha256: string;
-  violations?: Array<{ type: string; description: string; details?: Record<string, unknown> }>;
-}
-
-export interface ToolchainIdentity {
-  node?: string;
-  git?: string;
-  docker_engine?: string;
-  docker_compose?: string;
-  playwright?: string;
-  chromium?: string;
-  firefox?: string;
-  webkit?: string;
+export interface AcceptedContract {
+  schema_version: string;
+  subject: Subject;
+  assertions: Assertion[];
+  requires?: NormativeReference[];
+  /** sha256 over the canonical proposition. The filename it is stored under. */
+  digest: string;
 }

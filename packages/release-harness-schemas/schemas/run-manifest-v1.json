@@ -2,87 +2,106 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://json.xibo.dev/schemas/release-harness/run-manifest-v1.json",
   "title": "ReleaseHarnessRunManifest",
-  "description": "Root run manifest binding source identity, harness version, toolchain, and evidence digests",
+  "description": "What was exercised, where, and what came of it. Four identities are kept apart deliberately -- which proposition, where it was exercised, which revision of the subject, and what was observed -- because folding them into one digest makes 'did the promise change?' and 'did the port change?' indistinguishable afterwards.",
   "type": "object",
-  "required": [
-    "schema_version",
-    "run_id",
-    "product_slug",
-    "topology_type",
-    "started_at",
-    "harness_core_version",
-    "sources",
-    "toolchain",
-    "config_hashes"
-  ],
+  "required": ["schema_version", "run_id", "bindings", "evidence", "certification", "verdict"],
+  "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "string", "enum": ["1.0.0"] },
-    "run_id": { "type": "string" },
-    "product_slug": { "type": "string" },
-    "topology_type": { "type": "string", "enum": ["single_repo", "monorepo", "multi_repo"] },
-    "started_at": { "type": "string", "format": "date-time" },
-    "completed_at": { "type": "string", "format": "date-time" },
-    "harness_core_version": { "type": "string" },
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "harness_version": { "type": "string" },
+    "started_at": { "type": "string" },
+    "completed_at": { "type": "string" },
+
+    "contract": {
+      "description": "The accepted proposition this run exercised. Null for an exploratory run, which genuinely has none -- an empty digest would imply otherwise.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["digest"],
+          "additionalProperties": false,
+          "properties": {
+            "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "subject_id": { "type": "string" },
+            "requires": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["ref", "digest"],
+                "additionalProperties": false,
+                "properties": {
+                  "ref": { "type": "string" },
+                  "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+                }
+              }
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+
+    "bindings": {
+      "description": "Where the run looked. A sibling of the contract, never folded into it.",
+      "type": "object",
+      "required": ["digest", "targets"],
+      "additionalProperties": false,
+      "properties": {
+        "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "targets": {
+          "description": "INTENTIONAL MAP: keys are the symbolic target names an assertion may reference, which are authored per contract and cannot be enumerated in a schema.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+
     "sources": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["commit_sha", "is_clean"],
-        "properties": {
-          "repo_id": { "type": "string" },
-          "path": { "type": "string" },
-          "url": { "type": "string" },
-          "commit_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
-          "is_clean": { "type": "boolean" },
-          "dirty_files": { "type": "array", "items": { "type": "string" } }
+      "description": "INTENTIONAL MAP: subject revisions keyed by subject id.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+
+    "evidence": {
+      "type": "object",
+      "required": ["manifest_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+
+    "certification": {
+      "description": "Whether this run was entitled to certify, recorded so eligibility is auditable after the fact.",
+      "type": "object",
+      "required": ["mode", "eligible"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["CERTIFYING", "EXPLORATORY"] },
+        "eligible": { "type": "boolean" },
+        "ineligible_reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "detail"],
+            "additionalProperties": false,
+            "properties": {
+              "code": { "type": "string" },
+              "detail": { "type": "string" }
+            }
+          }
         }
       }
     },
-    "artifacts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["id", "service_id", "artifact_type", "content_digest"],
-        "properties": {
-          "id": { "type": "string" },
-          "service_id": { "type": "string" },
-          "artifact_type": { "type": "string", "enum": ["oci_image", "spa_bundle", "package", "file"] },
-          "content_digest": { "type": "string" },
-          "tag_aliases": { "type": "array", "items": { "type": "string" } }
-        }
-      }
-    },
-    "toolchain": {
+
+    "verdict": {
       "type": "object",
+      "required": ["digest"],
+      "additionalProperties": false,
       "properties": {
-        "node": { "type": "string" },
-        "git": { "type": "string" },
-        "docker_engine": { "type": "string" },
-        "docker_compose": { "type": "string" },
-        "playwright": { "type": "string" },
-        "chromium": { "type": "string" },
-        "firefox": { "type": "string" },
-        "webkit": { "type": "string" }
+        "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "status": { "enum": ["PASS", "FAIL", "UNPROVEN"] }
       }
-    },
-    "config_hashes": {
-      "type": "object",
-      "required": ["harness_config_sha256", "topology_sha256", "scenarios_manifest_sha256"],
-      "properties": {
-        "harness_config_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "topology_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "scenarios_manifest_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "brand_contract_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "waivers_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
-      }
-    },
-    "evidence_manifest_sha256": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{64}$"
-    },
-    "verdict_sha256": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{64}$"
     }
   }
 }

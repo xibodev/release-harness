@@ -1,7 +1,7 @@
 {
   "name": "@xibodev/release-harness-schemas",
-  "version": "2.0.0",
-  "description": "Formal JSON schemas for the versioned release harness architecture",
+  "version": "1.2.0-beta.1",
+  "description": "JSON schemas for release-harness drafts, contracts, evidence, runs, and verdicts",
   "type": "module",
   "main": "./index.js",
   "exports": {
@@ -13,7 +13,7 @@
     "schemas"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=18"
   },
   "scripts": {
     "test": "node test.js"

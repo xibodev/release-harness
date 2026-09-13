@@ -1,0 +1,218 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.xibo.dev/schemas/release-harness/contract-v1.json",
+  "title": "ReleaseHarnessAcceptedContract",
+  "description": "The proposition release-harness adjudicates: a subject, what must hold of it, and the normative references whose change would alter that meaning. Deliberately excludes execution bindings, authoring metadata and acceptance metadata -- a proposition's identity must not move because a port changed or a different person accepted it.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "subject",
+    "assertions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "description": "Version of this contract format.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "subject": {
+      "description": "What is being certified.",
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Stable identifier for the subject. Chosen by the author, not derived from a directory name or any other local filesystem accident.",
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "description": "Human-readable name, for reports.",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "assertions": {
+      "description": "What must hold. A contract asserting nothing certifies nothing, so this must be non-empty.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/assertion"
+      }
+    },
+    "requires": {
+      "description": "Normative references: other subjects whose change would alter what these assertions mean. Each must be pinned by digest -- an unpinned reference is a convention, not a reference.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/normativeReference"
+      }
+    }
+  },
+  "definitions": {
+    "assertion": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "target"
+      ],
+      "properties": {
+        "id": {
+          "description": "Identifier unique within this contract. Verdicts cite it, so it must be stable.",
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "description": "Which executor evaluates this assertion. Only kinds the harness can exercise may be accepted -- a promise nobody can check is refused while it is still a draft.",
+          "enum": [
+            "http",
+            "cli"
+          ]
+        },
+        "target": {
+          "description": "The SYMBOLIC name of the thing exercised -- 'api', 'web', 'db'. What this resolves to at run time is an execution binding, supplied per-run and deliberately not part of the contract. This is what lets one contract be authored on a laptop and certified in CI.",
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "description": "What this assertion means, in the author's words. Carried into reports so a failure reads as a broken promise rather than a failed probe.",
+          "type": "string"
+        },
+        "expect": {
+          "description": "What must hold. Deliberately unconstrained HERE: the shape is determined by `kind` and enforced by the allOf rules below, which close it per kind. See assertion-kinds-v1.json.",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "An assertion of kind \"http\" may only expect what the http adapter reads.",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "http"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "expect": {
+                "description": "Exercise an HTTP endpoint. WHERE it lives is an execution binding; this says only what must be true of the response.",
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "method": {
+                    "description": "HTTP method. Defaults to GET.",
+                    "type": "string",
+                    "enum": [
+                      "GET",
+                      "HEAD",
+                      "POST",
+                      "PUT",
+                      "PATCH",
+                      "DELETE",
+                      "OPTIONS"
+                    ]
+                  },
+                  "path": {
+                    "description": "Path appended to the bound location. Defaults to /.",
+                    "type": "string"
+                  },
+                  "status": {
+                    "description": "Expected status code. Defaults to 200.",
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 599
+                  },
+                  "body_contains": {
+                    "description": "Substring that must appear in the response body. D39: the real transfer test found the highest-value proposition available -- that the deployed service is running the revision intended for this release -- unwritable, because the service exposes it in the body and this kind could only read a status code. A substring test is the smallest primitive that closes it; anything richer is a query language, which this is deliberately not.",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "An assertion of kind \"cli\" may only expect what the cli adapter reads.",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "cli"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "expect": {
+                "description": "Exercise a command. WHAT is executed comes from the execution binding -- an assertion never carries a command, because a command is a local fact about where things are installed, not part of a promise.",
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "args": {
+                    "description": "Extra arguments appended to the bound command.",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "description": "Expected exit code. Defaults to 0.",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "stdout_contains": {
+                    "description": "Substring that must appear in stdout.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "stderr_contains": {
+                    "description": "Substring that must appear in stderr. D40: well-behaved CLIs put diagnostics on stderr, so \"the validator refuses for the expected reason\" degraded to an exit-code check that any unrelated crash could satisfy. Note the distinction this preserves: stderr may be ASSERTED by an author who chose the expectation, but it is still never READ to attribute a cause -- the thing removed from the trust boundary was the harness guessing from stderr, not an author promising about it.",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "normativeReference": {
+      "type": "object",
+      "required": [
+        "ref",
+        "digest"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "description": "Identifier of the referenced subject or artifact.",
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "description": "sha256 of the referenced proposition, pinning exactly which version this contract was accepted against.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

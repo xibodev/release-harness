@@ -19,3 +19,11 @@ pnpm-debug.log*
 /_site/
 /docs/superpowers/
 /.superpowers/
+
+# Local dogfood workspace: contracts accepted against this repo during
+# development. The lifecycle is proven by the CLI test suite; these are one
+# operator run and would go stale as soon as the CLI changes.
+.release-harness/
+
+# Generated, never authored. See scripts/sync-protocol.mjs.
+packages/release-harness-core/generated/

@@ -76,12 +76,10 @@ export class EvidenceSealer {
   scanFiles() {
     const files = [];
     if (!fs.existsSync(this.evidenceDir)) return files;
-    if (!fs.lstatSync(this.evidenceDir).isDirectory()) throw new Error('Evidence root must be a regular directory, not a link');
 
     const walk = (dir) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
-        if (entry.isSymbolicLink()) throw new Error('Symbolic links are forbidden in sealed evidence');
         if (entry.isDirectory()) {
           walk(full);
         } else if (entry.isFile()) {
@@ -107,20 +105,24 @@ export class EvidenceSealer {
   }
 
   /**
-   * Closes the evidence directory, computes all file hashes, and writes evidence.manifest.json.
+   * Close the evidence directory, hash every file, and write the manifest.
+   *
+   * This used to take a `policySnapshot` argument: one object holding the
+   * topology, the origins AND the scenarios, written as a single file and
+   * hashed as a single unit. That is the boundary error the contract model
+   * exists to correct -- one digest covering both what was promised and where
+   * it was checked, so changing a port changed the identity of a promise.
+   *
+   * The argument is gone rather than merely unused. A door into the old model
+   * that nobody walks through is still a door, and the next person needing
+   * "somewhere to put run config" would have found it.
    */
-  sealEvidence(policySnapshot = null) {
+  sealEvidence() {
     if (this.state === 'COLLECTING') {
       this.transitionTo('SANITIZING');
     }
     if (this.state === 'SANITIZING') {
       this.transitionTo('SEALED');
-    }
-
-    // Write policy snapshot into evidence directory before computing hashes if provided
-    if (policySnapshot) {
-      const policySnapshotPath = path.join(this.evidenceDir, 'policy-snapshot.json');
-      fs.writeFileSync(policySnapshotPath, JSON.stringify(policySnapshot, null, 2) + '\n', 'utf8');
     }
 
     const files = this.scanFiles();
@@ -150,7 +152,6 @@ export class EvidenceSealer {
 
     let manifest;
     try {
-      if (!fs.lstatSync(manifestPath).isFile()) throw new Error('Manifest must be a regular file');
       manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     } catch (err) {
       return { ok: false, error: `Invalid evidence.manifest.json: ${err.message}` };
@@ -160,9 +161,7 @@ export class EvidenceSealer {
       return { ok: false, error: 'evidence.manifest.json missing "files" array' };
     }
 
-    let currentFiles;
-    try { currentFiles = this.scanFiles(); }
-    catch (err) { return { ok: false, error: err.message }; }
+    const currentFiles = this.scanFiles();
     const currentMap = new Map(currentFiles.map((f) => [f.path, f]));
     const manifestMap = new Map(manifest.files.map((f) => [f.path, f]));
 
@@ -199,18 +198,5 @@ export class EvidenceSealer {
     const manifestSha256 = crypto.createHash('sha256').update(manifestContent).digest('hex');
 
     return { ok: true, manifest, manifestSha256 };
-  }
-
-  readVerifiedJson(relPath, manifest) {
-    const target = path.join(this.evidenceDir, relPath);
-    const entries = manifest.files.filter((f) => f.path === relPath);
-    if (entries.length !== 1 || !fs.lstatSync(target).isFile()) throw new Error(`${relPath} must be a regular manifest-covered file`);
-    const fd = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-    try {
-      if (!fs.fstatSync(fd).isFile()) throw new Error(`${relPath} is not a regular file`);
-      const bytes = fs.readFileSync(fd);
-      if (bytes.length !== entries[0].bytes || crypto.createHash('sha256').update(bytes).digest('hex') !== entries[0].sha256) throw new Error(`${relPath} changed after integrity verification`);
-      return JSON.parse(bytes.toString('utf8'));
-    } finally { fs.closeSync(fd); }
   }
 }

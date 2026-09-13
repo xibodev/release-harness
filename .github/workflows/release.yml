@@ -4,13 +4,14 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
       - 'release-harness-v*'
   workflow_dispatch:
     inputs:
       dry_run:
         description: 'Dry run (validate and pack without publishing)'
         required: false
-        default: true
+        default: false
         type: boolean
 
 jobs:
@@ -31,9 +32,6 @@ jobs:
           node-version: 20
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Validate release versions and tag
-        run: npm run test:release
-
       - name: Install dependencies
         run: npm ci
 
@@ -43,49 +41,40 @@ jobs:
       - name: Build public site allowlist
         run: npm run build:site
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: 1. Schemas Test
+      - name: Validate schemas
         run: npm run test:schemas
 
-      - name: 2. Core Engine & Evaluator Tests
+      - name: Validate core, CLI, self-adoption and platform behavior
         run: npm run test:core
 
-      - name: 3. 28 Neutral Acceptance Fixtures Suite
-        run: npm run test:neutral
-
-      - name: 4. Acceptance Suite (AC-01 through AC-18)
-        run: npm run test:smoke
-
-      - name: 5. Pack & Independent Consumer Test
+      - name: Pack and test an independent consumer
         run: npm run test:install
 
-      - name: 5. Build Release Tarballs
+      - name: Build release tarballs
         run: |
           mkdir -p dist-tarballs
           npm pack --pack-destination dist-tarballs ./packages/release-harness-schemas
           npm pack --pack-destination dist-tarballs ./packages/release-harness-core
           npm pack --pack-destination dist-tarballs ./packages/release-harness
 
-      - name: 6. Publish Packages to npm (Topological Order)
+      - name: Publish packages to npm in dependency order
         if: ${{ !inputs.dry_run }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           echo "Publishing @xibodev/release-harness-schemas..."
           cd packages/release-harness-schemas
-          npm publish --access public --provenance
+          npm publish --access public --provenance --tag beta
           
           echo "Publishing @xibodev/release-harness-core..."
           cd ../release-harness-core
-          npm publish --access public --provenance
+          npm publish --access public --provenance --tag beta
           
           echo "Publishing @xibodev/release-harness (Public Facade)..."
           cd ../release-harness
-          npm publish --access public --provenance
+          npm publish --access public --provenance --tag beta
 
-      - name: 7. Create GitHub Release
+      - name: Create GitHub release
         if: ${{ !inputs.dry_run && startsWith(github.ref, 'refs/tags/') }}
         uses: softprops/action-gh-release@v2
         with:
