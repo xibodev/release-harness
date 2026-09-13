@@ -1,0 +1,20 @@
+:root {
+  --rh-gunmetal: #14171E;
+  --rh-caliper-steel: #94A3B8;
+  --rh-safety-gold: #EAB308;
+  --rh-dark-steel: #475569;
+  --rh-dark-gold: #A16207;
+  --rh-white: #FFFFFF;
+
+  --rh-tile: var(--rh-gunmetal);
+  --rh-check: var(--rh-gunmetal);
+  --rh-mark-on-light: var(--rh-dark-steel);
+  --rh-mark-on-dark: var(--rh-caliper-steel);
+  --rh-identity-accent: var(--rh-safety-gold);
+  --rh-identity-text-on-light: var(--rh-dark-gold);
+  --rh-inverse-ink: var(--rh-white);
+
+  --rh-wordmark-font: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --rh-wordmark-weight: 700;
+  --rh-mark-clearspace: 15%;
+}

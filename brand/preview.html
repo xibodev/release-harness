@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release-Harness Brand Kit</title>
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--rh-gunmetal); background: #F8FAFC; font: 16px/1.55 system-ui, sans-serif; }
+    main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 64px 0 96px; }
+    h1, h2 { margin: 0; line-height: 1.05; }
+    h1 { max-width: 12ch; font-size: clamp(42px, 8vw, 82px); letter-spacing: -.04em; }
+    h2 { margin-top: 64px; padding-top: 20px; border-top: 2px solid var(--rh-gunmetal); font-size: 24px; }
+    p { max-width: 68ch; color: var(--rh-dark-steel); }
+    code { font-family: var(--rh-wordmark-font); }
+    .kicker { margin-bottom: 12px; color: var(--rh-dark-gold); font: 700 12px var(--rh-wordmark-font); letter-spacing: .1em; text-transform: uppercase; }
+    .asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+    figure { display: grid; min-height: 210px; margin: 0; border: 1px solid #CBD5E1; background: #FFFFFF; }
+    figure.dark { background: var(--rh-gunmetal); border-color: var(--rh-gunmetal); }
+    figure img { align-self: center; justify-self: center; max-width: min(82%, 560px); max-height: 130px; }
+    figcaption { align-self: end; padding: 10px 12px; color: var(--rh-dark-steel); border-top: 1px solid #CBD5E1; font: 12px var(--rh-wordmark-font); }
+    .dark figcaption { color: var(--rh-caliper-steel); border-color: #475569; }
+    .swatches { display: grid; grid-template-columns: repeat(5, 1fr); margin-top: 24px; border: 1px solid #CBD5E1; }
+    .swatch { min-height: 150px; padding: 90px 12px 12px; color: #FFFFFF; font: 700 12px var(--rh-wordmark-font); }
+    .swatch.gold { color: var(--rh-gunmetal); background: var(--rh-safety-gold); }
+    .swatch.dark-gold { background: var(--rh-dark-gold); }
+    .swatch.gunmetal { background: var(--rh-gunmetal); }
+    .swatch.steel { color: var(--rh-gunmetal); background: var(--rh-caliper-steel); }
+    .swatch.dark-steel { background: var(--rh-dark-steel); }
+    .icons { display: flex; flex-wrap: wrap; gap: 24px; align-items: end; margin-top: 24px; }
+    .icons img { display: block; }
+    @media (max-width: 720px) { .asset-grid { grid-template-columns: 1fr; } .swatches { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="kicker">Release-Harness visual identity</p>
+    <h1>The deterministic evaluator decides.</h1>
+    <p>The Locking Caliper Clamp identifies deterministic release gates while
+      keeping the product's trust boundary explicit. The evaluator decides from
+      declared policy and recorded evidence. Use the formal name Release-Harness
+      in prose and the <code>release.harness</code> wordmark in visual lockups.</p>
+
+    <h2>Primary artwork</h2>
+    <div class="asset-grid">
+      <figure><img src="logos/lockup.svg" alt="Release-Harness lockup"><figcaption>Release-Harness logos/lockup.svg</figcaption></figure>
+      <figure class="dark"><img src="logos/lockup-inverse.svg" alt="Release-Harness inverse lockup"><figcaption>Release-Harness logos/lockup-inverse.svg</figcaption></figure>
+      <figure><img src="logos/wordmark.svg" alt="Release-Harness wordmark"><figcaption>Release-Harness logos/wordmark.svg</figcaption></figure>
+      <figure class="dark"><img src="logos/wordmark-inverse.svg" alt="Release-Harness inverse wordmark"><figcaption>Release-Harness logos/wordmark-inverse.svg</figcaption></figure>
+      <figure><img src="logos/mark.svg" alt="Release-Harness mark"><figcaption>Release-Harness logos/mark.svg</figcaption></figure>
+      <figure class="dark"><img src="logos/mark-inverse.svg" alt="Release-Harness inverse mark"><figcaption>Release-Harness logos/mark-inverse.svg</figcaption></figure>
+      <figure><img src="logos/mono-black.svg" alt="Release-Harness black one-color lockup"><figcaption>Release-Harness logos/mono-black.svg</figcaption></figure>
+      <figure class="dark"><img src="logos/mono-white.svg" alt="Release-Harness white one-color lockup"><figcaption>Release-Harness logos/mono-white.svg</figcaption></figure>
+    </div>
+
+    <h2>Palette</h2>
+    <div class="swatches" aria-label="Release-Harness brand colors">
+      <div class="swatch gunmetal">Gunmetal<br>#14171E</div>
+      <div class="swatch steel">Caliper Steel<br>#94A3B8</div>
+      <div class="swatch gold">Safety Gold<br>#EAB308</div>
+      <div class="swatch dark-steel">Dark Steel<br>#475569</div>
+      <div class="swatch dark-gold">Dark Gold<br>#A16207</div>
+    </div>
+
+    <h2>Icons</h2>
+    <div class="icons">
+      <img src="icons/favicon.svg" width="32" height="32" alt="Release-Harness 32 pixel favicon">
+      <img src="icons/app-icon.svg" width="96" height="96" alt="Release-Harness application icon at 96 pixels">
+      <img src="icons/icon-192.svg" width="144" height="144" alt="Release-Harness 192 pixel icon scaled to 144 pixels">
+      <img src="icons/icon-512.svg" width="192" height="192" alt="Release-Harness 512 pixel icon scaled to 192 pixels">
+    </div>
+
+    <h2>Social preview</h2>
+    <figure><img src="og/og-default.png" alt="Release-Harness default social preview"><figcaption>Release-Harness og/og-default.png - 1200 x 630, generated from og/og-default.svg</figcaption></figure>
+  </main>
+</body>
+</html>

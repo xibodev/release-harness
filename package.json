@@ -15,6 +15,7 @@
     "test:all": "npm run test:docs && npm run test:vocab && npm run test:schemas && npm run test:core && npm run test:install",
     "test:vocab": "node scripts/sync-assertion-kinds.mjs --check",
     "build:site": "node scripts/build-public-site.mjs",
+    "generate:brand-png": "node scripts/generate-brand-png.mjs",
     "test:docs": "node --test tests/docs/public-site.test.mjs"
   },
   "devDependencies": {

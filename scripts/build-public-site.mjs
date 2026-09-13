@@ -3,14 +3,22 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const PUBLIC_SITE_FILES = Object.freeze(['index.html', 'docs.html', 'style.css', 'app.js']);
+export const PUBLIC_SITE_FILES = Object.freeze([
+  'index.html',
+  'docs.html',
+  'style.css',
+  'app.js',
+  'favicon.svg',
+  'logo-mark.svg',
+  'og-default.png',
+]);
 
 /**
  * Build only the public site allowlist.
  *
  * The repository has carried private plans, validation transcripts and working
  * notes under documentation-shaped paths before. Publication is therefore an
- * explicit four-file projection, never a recursive copy of docs/.
+ * explicit allowlisted projection, never a recursive copy of docs/.
  */
 export function buildPublicSite({
   sourceDir = path.join(repo, 'docs'),
