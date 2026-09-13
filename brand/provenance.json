@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0.0",
+  "product": {
+    "formal_name": "Release-Harness",
+    "visual_wordmark": "release.harness"
+  },
+  "origin": {
+    "kind": "original_project_artwork",
+    "owner": "XiboDev",
+    "description": "Original vector identity for Release-Harness."
+  },
+  "mark": {
+    "name": "Locking Caliper Clamp",
+    "viewBox": "0 0 100 100",
+    "geometry": {
+      "left_jaw": "M38 20 C22 20 16 34 16 50 C16 66 22 80 38 80 L38 68 C28 68 26 58 26 50 C26 42 28 32 38 32 Z",
+      "right_jaw": "M62 20 C78 20 84 34 84 50 C84 66 78 80 62 80 L62 68 C72 68 74 58 74 50 C74 42 72 32 62 32 Z",
+      "center": {
+        "cx": 50,
+        "cy": 50,
+        "r": 15
+      },
+      "check": {
+        "path": "M43 50 L48 55 L57 44",
+        "stroke_width": 3.5,
+        "linecap": "round",
+        "linejoin": "round"
+      }
+    }
+  },
+  "palette": {
+    "gunmetal": "#14171E",
+    "caliper_steel": "#94A3B8",
+    "safety_gold": "#EAB308",
+    "dark_steel": "#475569",
+    "dark_gold": "#A16207",
+    "white": "#FFFFFF"
+  },
+  "assets": {
+    "logos": [
+      "logos/mark.svg",
+      "logos/mark-inverse.svg",
+      "logos/lockup.svg",
+      "logos/lockup-inverse.svg",
+      "logos/wordmark.svg",
+      "logos/wordmark-inverse.svg",
+      "logos/mono-black.svg",
+      "logos/mono-white.svg"
+    ],
+    "icons": [
+      "icons/favicon.svg",
+      "icons/app-icon.svg",
+      "icons/icon-192.svg",
+      "icons/icon-512.svg"
+    ],
+    "social": [
+      "og/og-default.svg",
+      "og/og-default.png"
+    ]
+  },
+  "runtime_projections": {
+    "docs/favicon.svg": "icons/favicon.svg",
+    "docs/logo-mark.svg": "logos/mark.svg",
+    "docs/og-default.png": "og/og-default.png"
+  },
+  "generated_assets": {
+    "og/og-default.png": {
+      "source": "og/og-default.svg",
+      "command": "npm run generate:brand-png",
+      "check_command": "npm run generate:brand-png -- --check",
+      "width": 1200,
+      "height": 630
+    }
+  },
+  "external_assets": []
+}

@@ -8,10 +8,15 @@
   --muted: oklch(0.52 0.025 250);
   --line: oklch(0.83 0.018 250);
   --line-strong: oklch(0.65 0.026 250);
-  --focus: oklch(0.50 0.15 250);
-  --teal: oklch(0.50 0.15 250);
-  --teal-strong: oklch(0.40 0.13 250);
-  --teal-wash: oklch(0.92 0.035 250);
+  --focus: #A16207;
+  --brand-gold: #EAB308;
+  --brand-gold-strong: #A16207;
+  --brand-gold-wash: #FEF9C3;
+  --brand-gunmetal: #14171E;
+  --brand-steel: #94A3B8;
+  --teal: var(--brand-gold);
+  --teal-strong: var(--brand-gold-strong);
+  --teal-wash: var(--brand-gold-wash);
   --blue: oklch(0.45 0.12 240);
   --blue-wash: oklch(0.93 0.025 240);
   --green: oklch(0.45 0.12 155);
@@ -31,7 +36,7 @@
   --sidebar-w: 312px;
   --text-muted: var(--muted);
   --border: var(--line);
-  --accent: var(--teal);
+  --accent: var(--brand-gold);
   --success: var(--green);
   --warning: var(--amber);
   --danger: var(--red);
@@ -47,10 +52,13 @@
   --muted: oklch(0.69 0.024 250);
   --line: oklch(0.40 0.027 250);
   --line-strong: oklch(0.55 0.028 250);
-  --focus: oklch(0.78 0.11 250);
-  --teal: oklch(0.78 0.11 250);
-  --teal-strong: oklch(0.86 0.07 250);
-  --teal-wash: oklch(0.30 0.07 250);
+  --focus: #FACC15;
+  --brand-gold: #EAB308;
+  --brand-gold-strong: #FACC15;
+  --brand-gold-wash: #3C3209;
+  --teal: var(--brand-gold);
+  --teal-strong: var(--brand-gold-strong);
+  --teal-wash: var(--brand-gold-wash);
   --blue: oklch(0.80 0.10 240);
   --blue-wash: oklch(0.28 0.045 240);
   --green: oklch(0.80 0.12 155);
@@ -116,16 +124,17 @@ button { cursor: pointer; }
   text-decoration: none;
   border-bottom: 1px solid var(--line);
 }
-.brand-badge {
+.brand-mark {
   display: grid;
-  width: 37px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   place-items: center;
-  background: var(--teal-strong);
-  border: 1px solid var(--teal-strong);
-  color: var(--surface);
-  font: 800 13px/1 var(--font-mono);
-  letter-spacing: .08em;
+  flex: 0 0 auto;
+}
+.brand-mark img {
+  display: block;
+  width: 38px;
+  height: 38px;
 }
 .brand-name {
   font: 800 16px/1 var(--font-mono);
@@ -232,7 +241,7 @@ button { cursor: pointer; }
   top: 22px;
   right: 25px;
   color: var(--line);
-  content: "// RH-01";
+  content: "// release.harness";
   font: 700 11px var(--font-mono);
   letter-spacing: .08em;
 }
@@ -383,7 +392,7 @@ pre code { padding: 0; color: inherit; background: transparent; border: 0; borde
   border: 1px solid var(--line);
   box-shadow: 2px 2px 0 oklch(0.24 0.025 250 / .08);
 }
-.card-tag { margin-bottom: 6px; color: var(--teal); font: 800 10px var(--font-mono); letter-spacing: .1em; }
+.card-tag { margin-bottom: 6px; color: var(--teal-strong); font: 800 10px var(--font-mono); letter-spacing: .1em; }
 .card-title { margin-bottom: 6px; color: var(--ink); font-weight: 800; line-height: 1.25; }
 .card-desc { color: var(--ink-soft); font-size: 13.5px; }
 
@@ -417,7 +426,7 @@ pre code { padding: 0; color: inherit; background: transparent; border: 0; borde
 .skill-header:hover { background: var(--surface-muted); }
 .skill-title { display: flex; align-items: center; gap: 8px; color: var(--ink); font: 800 13px var(--font-mono); }
 .skill-badge { padding: 2px 6px; color: var(--teal-strong); background: var(--teal-wash); border: 1px solid var(--teal); border-radius: 999px; font: 800 9px var(--font-sans); letter-spacing: .04em; }
-.skill-arrow { color: var(--teal); font: 800 13px var(--font-mono); transition: transform .15s ease; }
+.skill-arrow { color: var(--teal-strong); font: 800 13px var(--font-mono); transition: transform .15s ease; }
 .skill-item.open .skill-arrow { transform: rotate(90deg); }.skill-content { display: none; padding: 14px; border-top: 1px solid var(--line); font-size: 13px; }.skill-item.open .skill-content { display: block; }
 
 .tab-container { margin: 21px 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line-strong); }
@@ -436,7 +445,6 @@ footer a, footer .text-link { color: var(--teal-strong) !important; }
 .landing-page { background: var(--canvas); }
 .site-header { position: sticky; z-index: 20; top: 0; display: flex; align-items: center; gap: 2rem; min-height: 68px; padding: 0 clamp(20px, 5vw, 80px); background: color-mix(in srgb, var(--canvas) 94%, transparent); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
 .site-header .brand { margin-right: auto; padding: 0; border: 0; color: var(--ink); }
-.site-header .brand-badge { background: var(--teal-strong); border-color: var(--teal-strong); color: var(--surface); }
 .site-header .brand-name { color: var(--ink); }
 .site-nav { display: flex; gap: 1.25rem; align-items: center; font: 600 13px var(--font-mono); }
 .site-nav a { color: var(--ink-soft); text-decoration: none; }
@@ -448,7 +456,7 @@ footer a, footer .text-link { color: var(--teal-strong) !important; }
 .hero-lede { max-width: 56ch; font-size: 17px; line-height: 1.62; }
 .hero-actions { display: flex; align-items: center; gap: 1.15rem; margin-top: 2rem; }
 .button-primary { display: inline-flex; align-items: center; gap: .75rem; min-height: 46px; padding: .7rem 1rem; color: var(--surface); background: var(--teal-strong); border: 1px solid var(--teal-strong); box-shadow: 3px 3px 0 color-mix(in srgb, var(--teal-strong) 25%, transparent); font: 800 12px var(--font-mono); letter-spacing: .035em; text-decoration: none; transition: transform .16s ease, background .16s ease; }
-.button-primary:hover { color: var(--surface); background: var(--teal); border-color: var(--teal); transform: translate(-1px, -1px); }
+.button-primary:hover { color: var(--brand-gunmetal); background: var(--teal); border-color: var(--teal); transform: translate(-1px, -1px); }
 .button-primary:active { transform: translate(1px, 1px); box-shadow: none; }
 .button-link { color: var(--ink); font: 700 13px var(--font-mono); text-decoration: underline; text-underline-offset: 5px; }
 .button-link:hover { color: var(--teal-strong); }
@@ -493,7 +501,7 @@ footer a, footer .text-link { color: var(--teal-strong) !important; }
 .hero-copy h1 { margin: .4rem 0 1rem; }
 .hero-copy > p:first-child {
   margin: 0;
-  color: var(--teal);
+  color: var(--teal-strong);
   font: 700 11px var(--font-mono);
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -521,7 +529,7 @@ footer a, footer .text-link { color: var(--teal-strong) !important; }
 }
 .sidebar-site-nav a:hover { color: var(--ink); border-color: var(--line); }
 .sidebar-site-nav a.nav-current {
-  color: var(--teal);
+  color: var(--teal-strong);
   border-color: color-mix(in srgb, var(--teal) 45%, transparent);
 }
 .sidebar-site-nav a:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }

@@ -190,6 +190,12 @@ Protect evidence storage and review [SECURITY.md](SECURITY.md).
 All three beta packages version together. The private monorepo root is not
 published.
 
+## Brand assets
+
+The canonical Release-Harness visual identity kit lives in [`brand/`](brand/README.md).
+Its social PNG is generated from the canonical SVG with `npm run generate:brand-png`
+and verified by direct rerendering with `npm run generate:brand-png -- --check`.
+
 ## Beta feedback
 
 Classify reports by the boundary they challenge:

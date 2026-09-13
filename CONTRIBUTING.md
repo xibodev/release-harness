@@ -15,6 +15,7 @@ tests for changed behavior. For suspected vulnerabilities, follow
 | `protocol/ADOPTION.md` | Canonical host-neutral adoption protocol |
 | `tests/package/` | Packed-package installation and independent consumer tests |
 | `docs/` | Public website sources and documentation assets |
+| `brand/` | Canonical visual identity kit and generated social artwork |
 
 ## Setup And Validation
 
@@ -26,6 +27,11 @@ schemas, core and public CLI behavior, failure attribution, evidence sealing,
 self-adoption, Windows process bindings, and an independently packed and
 installed consumer lifecycle. Passing a focused subset is not the full gate.
 Report commands run, failures, and skipped coverage in your PR.
+
+Brand and public-site changes must preserve the explicit publication allowlist.
+After changing `brand/og/og-default.svg`, run `npm run generate:brand-png` and
+`npm run generate:brand-png -- --check` with the repository's Playwright Chromium
+installed.
 
 ## Code And Template Changes
 
