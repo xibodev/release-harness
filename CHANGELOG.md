@@ -2,7 +2,9 @@
 
 User-visible changes and upgrade considerations.
 
-## 1.2.0-beta.1 — prepared, not yet published
+## 1.2.0-beta.1 — published 2026-09-13
+
+[GitHub prerelease](https://github.com/xibodev/release-harness/releases/tag/v1.2.0-beta.1)
 
 ### Added
 

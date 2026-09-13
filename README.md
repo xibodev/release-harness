@@ -10,15 +10,13 @@ that must hold, and any exact cross-subject contracts its meaning depends on.
 Bindings say where to exercise it. Runs seal what was observed, adjudicate it
 without AI, and leave a verifiable chain of custody.
 
-The repository is preparing **1.2.0-beta.1**. The beta is not published until the
-release checkpoint is approved.
+Release-Harness **1.2.0-beta.1 is publicly available as a beta**. Stable
+readiness remains intentionally unclaimed.
 
 [Getting started](#getting-started) · [Release notes](BETA-RELEASE-NOTES.md) ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 ## Install the beta
-
-After the prerelease is published:
 
 ```bash
 npm install -D @xibodev/release-harness@1.2.0-beta.1

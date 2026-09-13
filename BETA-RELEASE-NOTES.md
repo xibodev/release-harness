@@ -1,7 +1,9 @@
 # Release-Harness 1.2.0-beta.1
 
 Release-Harness certifies deliberately accepted release propositions with
-deterministic evidence.
+deterministic evidence. Its frozen contract model is:
+
+`subject + assertions + requires + execution bindings`
 
 ## Highlights
 
