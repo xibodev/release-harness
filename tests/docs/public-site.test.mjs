@@ -259,7 +259,6 @@ test('brand copy assigns decisions to declared policy and evidence without retir
 test('repository Markdown links resolve locally', () => {
   for (const name of [
     'README.md',
-    'BETA-RELEASE-NOTES.md',
     'CHANGELOG.md',
     'CONTRIBUTING.md',
     'SECURITY.md',
@@ -295,7 +294,7 @@ test('public docs describe the beta and only the current command surface', () =>
 });
 
 test('manual and agent-assisted adoption share one frozen model', () => {
-  for (const name of ['README.md', 'BETA-RELEASE-NOTES.md', 'docs/docs.html']) {
+  for (const name of ['README.md', 'docs/docs.html']) {
     const text = read(name);
     assert.match(text, /subject\s*\+\s*assertions\s*\+\s*requires\s*\+\s*execution bindings/i, name);
     assert.doesNotMatch(text, /"topology_type"|"repository_role"|"component_registry"/i, name);
@@ -303,6 +302,13 @@ test('manual and agent-assisted adoption share one frozen model', () => {
   const docsText = read('docs/docs.html');
   assert.match(docsText, /agent.*same.*contract|same.*artifacts/i);
   assert.match(docsText, /deterministic core decides/i);
+});
+
+test('public prose contains no common mojibake sequences', () => {
+  const mojibake = /(?:Ã‚|Ãƒ|Ã¢(?:â‚¬|â€ |â‚¬Â¦|â€”|â€“)|Ã¯Â»Â¿|ï¿½)/;
+  for (const name of ['README.md', 'CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md', 'docs/index.html', 'docs/docs.html', 'docs/app.js']) {
+    assert.doesNotMatch(read(name), mojibake, `${name}: double-encoded or invalid UTF-8`);
+  }
 });
 
 test('documentation JavaScript parses', () => {

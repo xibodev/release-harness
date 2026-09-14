@@ -13,8 +13,8 @@ without AI, and leave a verifiable chain of custody.
 Release-Harness **3.0.0-beta.1 is publicly available as the continuous-lifecycle beta**.
 Stable readiness remains intentionally unclaimed.
 
-[Getting started](#getting-started) Â· [Release notes](BETA-RELEASE-NOTES.md) Â·
-[Contributing](CONTRIBUTING.md) Â· [Security](SECURITY.md)
+[Getting started](#getting-started) · [Release history](CHANGELOG.md) ·
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 ## Install the beta
 
@@ -25,10 +25,50 @@ npm install -D @xibodev/release-harness@3.0.0-beta.1
 Node.js 20 is the CI-tested baseline. Package metadata permits Node.js 18 and
 later, but that range is not a claim that every version has equivalent coverage.
 
+## Continuous lifecycle in 3.0.0-beta.1
+
+This prerelease carries accepted intent across later sessions and checkouts:
+
+```bash
+npx release-harness init --with-agent
+npx release-harness lifecycle status
+```
+
+The optional lifecycle capability is Git-backed. Plain `init` retains the
+standalone deterministic contract engine and does not make Git mandatory.
+
+After accepting an initial proposition, create and confirm separate baseline
+source coverage:
+
+```bash
+npx release-harness review start baseline --contract <digest>
+# An agent or person authors facts and semantic impact in the review file.
+npx release-harness review validate baseline
+npx release-harness review confirm baseline --by "release owner"
+```
+
+After later source changes:
+
+```bash
+npx release-harness review start change-42 --base origin/main --contract <digest>
+npx release-harness lifecycle check --contract <digest>
+```
+
+The CLI records exact Git source identities and changed paths. It never infers
+semantic impact from paths. A review must account for every accepted assertion
+and exact `requires` identity. Only an attributable confirmation of
+`reuse_contract` or source-affecting `rebind` can authorize continued coverage.
+A blocking, reauthor, stale, missing, or unconfirmed review prevents lifecycle-
+enabled certification before execution begins.
+
+`init --with-agent` installs one thin capability pointing to the canonical
+lifecycle protocol. It does not install a roster of agent personas or give an
+agent authority to accept contracts, confirm reviews, or change verdicts.
+
 ## Getting started
 
 ```text
-init â†’ draft â†’ inspect / resolve questions â†’ validate â†’ accept â†’ bind â†’ run â†’ verify
+init → draft → inspect / resolve questions → validate → accept → bind → run → verify
 ```
 
 1. **Initialize without inventing a contract.**
@@ -129,10 +169,10 @@ binding. It does not prove the program is otherwise correct or safe to deploy.
 
 ```text
 authoring draft + evidence record
-                â†“ accountable acceptance
+                ↓ accountable acceptance
 subject + assertions + requires
-                â†“ execution bindings
-sealed observations â†’ deterministic adjudication â†’ verifiable run chain
+                ↓ execution bindings
+sealed observations → deterministic adjudication → verifiable run chain
 ```
 
 - Drafts are mutable authoring records. Five epistemic statuses distinguish what
@@ -216,43 +256,3 @@ and an explanation of why an assertion primitive cannot solve it.
 ## License
 
 [MIT](LICENSE), XiboDev.
-
-## Continuous lifecycle in 3.0.0-beta.1
-
-This prerelease carries accepted intent across later sessions and checkouts:
-
-```bash
-npx release-harness init --with-agent
-npx release-harness lifecycle status
-```
-
-The optional lifecycle capability is Git-backed. Plain `init` retains the
-standalone deterministic contract engine and does not make Git mandatory.
-
-After accepting an initial proposition, create and confirm separate baseline
-source coverage:
-
-```bash
-npx release-harness review start baseline --contract <digest>
-# An agent or person authors facts and semantic impact in the review file.
-npx release-harness review validate baseline
-npx release-harness review confirm baseline --by "release owner"
-```
-
-After later source changes:
-
-```bash
-npx release-harness review start change-42 --base origin/main --contract <digest>
-npx release-harness lifecycle check --contract <digest>
-```
-
-The CLI records exact Git source identities and changed paths. It never infers
-semantic impact from paths. A review must account for every accepted assertion
-and exact `requires` identity. Only an attributable confirmation of
-`reuse_contract` or source-affecting `rebind` can authorize continued coverage.
-A blocking, reauthor, stale, missing, or unconfirmed review prevents lifecycle-
-enabled certification before execution begins.
-
-`init --with-agent` installs one thin capability pointing to the canonical
-lifecycle protocol. It does not install a roster of agent personas or give an
-agent authority to accept contracts, confirm reviews, or change verdicts.
