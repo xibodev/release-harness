@@ -670,3 +670,17 @@ console.log('\nStructural invariants (C2)\n');
 }
 
 console.log(`\n  ${results.length} structural invariants passed\n`);
+
+// S-16  Provider adapters are activation pointers, never semantic authorities.
+{
+  const initSource = fs.readFileSync(path.join(REPO, 'packages/release-harness-core/src/cli/init.js'), 'utf8');
+  const match = /const ADAPTER = `([\s\S]*?)`;/m.exec(initSource);
+  assert.ok(match, 'one canonical thin adapter template must exist');
+  const adapter = match[1];
+  assert.match(adapter, /\.release-harness\/protocol\/LIFECYCLE\.md/);
+  assert.match(adapter, /lifecycle status/);
+  for (const semantic of ['reviewed_source_digest', 'reuse_contract', 'review_digest', 'confirmation.events', 'PRODUCT', 'PASS']) {
+    assert.ok(!adapter.includes(semantic), `adapter must not duplicate lifecycle semantics: ${semantic}`);
+  }
+  pass('S-16', 'provider adapters point to one lifecycle protocol and own no semantics');
+}
