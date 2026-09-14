@@ -11,6 +11,7 @@ import {
 } from '../lifecycle.js';
 import { validateChangeReview } from '../validator.js';
 import { paths, readJson, writeJson, isInstalled, resolveAccepted, listReviews } from './layout.js';
+import { configuredSources } from './lifecycle.js';
 import { EXIT } from './exit-codes.js';
 
 function loadContract(cwd, ref) {
@@ -24,7 +25,11 @@ function loadContract(cwd, ref) {
 
 function sourceSpecs(args, cwd) {
   const raw = args.flags.source;
-  if (!raw) return [{ id: 'primary', directory: cwd, repositoryIdentity: undefined }];
+  if (!raw) return configuredSources(cwd).map((source) => ({
+    id: source.id,
+    directory: source.directory,
+    repositoryIdentity: source.repository_identity,
+  }));
   const values = Array.isArray(raw) ? raw : [raw];
   return values.map((value) => {
     const [id, directory, identity] = String(value).split('=');

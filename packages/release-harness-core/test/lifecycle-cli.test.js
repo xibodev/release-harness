@@ -249,7 +249,38 @@ console.log('\n  6 lifecycle CLI checks passed\n');
   console.log('  ok  [LC-9] current beta state refresh preserves immutable accepted identity');
 }
 
-// LC-10  Ignored durable state is reported, not mistaken for portability.
+// LC-11  A subject may bind lifecycle coverage to multiple repositories.
+{
+  const cwd = fixture();
+  const assembly = fixture();
+  assert.equal(run(cwd, ['init', '--with-agent']).code, 0);
+  commitCapability(cwd);
+  const digest = writeAccepted(cwd);
+  let r = run(cwd, ['lifecycle', 'source', 'set', 'assembly', '--path', assembly]);
+  assert.equal(r.code, 0, r.all);
+  r = run(cwd, ['review', 'start', 'multi', '--contract', digest]);
+  assert.equal(r.code, 0, r.all);
+  const file = path.join(cwd, '.release-harness', 'reviews', 'multi.review.json');
+  const review = JSON.parse(fs.readFileSync(file));
+  assert.deepEqual(review.sources.map((s) => s.source_id), ['assembly', 'primary']);
+  assert.ok(review.sources.every((s) => !('role' in s) && !('component' in s)));
+  authorReview(cwd, 'multi');
+  assert.equal(run(cwd, ['review', 'confirm', 'multi', '--by', 'owner']).code, 0);
+
+  // Ignore checkout-local durability warnings here; source coverage itself is current.
+  r = run(cwd, ['lifecycle', 'status', '--contract', digest]);
+  assert.doesNotMatch(r.all, /REVIEW_STALE|SOURCE_UNREVIEWED/);
+  fs.writeFileSync(path.join(assembly, 'app.js'), "console.log('changed assembly');\n");
+  git(assembly, ['add', 'app.js']);
+  git(assembly, ['commit', '-m', 'change assembly']);
+  r = run(cwd, ['lifecycle', 'status', '--contract', digest]);
+  assert.match(r.all, /REVIEW_STALE/);
+
+  fs.rmSync(cwd, { recursive: true, force: true });
+  fs.rmSync(assembly, { recursive: true, force: true });
+  console.log('  ok  [LC-11] exact source coverage spans multiple repositories without roles');
+}
+
 {
   const cwd = fixture();
   fs.writeFileSync(path.join(cwd, '.gitignore'), '.release-harness/\n');

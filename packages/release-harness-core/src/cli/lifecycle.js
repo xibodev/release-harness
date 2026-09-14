@@ -1,12 +1,14 @@
 /** Deterministic lifecycle status and noninteractive freshness gate. */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { captureGitSource, deriveLifecycleReadiness } from '../lifecycle.js';
 import { validateChangeReview, validateReviewConfirmation } from '../validator.js';
 import {
   paths,
   readJson,
+  writeJson,
   isInstalled,
   listDrafts,
   listAccepted,
@@ -85,6 +87,27 @@ function gitStatus(cwd) {
   return { applicable: true, warnings };
 }
 
+export function configuredSources(cwd) {
+  const lifecycle = config(cwd).lifecycle ?? {};
+  return [
+    { id: 'primary', directory: cwd, repository_identity: lifecycle.repository_identity },
+    ...Object.entries(lifecycle.sources ?? {}).map(([id, source]) => ({
+      id,
+      directory: path.resolve(cwd, source.path),
+      repository_identity: source.repository_identity,
+    })),
+  ].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function captureConfiguredSources(cwd, sourceIds) {
+  const configured = configuredSources(cwd);
+  const wanted = sourceIds?.length ? configured.filter((source) => sourceIds.includes(source.id)) : configured;
+  return wanted.map((source) => captureGitSource(source.directory, {
+    sourceId: source.id,
+    repositoryIdentity: source.repository_identity,
+  }));
+}
+
 export function lifecycleFacts(cwd, ref) {
   const accepted = listAccepted(cwd);
   const drafts = listDrafts(cwd);
@@ -97,8 +120,8 @@ export function lifecycleFacts(cwd, ref) {
 
   if (selected && !selected.error) {
     confirmed = confirmedFor(cwd, selected.digest);
-    const sourceIds = confirmed?.review?.sources?.map((s) => s.source_id) ?? ['primary'];
-    currentSources = sourceIds.map((sourceId) => captureGitSource(cwd, { sourceId }));
+    const sourceIds = confirmed?.review?.sources?.map((s) => s.source_id);
+    currentSources = captureConfiguredSources(cwd, sourceIds);
     coverage = deriveLifecycleReadiness({
       contract: selected.contract,
       currentSources,
@@ -143,6 +166,27 @@ export function cmdLifecycle(ctx) {
     return EXIT.USAGE_OR_CONTRACT;
   }
   const sub = args.positional[1] ?? 'status';
+  if (sub === 'source' && args.positional[2] === 'set') {
+    const id = args.positional[3];
+    const sourcePath = typeof args.flags.path === 'string' ? args.flags.path : null;
+    if (!id || id === 'primary' || !sourcePath) {
+      out.error('Usage: release-harness lifecycle source set <source-id> --path <directory> [--repository <identity>]');
+      return EXIT.USAGE_OR_CONTRACT;
+    }
+    const p = paths(cwd);
+    const current = readJson(p.config).value ?? {};
+    const lifecycle = current.lifecycle ?? { enabled: true, provider: 'git' };
+    lifecycle.sources = {
+      ...(lifecycle.sources ?? {}),
+      [id]: {
+        path: path.relative(cwd, path.resolve(cwd, sourcePath)).split(path.sep).join('/') || '.',
+        ...(typeof args.flags.repository === 'string' ? { repository_identity: args.flags.repository } : {}),
+      },
+    };
+    writeJson(p.config, { ...current, lifecycle });
+    out.ok(`Configured lifecycle source "${id}".`);
+    return EXIT.OK;
+  }
   if (!['status', 'check'].includes(sub)) {
     out.error(`Unknown lifecycle subcommand "${sub}". Expected: status, check.`);
     return EXIT.USAGE_OR_CONTRACT;

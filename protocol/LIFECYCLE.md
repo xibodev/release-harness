@@ -12,6 +12,17 @@ subject + assertions + requires + execution bindings
 Lifecycle reviews sit around accepted contracts. They never enter contract
 identity, rewrite acceptance, or decide a verdict.
 
+The optional lifecycle capability is Git-backed. When one accepted subject really
+spans source in multiple repositories, configure each additional exact source:
+
+```text
+release-harness lifecycle source set <source-id> --path <directory>
+```
+
+`source-id` is bookkeeping identity only. It is not a component, role, service,
+or topology concept. Exact normative contract dependencies under `requires` do
+not automatically become lifecycle source roots.
+
 ## Start every session by resuming state
 
 Run:

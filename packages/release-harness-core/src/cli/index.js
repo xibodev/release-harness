@@ -141,6 +141,7 @@ const HELP = {
   lifecycle: [
     'release-harness lifecycle status',
     'release-harness lifecycle check [--contract <digest>]',
+    'release-harness lifecycle source set <id> --path <directory>',
     '',
     'Derive source-review freshness from immutable facts. In lifecycle-enabled',
     'projects, check exits 2 when review is missing, stale, blocking or unconfirmed.',
