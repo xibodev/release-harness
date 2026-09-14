@@ -103,8 +103,13 @@ console.log('\nContinuous lifecycle core\n');
 
   fs.mkdirSync(path.join(cwd, '.release-harness', 'reviews'), { recursive: true });
   fs.writeFileSync(path.join(cwd, '.release-harness', 'reviews', 'r.review.json'), '{}\n');
-  const lifecycleOnly = captureGitSource(cwd, { sourceId: 'primary', repositoryIdentity: 'example/repo' });
-  assert.equal(lifecycleOnly.reviewed_source_digest, initial.reviewed_source_digest);
+  const lifecycleUntracked = captureGitSource(cwd, { sourceId: 'primary', repositoryIdentity: 'example/repo' });
+  assert.equal(lifecycleUntracked.status, 'established');
+  assert.equal(lifecycleUntracked.reviewed_source_digest, initial.reviewed_source_digest);
+  git(cwd, ['add', '-f', '.release-harness/reviews/r.review.json']);
+  const lifecycleStaged = captureGitSource(cwd, { sourceId: 'primary', repositoryIdentity: 'example/repo' });
+  assert.equal(lifecycleStaged.status, 'established', 'staged lifecycle-owned state cannot make source unknowable');
+  assert.equal(lifecycleStaged.reviewed_source_digest, initial.reviewed_source_digest);
 
   fs.writeFileSync(path.join(cwd, 'README.md'), '# changed\n');
   git(cwd, ['add', 'README.md']);
