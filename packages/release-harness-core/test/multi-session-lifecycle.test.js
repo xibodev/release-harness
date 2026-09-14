@@ -105,6 +105,7 @@ git(a, 'add', '-f', '.release-harness/reviews'); git(a, 'commit', '--allow-empty
 git(a, 'push');
 git(root, 'clone', origin, c); git(c, 'config', 'user.name', 'Lifecycle Fixture'); git(c, 'config', 'user.email', 'fixture@example.invalid');
 let stale = rh(c, 'lifecycle', 'check', '--contract', contractDigest);
+assert.equal(fs.existsSync(path.join(c, '.release-harness', 'runs')), false, 'fresh checkout has no historical local runs');
 assert.equal(stale.code, 0, stale.all);
 assert.doesNotMatch(stale.all, /REVIEW_STALE/);
 assert.equal(rh(c, 'review', 'start', 'merged', '--base', 'HEAD~1', '--contract', contractDigest).code, 0);
