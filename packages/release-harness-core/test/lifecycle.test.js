@@ -330,4 +330,25 @@ console.log('\nContinuous lifecycle core\n');
   pass('L-8', 'normative identity changes require reauthoring and never mutate requires');
 }
 
+// ---------------------------------------------------------------------------
+// L-9  Editing an immutable confirmed review invalidates its confirmation.
+// ---------------------------------------------------------------------------
+{
+  const cwd = repo();
+  const source = captureGitSource(cwd, { sourceId: 'primary' });
+  const r = review(source);
+  const confirmed = confirmReview(r, contract, { by: 'owner' });
+  confirmed.review.conclusion.summary = 'Tampered after confirmation.';
+  const readiness = deriveLifecycleReadiness({
+    contract,
+    currentSources: [source],
+    review: confirmed.review,
+    confirmation: confirmed.confirmation,
+  });
+  assert.equal(readiness.eligible, false);
+  assert.ok(readiness.reasons.some((x) => x.code === 'REVIEW_TAMPERED'));
+  fs.rmSync(cwd, { recursive: true, force: true });
+  pass('L-9', 'editing a confirmed review invalidates exact confirmation');
+}
+
 console.log(`\n  ${results.length} lifecycle-core checks passed\n`);

@@ -310,9 +310,15 @@ export function deriveLifecycleReadiness({ contract, currentSources = [], review
     if (action === 'block' || action === 'reauthor') {
       reasons.push({ code: 'REVIEW_BLOCKS_RELEASE', detail: `Review conclusion is "${action}".` });
     } else if (PROGRESSION.has(action)) {
-      const digest = review.digest ?? reviewDigest(review);
-      if (!confirmation || confirmation.review_digest !== digest || !(confirmation.events ?? []).some((e) => e.by)) {
-        reasons.push({ code: 'REVIEW_UNCONFIRMED', detail: 'Reuse requires attributable confirmation of this exact review.' });
+      const claimed = review.digest;
+      const actual = reviewDigest(review);
+      if (claimed && claimed !== actual) {
+        reasons.push({ code: 'REVIEW_TAMPERED', detail: 'The confirmed review no longer matches its digest.' });
+      } else {
+        const digest = claimed ?? actual;
+        if (!confirmation || confirmation.review_digest !== digest || !(confirmation.events ?? []).some((e) => e.by)) {
+          reasons.push({ code: 'REVIEW_UNCONFIRMED', detail: 'Reuse requires attributable confirmation of this exact review.' });
+        }
       }
     }
   }
