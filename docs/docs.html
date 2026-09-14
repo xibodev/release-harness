@@ -182,6 +182,36 @@ release-harness verify</code></pre>
       </tbody></table>
     </section>
 
+    <section id="continuous-lifecycle">
+      <h2>Continuous lifecycle across sessions</h2>
+      <p>Enable the optional Git-backed lifecycle capability with <code>release-harness init --with-agent</code>. Plain <code>init</code> remains the contract-only engine and does not require Git or an agent.</p>
+      <pre><code>Day 1
+adopt → accept → baseline review → operator confirms
+
+Another checkout
+source changes → review-change → operator confirms reuse
+
+Release day
+prepare-release → lifecycle check → run → verify</code></pre>
+      <p>These are four workflows of one project capability: <strong>adopt</strong>, <strong>review-change</strong>, <strong>prepare-release</strong>, and <strong>investigate-result</strong>. They are not four independent authoritative agents.</p>
+      <h3>Responsibility boundary</h3>
+      <table class="tech-table"><thead><tr><th>Actor</th><th>Responsibility</th></tr></thead><tbody>
+        <tr><td>Agent</td><td>Inspects bounded evidence and proposes factual records and semantic change impact.</td></tr>
+        <tr><td>Operator</td><td>Accepts release propositions and confirms an exact review before semantic reuse can authorize release.</td></tr>
+        <tr><td>Deterministic harness</td><td>Owns identity, source freshness, eligibility, execution, evidence sealing, attribution, and verdict.</td></tr>
+      </tbody></table>
+      <h3>Reviews and exact freshness</h3>
+      <pre><code>release-harness lifecycle status
+release-harness review start change-42 --base origin/main --contract &lt;digest&gt;
+release-harness review validate change-42
+release-harness review confirm change-42 --by "release owner"
+release-harness lifecycle check --contract &lt;digest&gt;</code></pre>
+      <p>A review applies to an exact projected source state. The projection contains every tracked project path, mode, and Git blob except <code>.release-harness/**</code>. Commit identity alone is not freshness: a lifecycle-only commit may leave the projection unchanged, while a conflict-resolution source edit makes the review stale.</p>
+      <h3>Durable project state</h3>
+      <p>Normally source-control drafts and authoring records, accepted contracts, lifecycle reviews and confirmations, project-local capability adapters, and the package manifest/lockfile. Keep runs/evidence, machine-local bindings, credentials, and caches local or in controlled external retention. Release-Harness warns when durable state exists only in one checkout and never commits it automatically.</p>
+      <p>When one accepted subject genuinely spans source in multiple repositories, add exact lifecycle source IDs with <code>release-harness lifecycle source set</code>. Source IDs are bookkeeping only—not roles, components, or topology.</p>
+    </section>
+
     <section id="beta-scope">
       <h2>Beta scope and limitations</h2>
       <div class="callout warning"><div class="callout-title">BETA, NOT STABLE</div><p>Beta focuses on deterministic HTTP and CLI release assertions and on trustworthy contract authoring and adjudication. The assertion vocabulary will expand from demonstrated certification needs rather than repository taxonomy.</p></div>
