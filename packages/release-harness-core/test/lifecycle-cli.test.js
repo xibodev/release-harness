@@ -298,3 +298,27 @@ console.log('\n  6 lifecycle CLI checks passed\n');
   fs.rmSync(cwd, { recursive: true, force: true });
   console.log('  ok  [LC-10] ignored durable state is reported as checkout-local');
 }
+
+// LC-12  A certifying run seals the exact lifecycle source identity it gated.
+{
+  const cwd = fixture();
+  assert.equal(run(cwd, ['init', '--with-agent']).code, 0);
+  commitCapability(cwd);
+  const digest = writeAccepted(cwd);
+  assert.equal(run(cwd, ['review', 'start', 'baseline', '--contract', digest]).code, 0);
+  authorReview(cwd, 'baseline');
+  assert.equal(run(cwd, ['review', 'confirm', 'baseline', '--by', 'owner']).code, 0);
+  git(cwd, ['add', '-f', '.release-harness']);
+  git(cwd, ['commit', '-m', 'persist coverage']);
+  assert.equal(run(cwd, ['bind', 'local', '--target', 'tool=node tool.js']).code, 0);
+  const executed = run(cwd, ['run', '--binding', 'local', '--contract', digest]);
+  assert.equal(executed.code, 0, executed.all);
+  const runId = fs.readdirSync(path.join(cwd, '.release-harness', 'runs'))[0];
+  const manifest = JSON.parse(fs.readFileSync(path.join(cwd, '.release-harness', 'runs', runId, 'manifest.json')));
+  assert.match(manifest.sources.primary, /^[0-9a-f]{64}$/);
+  const reviewFile = fs.readdirSync(path.join(cwd, '.release-harness', 'reviews', 'confirmed')).find((x) => x.endsWith('.review.json'));
+  const review = JSON.parse(fs.readFileSync(path.join(cwd, '.release-harness', 'reviews', 'confirmed', reviewFile)));
+  assert.equal(manifest.sources.primary, review.sources[0].reviewed_source_digest);
+  fs.rmSync(cwd, { recursive: true, force: true });
+  console.log('  ok  [LC-12] run manifest seals the exact lifecycle source identity it gated');
+}

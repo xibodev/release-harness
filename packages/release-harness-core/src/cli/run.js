@@ -142,6 +142,7 @@ export async function cmdRun(ctx) {
   // Continuous lifecycle is an outer gate only when explicitly enabled by
   // `init --with-agent`. Plain deterministic contract execution remains
   // unchanged and does not require Git.
+  let lifecycleCoverage = null;
   if (!exploratory && contract && readJson(p.config).value?.lifecycle?.enabled === true) {
     const lifecycle = lifecycleFacts(cwd, contract.digest);
     if (!lifecycle.source_coverage.eligible || lifecycle.tracking.warnings.length > 0) {
@@ -154,6 +155,11 @@ export async function cmdRun(ctx) {
       out.data('side_effects', trace.entries);
       return EXIT.UNPROVEN;
     }
+    lifecycleCoverage = Object.fromEntries(
+      lifecycle.current_sources
+        .filter((source) => source.status === 'established')
+        .map((source) => [source.source_id, source.reviewed_source_digest])
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -245,7 +251,7 @@ export async function cmdRun(ctx) {
     runId,
     contract,
     bindings,
-    sources: { cwd: path.resolve(cwd) },
+    sources: lifecycleCoverage ?? { cwd: path.resolve(cwd) },
     evidenceManifestSha256: sealed.manifestSha256,
     verdict,
     mode: decision.mode,
