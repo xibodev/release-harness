@@ -121,6 +121,12 @@ test('all site-local assets and fragments resolve inside the artifact', () => {
   }
 });
 
+test('landing install commands stay contained by their local scroller', () => {
+  const css = read('docs/style.css');
+  assert.match(css, /\.install-panel\s*\{[^}]*\bmin-width:\s*0\s*;/);
+  assert.match(css, /pre\s*\{[^}]*\boverflow-x:\s*auto\s*;/);
+});
+
 test('site headers use the approved identity, canonical URLs and PNG social metadata', () => {
   const imageUrl = 'https://xibodev.github.io/release-harness/og-default.png';
   const pages = [
