@@ -248,3 +248,18 @@ console.log('\n  6 lifecycle CLI checks passed\n');
   fs.rmSync(cwd, { recursive: true, force: true });
   console.log('  ok  [LC-9] current beta state refresh preserves immutable accepted identity');
 }
+
+// LC-10  Ignored durable state is reported, not mistaken for portability.
+{
+  const cwd = fixture();
+  fs.writeFileSync(path.join(cwd, '.gitignore'), '.release-harness/\n');
+  git(cwd, ['add', '.gitignore']);
+  git(cwd, ['commit', '-m', 'ignore local harness state']);
+  assert.equal(run(cwd, ['init', '--with-agent']).code, 0);
+  assert.equal(run(cwd, ['draft', 'new', 'ignored']).code, 0);
+  const status = run(cwd, ['lifecycle', 'status']);
+  assert.equal(status.code, 2);
+  assert.match(status.all, /ignored.*draft.*only in this checkout/i);
+  fs.rmSync(cwd, { recursive: true, force: true });
+  console.log('  ok  [LC-10] ignored durable state is reported as checkout-local');
+}

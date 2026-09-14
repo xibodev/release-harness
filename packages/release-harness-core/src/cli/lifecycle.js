@@ -49,7 +49,7 @@ function confirmedFor(cwd, contractDigest) {
 }
 
 function gitStatus(cwd) {
-  const r = spawnSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd, encoding: 'utf8' });
+  const r = spawnSync('git', ['status', '--porcelain', '--untracked-files=all', '--ignored=matching'], { cwd, encoding: 'utf8' });
   if (r.status !== 0) return { applicable: false, warnings: [] };
   const warnings = [];
   const lines = r.stdout.split(/\r?\n/).filter(Boolean);
@@ -59,9 +59,24 @@ function gitStatus(cwd) {
     { pattern: /^\.release-harness\/accepted\//, label: 'accepted contract state' },
     { pattern: /^\.release-harness\/reviews\//, label: 'lifecycle review' },
   ];
+  const ignoredRoot = lines.some((line) => line === '!! .release-harness/' || line === '!! .release-harness\\');
   for (const { pattern, label } of durable) {
-    const count = lines.filter((line) => line.startsWith('?? ') && pattern.test(line.slice(3).replace(/\\/g, '/'))).length;
-    if (count) warnings.push({ code: 'DURABLE_STATE_UNTRACKED', detail: `${count} ${label}${count === 1 ? '' : 's'} exist only in this checkout. Another checkout or future session will not see them.` });
+    let count = lines.filter((line) => (line.startsWith('?? ') || line.startsWith('!! ')) && pattern.test(line.slice(3).replace(/\\/g, '/'))).length;
+    if (ignoredRoot && count === 0) {
+      const dir = label === 'draft' || label === 'authoring record'
+        ? paths(cwd).drafts
+        : label === 'accepted contract state'
+          ? paths(cwd).accepted
+          : paths(cwd).reviews;
+      if (fs.existsSync(dir)) {
+        const suffix = label === 'draft' ? '.draft.json' : label === 'authoring record' ? '.record.json' : '.json';
+        count = fs.readdirSync(dir, { recursive: true }).filter((file) => String(file).endsWith(suffix)).length;
+      }
+    }
+    if (count) {
+      const ignored = ignoredRoot || lines.some((line) => line.startsWith('!! ') && pattern.test(line.slice(3).replace(/\\/g, '/')));
+      warnings.push({ code: ignored ? 'DURABLE_STATE_IGNORED' : 'DURABLE_STATE_UNTRACKED', detail: `${count} ${ignored ? 'ignored ' : ''}${label}${count === 1 ? '' : 's'} exist only in this checkout. Another checkout or future session will not see them.` });
+    }
   }
   const trackedRuns = lines.filter((line) => !line.startsWith('?? ') && line.slice(3).replace(/\\/g, '/').startsWith('.release-harness/runs/'));
   if (trackedRuns.length) warnings.push({ code: 'LOCAL_STATE_TRACKED', detail: `${trackedRuns.length} run artifact(s) are tracked even though runs are local by default.` });
