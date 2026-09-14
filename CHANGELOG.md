@@ -57,9 +57,11 @@ The beta assertion vocabulary is intentionally limited to deterministic HTTP
 and CLI propositions. A PASS covers only the accepted assertions and exact
 references exercised by that run; it is not deployment approval.
 
-See [BETA-RELEASE-NOTES.md](BETA-RELEASE-NOTES.md) and [README.md](README.md).
+See the [1.2.0-beta.1 GitHub prerelease](https://github.com/xibodev/release-harness/releases/tag/v1.2.0-beta.1) and [README.md](README.md).
 
-## 3.0.0-beta.1 — Unreleased
+## 3.0.0-beta.1 — published 2026-09-14
+
+[GitHub prerelease](https://github.com/xibodev/release-harness/releases/tag/v3.0.0-beta.1)
 
 ### Added
 
