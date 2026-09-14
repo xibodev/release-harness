@@ -10,16 +10,16 @@ that must hold, and any exact cross-subject contracts its meaning depends on.
 Bindings say where to exercise it. Runs seal what was observed, adjudicate it
 without AI, and leave a verifiable chain of custody.
 
-Release-Harness **1.2.0-beta.1 is publicly available as a beta**. Stable
-readiness remains intentionally unclaimed.
+Release-Harness **3.0.0-beta.1 is publicly available as the continuous-lifecycle beta**.
+Stable readiness remains intentionally unclaimed.
 
-[Getting started](#getting-started) · [Release notes](BETA-RELEASE-NOTES.md) ·
-[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Getting started](#getting-started) Â· [Release notes](BETA-RELEASE-NOTES.md) Â·
+[Contributing](CONTRIBUTING.md) Â· [Security](SECURITY.md)
 
 ## Install the beta
 
 ```bash
-npm install -D @xibodev/release-harness@1.2.0-beta.1
+npm install -D @xibodev/release-harness@3.0.0-beta.1
 ```
 
 Node.js 20 is the CI-tested baseline. Package metadata permits Node.js 18 and
@@ -28,7 +28,7 @@ later, but that range is not a claim that every version has equivalent coverage.
 ## Getting started
 
 ```text
-init → draft → inspect / resolve questions → validate → accept → bind → run → verify
+init â†’ draft â†’ inspect / resolve questions â†’ validate â†’ accept â†’ bind â†’ run â†’ verify
 ```
 
 1. **Initialize without inventing a contract.**
@@ -129,10 +129,10 @@ binding. It does not prove the program is otherwise correct or safe to deploy.
 
 ```text
 authoring draft + evidence record
-                ↓ accountable acceptance
+                â†“ accountable acceptance
 subject + assertions + requires
-                ↓ execution bindings
-sealed observations → deterministic adjudication → verifiable run chain
+                â†“ execution bindings
+sealed observations â†’ deterministic adjudication â†’ verifiable run chain
 ```
 
 - Drafts are mutable authoring records. Five epistemic statuses distinguish what
@@ -219,7 +219,7 @@ and an explanation of why an assertion primitive cannot solve it.
 
 ## Continuous lifecycle in 3.0.0-beta.1
 
-The next prerelease carries accepted intent across later sessions and checkouts:
+This prerelease carries accepted intent across later sessions and checkouts:
 
 ```bash
 npx release-harness init --with-agent
