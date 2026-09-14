@@ -669,8 +669,6 @@ console.log('\nStructural invariants (C2)\n');
   pass('S-15', 'source coverage and reviews surround, never expand, contract identity');
 }
 
-console.log(`\n  ${results.length} structural invariants passed\n`);
-
 // S-16  Provider adapters are activation pointers, never semantic authorities.
 {
   const initSource = fs.readFileSync(path.join(REPO, 'packages/release-harness-core/src/cli/init.js'), 'utf8');
@@ -684,3 +682,5 @@ console.log(`\n  ${results.length} structural invariants passed\n`);
   }
   pass('S-16', 'provider adapters point to one lifecycle protocol and own no semantics');
 }
+
+console.log(`\n  ${results.length} structural invariants passed\n`);
