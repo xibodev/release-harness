@@ -33,12 +33,7 @@ export function artifactDigest(value) {
 
 export function canonicalizeReview(review) {
   const { proposed, digest, confirmed, ...identity } = review ?? {};
-  // Git context such as commit/tree explains where the review happened, but
-  // exact source coverage is the release-source projection digest. Excluding
-  // contextual head labels keeps committing the review itself from changing
-  // the identity of an otherwise identical baseline/change review.
-  const sources = (identity.sources ?? []).map(({ head_commit, head_tree, ...source }) => source);
-  return canonical({ ...identity, sources });
+  return canonical(identity);
 }
 
 export function reviewDigest(review) {
@@ -279,6 +274,11 @@ export function confirmReview(review, contract, { by, at, note } = {}) {
       events: [{ by: by.trim(), at: at ?? new Date().toISOString(), ...(note ? { note } : {}) }],
     },
   };
+}
+
+function sourceIdentity(source) {
+  if (!source || source.status !== 'established') return null;
+  return `${source.source_id}|${source.reviewed_source_digest}`;
 }
 
 export function deriveLifecycleReadiness({ contract, currentSources = [], review, confirmation } = {}) {

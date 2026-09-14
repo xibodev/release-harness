@@ -166,6 +166,10 @@ console.log('\nContinuous lifecycle core\n');
   changed.impact.assertions[0].impact = 'not_established';
   assert.notEqual(reviewDigest(changed), first);
 
+  const changedContext = structuredClone(r);
+  changedContext.sources[0].head_commit = 'f'.repeat(40);
+  assert.notEqual(reviewDigest(changedContext), first, 'recorded commit context is part of review identity');
+
   assert.ok(!('proposed' in canonicalizeReview(r)));
   assert.equal(artifactDigest(canonicalizeReview(r)), first);
   fs.rmSync(cwd, { recursive: true, force: true });
