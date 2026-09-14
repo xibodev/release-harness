@@ -489,7 +489,7 @@ footer a, footer .text-link { color: var(--teal-strong) !important; }
 .verdict-section > .button-link { display: inline-block; margin-top: 1.5rem; }
 .start-grid { display: grid; grid-template-columns: minmax(0, .8fr) minmax(420px, 1.2fr); gap: clamp(2rem, 8vw, 8rem); align-items: center; padding: 2rem 0 0; border-top: 2px solid var(--line-strong); }
 .start-grid p { max-width: 52ch; margin-top: 1rem; }
-.install-panel { background: var(--terminal); border: 1px solid var(--terminal-line); box-shadow: 5px 5px 0 color-mix(in srgb, var(--ink) 12%, transparent); }
+.install-panel { min-width: 0; background: var(--terminal); border: 1px solid var(--terminal-line); box-shadow: 5px 5px 0 color-mix(in srgb, var(--ink) 12%, transparent); }
 .install-panel pre { margin-bottom: 0; border: 0; }
 .install-panel a { display: inline-block; padding: 1rem 1.1rem; color: #d8e5f7; }
 .site-footer { display: flex; justify-content: space-between; gap: 1rem; width: min(1240px, calc(100% - 40px)); padding: 1.5rem 0 2.25rem; margin: 0 auto; border-top: 1px solid var(--line); color: var(--muted); font: 11px var(--font-mono); }
