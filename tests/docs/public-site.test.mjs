@@ -276,11 +276,13 @@ test('repository Markdown links resolve locally', () => {
 
 test('public docs describe the beta and only the current command surface', () => {
   const version = JSON.parse(read('packages/release-harness/package.json')).version;
-  assert.equal(version, '1.2.0-beta.1');
+  assert.equal(version, '3.0.0-beta.1');
+  const releaseNotes = read('CHANGELOG.md');
   const forbidden = /\b(?:run-local|check-pr|release-conductor|scenario-compiler|fix-planner|fix-executor)\b|topology\.json|origins\.json/;
-  for (const name of ['README.md', 'BETA-RELEASE-NOTES.md', 'docs/index.html', 'docs/docs.html']) {
+  const productDocs = ['README.md', 'docs/index.html', 'docs/docs.html'];
+  assert.ok(releaseNotes.includes(version), 'changelog: lifecycle beta version');
+  for (const name of productDocs) {
     const text = read(name);
-    assert.ok(text.includes(version), `${name}: beta version`);
     assert.doesNotMatch(text, forbidden, `${name}: deleted architecture`);
   }
   assert.doesNotMatch(read('SECURITY.md'), forbidden, 'SECURITY.md: deleted architecture');

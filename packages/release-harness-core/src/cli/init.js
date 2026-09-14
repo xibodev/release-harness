@@ -22,6 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { canonicalText } from '../canonical-text.js';
 import { paths, DIRS, writeJson, isInstalled } from './layout.js';
 import { EXIT } from './exit-codes.js';
 
@@ -34,7 +35,7 @@ import { EXIT } from './exit-codes.js';
  * guess written by the tool is indistinguishable on disk from a fact
  * established by a person.
  */
-function defaultConfig(version) {
+function defaultConfig(version, { lifecycle = false } = {}) {
   return {
     schema_version: '1.0.0',
     harness_version: version,
@@ -44,6 +45,7 @@ function defaultConfig(version) {
     // Whether a dirty working tree downgrades eligibility. On by default
     // because certifying a tree you cannot reproduce is not certification.
     require_clean_source: true,
+    ...(lifecycle ? { lifecycle: { enabled: true, provider: 'git' } } : {}),
   };
 }
 
@@ -112,11 +114,73 @@ const EXAMPLE_RECORD = {
   ],
 };
 
+const MANAGED_START = '<!-- release-harness:managed:start -->';
+const MANAGED_END = '<!-- release-harness:managed:end -->';
+const MANAGED = `${MANAGED_START}
+When work affects tests, public behavior, packaging, build/release configuration,
+deployment inputs, compatibility boundaries, or normative dependencies, load the
+project Release-Harness capability. Read existing Release-Harness state before
+reasoning from the repository. Perform change-impact review before claiming
+release readiness.
+${MANAGED_END}`;
+
+const ADAPTER = `---
+name: release-harness
+description: Operate the continuous Release-Harness lifecycle across sessions and releases.
+---
+
+# Release-Harness lifecycle
+
+Read \`.release-harness/protocol/LIFECYCLE.md\` and follow it. Run
+\`release-harness lifecycle status\` first. Use only the public CLI; the
+deterministic core remains authoritative. This adapter owns no product semantics.
+`;
+
+function installManagedInstruction(cwd) {
+  const file = path.join(cwd, 'AGENTS.md');
+  const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const pattern = new RegExp(`${MANAGED_START}[\\s\\S]*?${MANAGED_END}`, 'g');
+  const updated = pattern.test(existing)
+    ? existing.replace(pattern, MANAGED)
+    : `${existing.replace(/\\s*$/, '')}${existing.trim() ? '\\n\\n' : ''}${MANAGED}\\n`;
+  fs.writeFileSync(file, updated);
+}
+
+function installAgentCapability(cwd, lifecycleSource) {
+  for (const target of [
+    path.join(cwd, '.agents', 'skills', 'release-harness', 'SKILL.md'),
+    path.join(cwd, '.claude', 'skills', 'release-harness', 'SKILL.md'),
+  ]) {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, ADAPTER);
+  }
+  installManagedInstruction(cwd);
+  if (lifecycleSource) {
+    const target = path.join(paths(cwd).root, 'protocol', 'LIFECYCLE.md');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(lifecycleSource, target);
+  }
+}
+
 export function cmdInit(ctx) {
   const { cwd, out, version } = ctx;
   const p = paths(cwd);
 
-  if (isInstalled(cwd) && !ctx.flags.force) {
+  const withAgent = ctx.flags.withAgent === true || ctx.flags.withAgent === 'true';
+  const legacyIndicators = [
+    'topology.json',
+    'origins.json',
+    'harness.config.json',
+    'scenarios',
+  ].filter((name) => fs.existsSync(path.join(p.root, name)));
+  if (legacyIndicators.length > 0) {
+    out.error(`Legacy topology-era state detected: ${legacyIndicators.join(', ')}`);
+    out.error('These values are investigation leads, not evidence. Archive them explicitly before initializing the current model.');
+    out.data('legacy', legacyIndicators);
+    return EXIT.UNPROVEN;
+  }
+
+  if (isInstalled(cwd) && !ctx.flags.force && !withAgent) {
     out.info(`release-harness is already installed in ${path.relative(cwd, p.root) || '.'}`);
     out.info('Nothing to do. Pass --force to rewrite harness-owned files.');
     return EXIT.OK;
@@ -127,7 +191,7 @@ export function cmdInit(ctx) {
   }
   fs.mkdirSync(path.join(p.root, 'examples'), { recursive: true });
 
-  writeJson(p.config, defaultConfig(version));
+  writeJson(p.config, defaultConfig(version, { lifecycle: withAgent }));
   fs.writeFileSync(path.join(p.root, 'README.md'), README);
 
   // Examples live in their own directory, outside every location a command
@@ -160,6 +224,12 @@ export function cmdInit(ctx) {
     protocolInstalled = true;
   }
 
+  const lifecycleSource = [
+    path.join(here, '..', '..', 'generated', 'protocol', 'LIFECYCLE.md'),
+    path.join(here, '..', '..', '..', '..', 'protocol', 'LIFECYCLE.md'),
+  ].find((candidate) => fs.existsSync(candidate));
+  if (withAgent) installAgentCapability(cwd, lifecycleSource);
+
   out.ok(`Installed release-harness in ${path.relative(cwd, p.root) || '.'}`);
   out.blank();
   out.info('No contract exists yet, and nothing here describes your software.');
@@ -168,6 +238,11 @@ export function cmdInit(ctx) {
   out.info('Next:');
   out.info('  release-harness draft new <name>     write what must hold');
   out.info('  release-harness doctor               see where you stand');
+  if (withAgent) {
+    out.blank();
+    out.info('Continuous lifecycle enabled. One provider-neutral capability was installed.');
+    out.info('Future sessions begin with: release-harness lifecycle status');
+  }
   if (protocolInstalled) {
     out.blank();
     out.info('An agent can help you author a draft. Point it at:');

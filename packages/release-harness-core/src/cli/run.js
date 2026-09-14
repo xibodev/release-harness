@@ -29,6 +29,7 @@ import { adjudicate, exitCodeForVerdict } from '../adjudicate.js';
 import { buildRunManifest } from '../run-manifest.js';
 import { EvidenceSealer } from '../sealer.js';
 import { executeAssertion } from '../execute.js';
+import { lifecycleFacts } from './lifecycle.js';
 
 /**
  * The side-effect trace.
@@ -138,6 +139,29 @@ export async function cmdRun(ctx) {
     readJson,
   });
 
+  // Continuous lifecycle is an outer gate only when explicitly enabled by
+  // `init --with-agent`. Plain deterministic contract execution remains
+  // unchanged and does not require Git.
+  let lifecycleCoverage = null;
+  if (!exploratory && contract && readJson(p.config).value?.lifecycle?.enabled === true) {
+    const lifecycle = lifecycleFacts(cwd, contract.digest);
+    if (!lifecycle.source_coverage.eligible || lifecycle.tracking.warnings.length > 0) {
+      out.error('This run cannot certify because continuous lifecycle coverage is not current:');
+      for (const reason of lifecycle.source_coverage.reasons) out.error(`  [${reason.code}] ${reason.detail}`);
+      for (const warning of lifecycle.tracking.warnings) out.error(`  [${warning.code}] ${warning.detail}`);
+      out.error('');
+      out.error('Nothing was executed. Complete and confirm a current review first.');
+      out.data('lifecycle', lifecycle);
+      out.data('side_effects', trace.entries);
+      return EXIT.UNPROVEN;
+    }
+    lifecycleCoverage = Object.fromEntries(
+      lifecycle.current_sources
+        .filter((source) => source.status === 'established')
+        .map((source) => [source.source_id, source.reviewed_source_digest])
+    );
+  }
+
   // -------------------------------------------------------------------------
   // THE GATE. Mode is fixed here, from data alone.
   // -------------------------------------------------------------------------
@@ -227,7 +251,7 @@ export async function cmdRun(ctx) {
     runId,
     contract,
     bindings,
-    sources: { cwd: path.resolve(cwd) },
+    sources: lifecycleCoverage ?? { cwd: path.resolve(cwd) },
     evidenceManifestSha256: sealed.manifestSha256,
     verdict,
     mode: decision.mode,

@@ -18,6 +18,10 @@ console.log('Testing schema definitions...');
 const PUBLISHED = [
   'DraftV1',
   'AuthoringRecordV1',
+  // Lifecycle authoring metadata around an accepted contract. It does not
+  // participate in proposition identity.
+  'ChangeReviewV1',
+  'ReviewConfirmationV1',
   'ContractV1',
   // What each assertion kind may promise, and which fields the executor reads.
   // One authority, consumed by the draft schema, the contract schema, the
@@ -64,14 +68,14 @@ for (const gone of [
   );
 }
 
-console.log('✓ the published schemas load and the removed ones are gone');
+console.log('âœ“ the published schemas load and the removed ones are gone');
 
 // --- verdict ---------------------------------------------------------------
 
 const runIntegrityEnum = Schemas.VerdictV1.properties.run_integrity.enum;
 assert.deepStrictEqual(runIntegrityEnum, ['COMPLETE', 'HARNESS_ERROR', 'EVIDENCE_INVALID']);
 
-console.log('✓ verdict run_integrity enum is intact');
+console.log('âœ“ verdict run_integrity enum is intact');
 
 // --- contract identity -----------------------------------------------------
 
@@ -102,7 +106,7 @@ const ref = contract.definitions.normativeReference;
 assert.deepStrictEqual(ref.required, ['ref', 'digest'], 'a normative reference must carry a digest');
 assert.strictEqual(ref.properties.digest.pattern, '^[0-9a-f]{64}$', 'and it must be a sha256');
 
-console.log('✓ contract schema is closed and pins its normative references');
+console.log('âœ“ contract schema is closed and pins its normative references');
 
 // --- authoring record ------------------------------------------------------
 
@@ -132,6 +136,23 @@ assert.deepStrictEqual(
   'the epistemic vocabulary must be exactly these five statuses'
 );
 
-console.log('✓ authoring record enforces bounded, completed absence');
+console.log('âœ“ authoring record enforces bounded, completed absence');
+
+// --- lifecycle review ------------------------------------------------------
+
+const review = Schemas.ChangeReviewV1;
+assert.ok(review.properties.sources.items.$ref, 'a review models a set of source identities');
+assert.deepStrictEqual(
+  review.properties.conclusion.properties.action.enum,
+  ['reuse_contract', 'rebind', 'reauthor', 'block'],
+  'review conclusions classify lifecycle action without becoming contract state'
+);
+assert.strictEqual(
+  Object.hasOwn(contract.properties, 'sources'),
+  false,
+  'source coverage is lifecycle metadata, never a proposition dimension'
+);
+
+console.log('âœ“ lifecycle review surrounds the frozen contract model');
 
 console.log('All schema tests PASSED.\n');

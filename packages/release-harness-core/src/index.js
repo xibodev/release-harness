@@ -19,3 +19,5 @@ export * from './redactor.js';
 export * from './materializer.js';
 export * from './source-enumerator.js';
 export * from './probes.js';
+
+export * from './lifecycle.js';

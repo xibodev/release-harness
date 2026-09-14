@@ -216,3 +216,43 @@ and an explanation of why an assertion primitive cannot solve it.
 ## License
 
 [MIT](LICENSE), XiboDev.
+
+## Continuous lifecycle in 3.0.0-beta.1
+
+The next prerelease carries accepted intent across later sessions and checkouts:
+
+```bash
+npx release-harness init --with-agent
+npx release-harness lifecycle status
+```
+
+The optional lifecycle capability is Git-backed. Plain `init` retains the
+standalone deterministic contract engine and does not make Git mandatory.
+
+After accepting an initial proposition, create and confirm separate baseline
+source coverage:
+
+```bash
+npx release-harness review start baseline --contract <digest>
+# An agent or person authors facts and semantic impact in the review file.
+npx release-harness review validate baseline
+npx release-harness review confirm baseline --by "release owner"
+```
+
+After later source changes:
+
+```bash
+npx release-harness review start change-42 --base origin/main --contract <digest>
+npx release-harness lifecycle check --contract <digest>
+```
+
+The CLI records exact Git source identities and changed paths. It never infers
+semantic impact from paths. A review must account for every accepted assertion
+and exact `requires` identity. Only an attributable confirmation of
+`reuse_contract` or source-affecting `rebind` can authorize continued coverage.
+A blocking, reauthor, stale, missing, or unconfirmed review prevents lifecycle-
+enabled certification before execution begins.
+
+`init --with-agent` installs one thin capability pointing to the canonical
+lifecycle protocol. It does not install a roster of agent personas or give an
+agent authority to accept contracts, confirm reviews, or change verdicts.

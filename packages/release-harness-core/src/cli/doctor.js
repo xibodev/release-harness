@@ -26,6 +26,7 @@ import { assessDraft, DRAFT_STATE } from '../assess.js';
 import { summariseBlocker } from './blockers.js';
 import { describeReadiness } from '../bindings.js';
 import { resolveNormativeReferences } from '../normative.js';
+import { lifecycleFacts } from './lifecycle.js';
 
 function safe(fn) {
   try {
@@ -56,6 +57,8 @@ export function cmdDoctor(ctx) {
   }
 
   const p = paths(cwd);
+  const continuousLifecycle = readJson(p.config).value?.lifecycle?.enabled === true;
+  const lifecycle = continuousLifecycle ? lifecycleFacts(cwd) : null;
 
   // --- drafts --------------------------------------------------------------
   const draftNames = listDrafts(cwd);
@@ -170,16 +173,22 @@ export function cmdDoctor(ctx) {
   out.info(`accepted contracts  ${digests.length === 0 ? 'none' : digests.length}`);
   for (const c of contractFacts) {
     if (!c.intact) {
-      out.detail(`${c.digest.slice(0, 12)}…: BROKEN -- ${c.detail}`);
+      out.detail(`${c.digest.slice(0, 12)}Ã¢â‚¬Â¦: BROKEN -- ${c.detail}`);
     } else {
       out.detail(
-        `${c.digest.slice(0, 12)}…: ${c.subject}, ${c.assertions} assertion${c.assertions === 1 ? '' : 's'}, ` +
+        `${c.digest.slice(0, 12)}Ã¢â‚¬Â¦: ${c.subject}, ${c.assertions} assertion${c.assertions === 1 ? '' : 's'}, ` +
           `${c.acceptances} acceptance${c.acceptances === 1 ? '' : 's'}`
       );
     }
   }
 
   out.info(`bindings            ${bindingNames.length === 0 ? 'none' : bindingNames.join(', ')}`);
+  out.info(`continuous lifecycle ${continuousLifecycle ? 'enabled' : 'not enabled'}`);
+  if (lifecycle) {
+    out.detail(`source coverage: ${lifecycle.source_coverage.eligible ? 'current' : 'not current'}`);
+    for (const reason of lifecycle.source_coverage.reasons) out.detail(`[${reason.code}] ${reason.detail}`);
+    for (const warning of lifecycle.tracking.warnings) out.detail(`Warning: ${warning.detail}`);
+  }
 
   // Authoring capability: reported as what can actually be checked.
   //
@@ -190,10 +199,24 @@ export function cmdDoctor(ctx) {
   // exists to have removed, so the two facts are reported separately.
   const protocolFile = path.join(p.root, 'protocol', 'ADOPTION.md');
   const protocolInstalled = fs.existsSync(protocolFile);
+  const lifecycleFile = path.join(p.root, 'protocol', 'LIFECYCLE.md');
+  const adapters = [
+    path.join(cwd, '.agents', 'skills', 'release-harness', 'SKILL.md'),
+    path.join(cwd, '.claude', 'skills', 'release-harness', 'SKILL.md'),
+  ];
+  const lifecycleArtifacts = continuousLifecycle
+    ? [lifecycleFile, ...adapters].map((file) => ({ file, present: fs.existsSync(file) }))
+    : [];
+  out.data('lifecycle_artifacts', lifecycleArtifacts);
   out.data('authoring_protocol_installed', protocolInstalled);
   out.info(`authoring protocol  ${protocolInstalled ? 'installed' : 'not installed'}`);
   if (protocolInstalled) {
     out.detail('whether your agent host has loaded it is not observable from here');
+  }
+  if (continuousLifecycle) {
+    for (const artifact of lifecycleArtifacts) {
+      out.detail(`lifecycle artifact ${artifact.present ? 'present' : 'MISSING'}: ${path.relative(cwd, artifact.file)}`);
+    }
   }
 
   out.blank();
@@ -222,9 +245,9 @@ export function cmdDoctor(ctx) {
   out.info('Can anything be certified right now?');
   for (const e of eligibility) {
     if (e.eligible) {
-      out.detail(`yes -- ${e.digest.slice(0, 12)}… against binding "${e.binding}"`);
+      out.detail(`yes -- ${e.digest.slice(0, 12)}Ã¢â‚¬Â¦ against binding "${e.binding}"`);
     } else {
-      out.detail(`no  -- ${e.digest.slice(0, 12)}… against binding "${e.binding}"`);
+      out.detail(`no  -- ${e.digest.slice(0, 12)}Ã¢â‚¬Â¦ against binding "${e.binding}"`);
       for (const r of e.reasons) out.detail(`     ${r}`);
     }
   }

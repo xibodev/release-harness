@@ -58,3 +58,31 @@ and CLI propositions. A PASS covers only the accepted assertions and exact
 references exercised by that run; it is not deployment approval.
 
 See [BETA-RELEASE-NOTES.md](BETA-RELEASE-NOTES.md) and [README.md](README.md).
+
+## 3.0.0-beta.1 — Unreleased
+
+### Added
+
+- Optional `init --with-agent` continuous lifecycle capability for Git-backed
+  continuity across sessions, branches, worktrees, merges, and later releases.
+- First-class baseline/change review artifacts with exact multi-source identity,
+  complete assertion/reference impact mapping, and attributable confirmation.
+- Deterministic `review start|validate|confirm|list` and
+  `lifecycle status|check` commands.
+- Exact source freshness derived from tracked file mode/blob/path manifests,
+  excluding only `.release-harness/**`; no semantic path heuristics.
+- Warnings when drafts, authoring records, accepted contracts, or reviews exist
+  only in one checkout.
+- One provider-neutral lifecycle capability with thin `.agents` and Claude
+  adapters. Temporary workers may gather bounded facts but own no release
+  semantics.
+
+### Compatibility
+
+- Plain `init` and deterministic contract execution remain available without
+  Git lifecycle enforcement.
+- Lifecycle-enabled certifying runs require current confirmed source coverage.
+- Acceptance semantics are unchanged. Initial source coverage is a separate
+  baseline review, not part of contract or acceptance identity.
+- Legacy topology-era artifacts are detected and refused as migration evidence;
+  they are not converted into claims automatically.

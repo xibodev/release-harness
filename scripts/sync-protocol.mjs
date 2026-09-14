@@ -19,14 +19,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const CANONICAL = path.join(REPO, 'protocol', 'ADOPTION.md');
+const PROTOCOLS = ['ADOPTION.md', 'LIFECYCLE.md'];
 const OUT_DIR = path.join(REPO, 'packages', 'release-harness-core', 'generated', 'protocol');
 
-if (!fs.existsSync(CANONICAL)) {
-  console.error(`sync-protocol: canonical protocol missing at ${CANONICAL}`);
-  process.exit(1);
-}
-
 fs.mkdirSync(OUT_DIR, { recursive: true });
-fs.copyFileSync(CANONICAL, path.join(OUT_DIR, 'ADOPTION.md'));
-console.log(`sync-protocol: ${path.relative(REPO, CANONICAL)} -> generated/protocol/ADOPTION.md`);
+for (const name of PROTOCOLS) {
+  const canonical = path.join(REPO, 'protocol', name);
+  if (!fs.existsSync(canonical)) {
+    console.error(`sync-protocol: canonical protocol missing at ${canonical}`);
+    process.exit(1);
+  }
+  fs.copyFileSync(canonical, path.join(OUT_DIR, name));
+  console.log(`sync-protocol: ${path.relative(REPO, canonical)} -> generated/protocol/${name}`);
+}

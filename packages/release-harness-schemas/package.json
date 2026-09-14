@@ -1,6 +1,6 @@
 {
   "name": "@xibodev/release-harness-schemas",
-  "version": "1.2.0-beta.1",
+  "version": "3.0.0-beta.1",
   "description": "JSON schemas for release-harness drafts, contracts, evidence, runs, and verdicts",
   "type": "module",
   "main": "./index.js",

@@ -650,4 +650,37 @@ console.log('\nStructural invariants (C2)\n');
   pass('S-14', 'every taught assertion field validates in both the draft and the contract');
 }
 
+// ---------------------------------------------------------------------------
+// S-15  Lifecycle metadata remains outside proposition identity.
+//
+// Continuous operation adds source coverage, review and confirmation around an
+// accepted contract. None may become a fifth proposition dimension.
+// ---------------------------------------------------------------------------
+{
+  const contract = Schemas.ContractV1;
+  for (const forbidden of ['sources', 'reviews', 'coverage', 'base_commit', 'head_commit', 'confirmation']) {
+    assert.ok(
+      !Object.hasOwn(contract.properties, forbidden),
+      `${forbidden} is lifecycle metadata and must not enter the contract schema`
+    );
+  }
+  assert.ok(Schemas.ChangeReviewV1, 'lifecycle review has its own published schema');
+  assert.ok(Schemas.ReviewConfirmationV1, 'review confirmation has its own published schema');
+  pass('S-15', 'source coverage and reviews surround, never expand, contract identity');
+}
+
+// S-16  Provider adapters are activation pointers, never semantic authorities.
+{
+  const initSource = fs.readFileSync(path.join(REPO, 'packages/release-harness-core/src/cli/init.js'), 'utf8');
+  const match = /const ADAPTER = `([\s\S]*?)`;/m.exec(initSource);
+  assert.ok(match, 'one canonical thin adapter template must exist');
+  const adapter = match[1];
+  assert.match(adapter, /\.release-harness\/protocol\/LIFECYCLE\.md/);
+  assert.match(adapter, /lifecycle status/);
+  for (const semantic of ['reviewed_source_digest', 'reuse_contract', 'review_digest', 'confirmation.events', 'PRODUCT', 'PASS']) {
+    assert.ok(!adapter.includes(semantic), `adapter must not duplicate lifecycle semantics: ${semantic}`);
+  }
+  pass('S-16', 'provider adapters point to one lifecycle protocol and own no semantics');
+}
+
 console.log(`\n  ${results.length} structural invariants passed\n`);

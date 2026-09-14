@@ -42,6 +42,7 @@ export const DIRS = {
   accepted: 'accepted',
   bindings: 'bindings',
   runs: 'runs',
+  reviews: 'reviews',
 };
 
 export function harnessRoot(cwd) {
@@ -57,12 +58,17 @@ export function paths(cwd) {
     accepted: path.join(root, DIRS.accepted),
     bindings: path.join(root, DIRS.bindings),
     runs: path.join(root, DIRS.runs),
+    reviews: path.join(root, DIRS.reviews),
+    confirmedReviews: path.join(root, DIRS.reviews, 'confirmed'),
     draft: (name) => path.join(root, DIRS.drafts, `${name}.draft.json`),
     record: (name) => path.join(root, DIRS.drafts, `${name}.record.json`),
     contract: (digest) => path.join(root, DIRS.accepted, `${digest}.contract.json`),
     acceptance: (digest) => path.join(root, DIRS.accepted, `${digest}.acceptance.json`),
     binding: (name) => path.join(root, DIRS.bindings, `${name}.binding.json`),
     run: (runId) => path.join(root, DIRS.runs, runId),
+    review: (name) => path.join(root, DIRS.reviews, `${name}.review.json`),
+    confirmedReview: (digest) => path.join(root, DIRS.reviews, 'confirmed', `${digest}.review.json`),
+    reviewConfirmation: (digest) => path.join(root, DIRS.reviews, 'confirmed', `${digest}.confirmation.json`),
   };
 }
 
@@ -122,6 +128,25 @@ export function listBindings(cwd) {
     .sort();
 }
 
+
+export function listReviews(cwd) {
+  const dir = paths(cwd).reviews;
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.review.json'))
+    .map((f) => f.slice(0, -'.review.json'.length))
+    .sort();
+}
+
+export function listConfirmedReviews(cwd) {
+  const dir = paths(cwd).confirmedReviews;
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.review.json'))
+    .map((f) => f.slice(0, -'.review.json'.length))
+    .sort();
+}
+
 /**
  * Resolve which accepted contract a command means.
  *
@@ -140,7 +165,7 @@ export function resolveAccepted(cwd, ref) {
       ok: false,
       reason:
         `${digests.length} accepted contracts exist; name one.\n` +
-        digests.map((d) => `  ${d.slice(0, 12)}…`).join('\n'),
+        digests.map((d) => `  ${d.slice(0, 12)}â€¦`).join('\n'),
     };
   }
 
@@ -151,6 +176,6 @@ export function resolveAccepted(cwd, ref) {
     ok: false,
     reason:
       `"${ref}" matches ${matches.length} accepted contracts; be more specific.\n` +
-      matches.map((d) => `  ${d.slice(0, 16)}…`).join('\n'),
+      matches.map((d) => `  ${d.slice(0, 16)}â€¦`).join('\n'),
   };
 }

@@ -22,6 +22,8 @@ import { cmdBind } from './bind.js';
 import { cmdRun } from './run.js';
 import { cmdVerify } from './verify.js';
 import { cmdDoctor } from './doctor.js';
+import { cmdReview } from './review.js';
+import { cmdLifecycle } from './lifecycle.js';
 
 export const COMMANDS = {
   init: { run: cmdInit, summary: 'install the harness; assert nothing about your project' },
@@ -32,6 +34,8 @@ export const COMMANDS = {
   run: { run: cmdRun, summary: 'exercise a contract (certifying) or a draft (--exploratory)' },
   verify: { run: cmdVerify, summary: "check a run's chain of custody" },
   doctor: { run: cmdDoctor, summary: 'report what exists and whether anything can certify' },
+  review: { run: cmdReview, summary: 'author and confirm exact-source change impact' },
+  lifecycle: { run: cmdLifecycle, summary: 'report or enforce continuous source coverage' },
 };
 
 /**
@@ -46,12 +50,14 @@ export const COMMANDS = {
 const HELP = {
   init: [
     'release-harness init',
+    'release-harness init --with-agent',
     '',
     'Install the harness in this directory. Creates directories, its own config,',
     'and the adoption protocol. Makes NO claims about your software: it does not',
     'inspect your project, name a subject, or guess a port.',
     '',
-    '  --force    rewrite harness-owned files if already installed',
+    '  --with-agent  enable Git-backed continuous lifecycle and install one capability',
+    '  --force       rewrite harness-owned files if already installed',
   ],
   draft: [
     'release-harness draft new <name>     write an empty proposal',
@@ -124,6 +130,22 @@ const HELP = {
     'Exit 2  nothing broken, but the chain is incomplete',
     'Exit 4  a link is broken; the run is not trustworthy',
   ],
+  review: [
+    'release-harness review start <name> [--base <ref>] [--contract <digest>]',
+    'release-harness review validate <name>',
+    'release-harness review confirm <name> --by "<actor>"',
+    '',
+    'The CLI records exact Git source facts; a person or agent authors semantic',
+    'impact. Reusing an accepted contract requires attributable confirmation.',
+  ],
+  lifecycle: [
+    'release-harness lifecycle status',
+    'release-harness lifecycle check [--contract <digest>]',
+    'release-harness lifecycle source set <id> --path <directory>',
+    '',
+    'Derive source-review freshness from immutable facts. In lifecycle-enabled',
+    'projects, check exits 2 when review is missing, stale, blocking or unconfirmed.',
+  ],
   doctor: [
     'release-harness doctor',
     '',
@@ -148,7 +170,7 @@ function usage(out, version) {
   }
   out.blank();
   out.info('The lifecycle:');
-  out.info('  init -> draft -> validate -> accept -> bind -> run -> verify');
+  out.info('  init -> draft -> validate -> accept -> review -> bind -> run -> verify');
   out.blank();
   out.info('Exit codes:');
   for (const [code, meaning] of Object.entries(EXIT_MEANING)) {

@@ -3,6 +3,8 @@ import {
   validateAcceptedContract,
   validateDraft,
   validateAuthoringRecord,
+  validateChangeReview,
+  validateReviewConfirmation,
   ValidationError,
 } from '../src/validator.js';
 import { acceptDraft } from '../src/acceptance.js';
@@ -40,6 +42,31 @@ console.log('Running validation-authority tests...');
 
   assert.strictEqual(validateDraft(draft), true, 'a well-formed draft validates');
   assert.strictEqual(validateAuthoringRecord(record), true, 'a sound authoring record validates');
+  assert.strictEqual(
+    validateChangeReview({
+      schema_version: '1.0.0',
+      mode: 'baseline',
+      contract: { digest: 'a'.repeat(64) },
+      authoring_provenance: { status: 'not_available' },
+      sources: [{ source_id: 'primary', status: 'not_established', reason: 'not reviewed' }],
+      facts: [],
+      impact: { assertions: [], requires: [], possible_binding_changes: [] },
+      questions: [],
+      conclusion: { action: 'block', summary: 'not reviewed' },
+      proposed: { by: 'agent', at: '2026-01-01T00:00:00Z' },
+    }),
+    true,
+    'a lifecycle review uses the same schema authority'
+  );
+  assert.strictEqual(
+    validateReviewConfirmation({
+      schema_version: '1.0.0',
+      review_digest: 'b'.repeat(64),
+      events: [{ by: 'operator', at: '2026-01-01T00:00:00Z' }],
+    }),
+    true,
+    'review confirmation uses the same schema authority'
+  );
   assert.strictEqual(
     validateAcceptedContract(contract),
     true,
@@ -103,7 +130,7 @@ console.log('Running validation-authority tests...');
   );
 
   console.log(
-    '✓ vNext contract, draft and authoring-record documents share the one validation path'
+    '✓ contract, draft, authoring-record, lifecycle-review and confirmation documents share the one validation path'
   );
 }
 console.log('All validation-authority tests PASSED.\n');
