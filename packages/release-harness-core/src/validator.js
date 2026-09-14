@@ -135,6 +135,17 @@ export function validateDraft(draft) {
  * Runtime adds what the schema cannot see: that claim ids are unique, since
  * assertions cite claims by id and a duplicate makes that citation ambiguous.
  */
+export function validateChangeReview(review) {
+  validateAgainstSchema(Schemas.ChangeReviewV1, review, 'Change review');
+  return true;
+}
+
+export function validateReviewConfirmation(confirmation) {
+  validateAgainstSchema(Schemas.ReviewConfirmationV1, confirmation, 'Review confirmation');
+  return true;
+}
+
+
 export function validateAuthoringRecord(record) {
   validateAgainstSchema(Schemas.AuthoringRecordV1, record, 'Authoring record');
 

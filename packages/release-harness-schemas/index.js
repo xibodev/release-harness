@@ -29,6 +29,8 @@ export function loadSchema(name) {
 export const Schemas = {
   DraftV1: loadSchema('draft-v1'),
   AuthoringRecordV1: loadSchema('authoring-record-v1'),
+  ChangeReviewV1: loadSchema('change-review-v1'),
+  ReviewConfirmationV1: loadSchema('review-confirmation-v1'),
   ContractV1: loadSchema('contract-v1'),
   AssertionKindsV1: loadSchema('assertion-kinds-v1'),
   RunManifestV1: loadSchema('run-manifest-v1'),

@@ -650,4 +650,23 @@ console.log('\nStructural invariants (C2)\n');
   pass('S-14', 'every taught assertion field validates in both the draft and the contract');
 }
 
+// ---------------------------------------------------------------------------
+// S-15  Lifecycle metadata remains outside proposition identity.
+//
+// Continuous operation adds source coverage, review and confirmation around an
+// accepted contract. None may become a fifth proposition dimension.
+// ---------------------------------------------------------------------------
+{
+  const contract = Schemas.ContractV1;
+  for (const forbidden of ['sources', 'reviews', 'coverage', 'base_commit', 'head_commit', 'confirmation']) {
+    assert.ok(
+      !Object.hasOwn(contract.properties, forbidden),
+      `${forbidden} is lifecycle metadata and must not enter the contract schema`
+    );
+  }
+  assert.ok(Schemas.ChangeReviewV1, 'lifecycle review has its own published schema');
+  assert.ok(Schemas.ReviewConfirmationV1, 'review confirmation has its own published schema');
+  pass('S-15', 'source coverage and reviews surround, never expand, contract identity');
+}
+
 console.log(`\n  ${results.length} structural invariants passed\n`);
